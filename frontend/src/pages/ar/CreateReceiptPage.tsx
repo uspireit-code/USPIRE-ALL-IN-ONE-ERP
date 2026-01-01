@@ -21,7 +21,7 @@ export function CreateReceiptPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('AR_RECEIPT_CREATE');
+  const canCreate = hasPermission('AR_RECEIPTS_CREATE');
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);

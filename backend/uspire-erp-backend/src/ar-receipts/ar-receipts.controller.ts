@@ -14,31 +14,31 @@ export class ArReceiptsController {
   constructor(private readonly receipts: ArReceiptsService) {}
 
   @Get()
-  @Permissions('AR_RECEIPT_READ')
+  @Permissions('AR_RECEIPTS_VIEW')
   async list(@Req() req: Request) {
     return this.receipts.listReceipts(req);
   }
 
   @Get(':id')
-  @Permissions('AR_RECEIPT_READ')
+  @Permissions('AR_RECEIPTS_VIEW')
   async getById(@Param('id') id: string, @Req() req: Request) {
     return this.receipts.getReceiptById(req, id);
   }
 
   @Post()
-  @Permissions('AR_RECEIPT_CREATE')
+  @Permissions('AR_RECEIPTS_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateReceiptDto) {
     return this.receipts.createReceipt(req, dto);
   }
 
   @Patch(':id')
-  @Permissions('AR_RECEIPT_CREATE')
+  @Permissions('AR_RECEIPTS_CREATE')
   async update(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateReceiptDto) {
     return this.receipts.updateReceipt(req, id, dto);
   }
 
   @Post(':id/post')
-  @Permissions('AR_RECEIPT_CREATE')
+  @Permissions('AR_RECEIPTS_CREATE')
   async post(@Req() req: Request, @Param('id') id: string) {
     return this.receipts.postReceipt(req, id);
   }

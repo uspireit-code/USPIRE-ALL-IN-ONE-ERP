@@ -185,8 +185,8 @@ async function main() {
     { code: 'AR_INVOICE_APPROVE', description: 'Approve customer invoices' },
     { code: 'AR_INVOICE_POST', description: 'Post customer invoices to GL' },
     { code: 'AR_INVOICE_VIEW', description: 'View customer invoices' },
-    { code: 'AR_RECEIPT_READ', description: 'View customer receipts' },
-    { code: 'AR_RECEIPT_CREATE', description: 'Create customer receipts' },
+    { code: 'AR_RECEIPTS_VIEW', description: 'View customer receipts' },
+    { code: 'AR_RECEIPTS_CREATE', description: 'Create customer receipts' },
     { code: 'AR_RECEIPT_VOID', description: 'Void customer receipts' },
     { code: 'BANK_ACCOUNT_CREATE', description: 'Create bank accounts' },
     { code: 'PAYMENT_CREATE', description: 'Create payments' },
@@ -581,6 +581,43 @@ async function main() {
         })),
       skipDuplicates: true,
     });
+  }
+
+  // AR Receipts (AR-2) RBAC backfill (idempotent):
+  // - ADMIN / FINANCE_OFFICER / FINANCE_MANAGER / FINANCE_CONTROLLER must have:
+  //   - AR_RECEIPTS_VIEW
+  //   - AR_RECEIPTS_CREATE
+  const arReceiptsViewPerm = await prisma.permission.findUnique({
+    where: { code: 'AR_RECEIPTS_VIEW' },
+    select: { id: true },
+  });
+  const arReceiptsCreatePerm = await prisma.permission.findUnique({
+    where: { code: 'AR_RECEIPTS_CREATE' },
+    select: { id: true },
+  });
+
+  const arReceiptsPermIds = [arReceiptsViewPerm?.id, arReceiptsCreatePerm?.id].filter(Boolean) as string[];
+  if (arReceiptsPermIds.length > 0) {
+    const arReceiptsRoles = await prisma.role.findMany({
+      where: {
+        name: {
+          in: ['ADMIN', 'FINANCE_OFFICER', 'FINANCE_MANAGER', 'FINANCE_CONTROLLER'],
+        },
+      },
+      select: { id: true },
+    });
+
+    if (arReceiptsRoles.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: arReceiptsRoles.flatMap((r) =>
+          arReceiptsPermIds.map((permissionId) => ({
+            roleId: r.id,
+            permissionId,
+          })),
+        ),
+        skipDuplicates: true,
+      });
+    }
   }
 
   // Backfill: ensure ADMIN / FINANCE_MANAGER / FINANCE_CONTROLLER have FINANCE_BUDGET_VIEW.

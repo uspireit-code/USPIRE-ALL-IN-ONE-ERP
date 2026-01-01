@@ -28,8 +28,8 @@ export function ReceiptsPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('AR_RECEIPT_READ');
-  const canCreate = hasPermission('AR_RECEIPT_CREATE');
+  const canView = hasPermission('AR_RECEIPTS_VIEW');
+  const canCreate = hasPermission('AR_RECEIPTS_CREATE');
 
   const [rows, setRows] = useState<ArReceipt[]>([]);
   const [loading, setLoading] = useState(true);

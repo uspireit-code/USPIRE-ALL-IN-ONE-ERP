@@ -18,8 +18,8 @@ export function ReceiptDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canRead = hasPermission('AR_RECEIPT_READ');
-  const canCreate = hasPermission('AR_RECEIPT_CREATE');
+  const canRead = hasPermission('AR_RECEIPTS_VIEW');
+  const canCreate = hasPermission('AR_RECEIPTS_CREATE');
   const canVoid = hasPermission('AR_RECEIPT_VOID');
 
   const [receipt, setReceipt] = useState<ArReceipt | null>(null);
