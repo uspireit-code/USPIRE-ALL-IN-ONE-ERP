@@ -148,6 +148,20 @@ enum CustomerInvoiceStatus {
   POSTED
 }
 
+enum ReceiptStatus {
+  DRAFT
+  POSTED
+  VOIDED
+}
+
+enum ReceiptPaymentMethod {
+  CASH
+  CARD
+  EFT
+  CHEQUE
+  OTHER
+}
+
 enum PaymentType {
   SUPPLIER_PAYMENT
   CUSTOMER_RECEIPT
@@ -342,6 +356,7 @@ model Customer {
 
   tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   invoices CustomerInvoice[]
+  receipts CustomerReceipt[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -369,6 +384,7 @@ model CustomerInvoice {
   approvedBy User?                 @relation("CustomerInvoiceApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   postedBy   User?                 @relation("CustomerInvoicePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
   lines      CustomerInvoiceLine[]
+  receiptLines CustomerReceiptLine[]
 
   @@unique([tenantId, customerId, invoiceNumber])
   @@index([tenantId])
@@ -565,6 +581,52 @@ model CustomerInvoiceLine {
 
   @@index([customerInvoiceId])
   @@index([accountId])
+}
+
+model CustomerReceipt {
+  id              String               @id @default(uuid())
+  tenantId         String
+  receiptNumber    String
+  receiptDate      DateTime
+  customerId       String
+  currency         String
+  totalAmount      Decimal              @db.Decimal(18, 2)
+  paymentMethod    ReceiptPaymentMethod
+  paymentReference String?
+  status           ReceiptStatus        @default(DRAFT)
+  createdById      String
+  createdAt        DateTime             @default(now())
+  postedById       String?
+  postedAt         DateTime?
+  voidedById       String?
+  voidedAt         DateTime?
+  voidReason       String?
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy User     @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy  User?    @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  voidedBy  User?    @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  lines     CustomerReceiptLine[]
+
+  @@unique([tenantId, receiptNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([customerId])
+}
+
+model CustomerReceiptLine {
+  id            String  @id @default(uuid())
+  receiptId     String
+  invoiceId     String
+  appliedAmount Decimal @db.Decimal(18, 2)
+
+  receipt CustomerReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  invoice CustomerInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([receiptId])
+  @@index([invoiceId])
+  @@unique([receiptId, invoiceId])
 }
 
 model Supplier {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import type { ArReceipt } from '../../services/ar';
@@ -8,8 +9,24 @@ function formatMoney(n: number) {
   return Number(n ?? 0).toFixed(2);
 }
 
+function StatusBadge(props: { status: 'DRAFT' | 'POSTED' | 'VOIDED' }) {
+  const bg =
+    props.status === 'POSTED'
+      ? '#e6ffed'
+      : props.status === 'VOIDED'
+        ? '#ffecec'
+        : '#fff7e6';
+  const fg = props.status === 'POSTED' ? '#137333' : props.status === 'VOIDED' ? '#b00020' : '#7a4b00';
+  return (
+    <span style={{ padding: '2px 8px', borderRadius: 12, background: bg, color: fg, fontSize: 12, fontWeight: 600 }}>
+      {props.status}
+    </span>
+  );
+}
+
 export function ReceiptsPage() {
   const { hasPermission } = useAuth();
+  const navigate = useNavigate();
 
   const canView = hasPermission('AR_RECEIPT_READ');
   const canCreate = hasPermission('AR_RECEIPT_CREATE');
@@ -63,11 +80,15 @@ export function ReceiptsPage() {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.receiptNo}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.date}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.customer}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(r.amount)}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.status}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                <Link to={`/ar/receipts/${r.id}`}>{r.receiptNumber}</Link>
+              </td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.receiptDate}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.customerName}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(r.totalAmount)}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                <StatusBadge status={r.status} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -79,7 +100,7 @@ export function ReceiptsPage() {
     <PageLayout
       title="Customer Receipts"
       actions={
-        <button type="button" disabled={!canCreate}>
+        <button type="button" disabled={!canCreate} onClick={() => navigate('/ar/receipts/new')}>
           New Receipt
         </button>
       }

@@ -39,13 +39,36 @@ export type CustomerInvoice = {
   lines: CustomerInvoiceLine[];
 };
 
+export type ReceiptStatus = 'DRAFT' | 'POSTED' | 'VOIDED';
+
+export type ReceiptPaymentMethod = 'CASH' | 'CARD' | 'EFT' | 'CHEQUE' | 'OTHER';
+
+export type ReceiptLineInput = {
+  invoiceId: string;
+  appliedAmount: number;
+};
+
+export type ReceiptLine = ReceiptLineInput & {
+  id: string;
+  invoiceNumber: string;
+};
+
 export type ArReceipt = {
   id: string;
-  receiptNo: string;
-  date: string;
-  customer: string;
-  amount: number;
-  status: string;
+  receiptNumber: string;
+  receiptDate: string;
+  customerId: string;
+  customerName: string;
+  currency: string;
+  totalAmount: number;
+  paymentMethod: ReceiptPaymentMethod;
+  paymentReference?: string | null;
+  status: ReceiptStatus;
+  createdAt: string;
+  postedAt?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  lines?: ReceiptLine[];
 };
 
 export async function listCustomers() {
@@ -109,4 +132,61 @@ export async function listReceipts() {
 
 export async function getReceiptById(id: string) {
   return apiFetch<ArReceipt>(`/ar/receipts/${id}`, { method: 'GET' });
+}
+
+export async function createReceipt(params: {
+  customerId: string;
+  receiptDate: string;
+  currency: string;
+  totalAmount: number;
+  paymentMethod: ReceiptPaymentMethod;
+  paymentReference?: string;
+  lines?: ReceiptLineInput[];
+}) {
+  return apiFetch<ArReceipt>('/ar/receipts', {
+    method: 'POST',
+    body: JSON.stringify({
+      customerId: params.customerId,
+      receiptDate: params.receiptDate,
+      currency: params.currency,
+      totalAmount: params.totalAmount,
+      paymentMethod: params.paymentMethod,
+      paymentReference: params.paymentReference || undefined,
+      lines: params.lines ?? [],
+    }),
+  });
+}
+
+export async function updateReceipt(id: string, params: {
+  customerId?: string;
+  receiptDate?: string;
+  currency?: string;
+  totalAmount?: number;
+  paymentMethod?: ReceiptPaymentMethod;
+  paymentReference?: string;
+  lines?: ReceiptLineInput[];
+}) {
+  return apiFetch<ArReceipt>(`/ar/receipts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      customerId: params.customerId,
+      receiptDate: params.receiptDate,
+      currency: params.currency,
+      totalAmount: params.totalAmount,
+      paymentMethod: params.paymentMethod,
+      paymentReference: params.paymentReference,
+      lines: params.lines,
+    }),
+  });
+}
+
+export async function postReceipt(id: string) {
+  return apiFetch<ArReceipt>(`/ar/receipts/${id}/post`, { method: 'POST' });
+}
+
+export async function voidReceipt(id: string, reason: string) {
+  return apiFetch<ArReceipt>(`/ar/receipts/${id}/void`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
 }
