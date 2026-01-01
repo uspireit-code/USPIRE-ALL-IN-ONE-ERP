@@ -914,6 +914,7 @@ model Tenant {
   supplierInvoices    SupplierInvoice[]
   customers           Customer[]
   customerInvoices    CustomerInvoice[]
+  customerReceipts    CustomerReceipt[]
   bankAccounts        BankAccount[]
   payments            Payment[]
   bankStatements      BankStatement[]
@@ -1117,6 +1118,9 @@ model User {
   customerInvoicesCreated          CustomerInvoice[]           @relation("CustomerInvoiceCreatedBy")
   customerInvoicesApproved         CustomerInvoice[]           @relation("CustomerInvoiceApprovedBy")
   customerInvoicesPosted           CustomerInvoice[]           @relation("CustomerInvoicePostedBy")
+  customerReceiptsCreated          CustomerReceipt[]           @relation("CustomerReceiptCreatedBy")
+  customerReceiptsPosted           CustomerReceipt[]           @relation("CustomerReceiptPostedBy")
+  customerReceiptsVoided           CustomerReceipt[]           @relation("CustomerReceiptVoidedBy")
   paymentsCreated                  Payment[]                   @relation("PaymentCreatedBy")
   paymentsApproved                 Payment[]                   @relation("PaymentApprovedBy")
   paymentsPosted                   Payment[]                   @relation("PaymentPostedBy")
