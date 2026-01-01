@@ -579,6 +579,7 @@ export function Layout() {
                   <Indent level={3}>
                     <SidebarLink to="/finance/ar/customers" label="Customers" icon={<UsersIcon />} level={3} />
                     <SidebarLink to="/finance/ar/invoices" label="Invoices" icon={<ReceiptIcon />} level={3} />
+                    <SidebarLink to="/finance/ar/receipts" label="Receipts" icon={<ReceiptIcon />} level={3} />
                     <SidebarLink to="/finance/ar/aging" label="AR Aging" icon={<BarChartIcon />} level={3} />
                     <SidebarLink to="/finance/ar/statements" label="Statements" icon={<FileTextIcon />} level={3} />
                   </Indent>

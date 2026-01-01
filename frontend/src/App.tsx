@@ -20,6 +20,7 @@ import { CreateInvoicePage as CreateArInvoicePage } from './pages/ar/CreateInvoi
 import { CustomersListPage } from './pages/ar/CustomersListPage';
 import { InvoiceDetailsPage as ArInvoiceDetailsPage } from './pages/ar/InvoiceDetailsPage';
 import { InvoicesListPage as ArInvoicesListPage } from './pages/ar/InvoicesListPage';
+import { ReceiptsPage } from './pages/ar/ReceiptsPage';
 import { ApPaymentDetailsPage } from './pages/payments/ApPaymentDetailsPage';
 import { ApPaymentsListPage } from './pages/payments/ApPaymentsListPage';
 import { ArReceiptDetailsPage } from './pages/payments/ArReceiptDetailsPage';
@@ -122,6 +123,7 @@ export default function App() {
               <Route path="ar/invoices" element={<ArInvoicesListPage />} />
               <Route path="ar/invoices/new" element={<CreateArInvoicePage />} />
               <Route path="ar/invoices/:id" element={<ArInvoiceDetailsPage />} />
+              <Route path="ar/receipts" element={<ReceiptsPage />} />
               <Route path="payments" element={<PaymentsHomePage />} />
               <Route path="payments/bank-accounts" element={<BankAccountsListPage />} />
               <Route path="payments/ap" element={<ApPaymentsListPage />} />
@@ -256,6 +258,7 @@ export default function App() {
               />
               <Route path="finance/ar/customers" element={<CustomersListPage />} />
               <Route path="finance/ar/invoices" element={<ArInvoicesListPage />} />
+              <Route path="finance/ar/receipts" element={<ReceiptsPage />} />
               <Route path="finance/ar/aging" element={<ArAgingPage />} />
               <Route path="finance/ar/statements" element={<FinanceArStatementsPage />} />
               <Route path="finance/ap/suppliers" element={<SuppliersListPage />} />

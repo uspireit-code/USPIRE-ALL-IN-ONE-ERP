@@ -27,6 +27,7 @@ import { RbacModule } from './rbac/rbac.module';
 import { ReportsModule } from './reports/reports.module';
 import { SettingsModule } from './settings/settings.module';
 import { TaxModule } from './tax/tax.module';
+import { ArReceiptsModule } from './ar-receipts/ar-receipts.module';
 import { CorrelationIdMiddleware } from './internal/correlation-id.middleware';
 import { RequestLoggerMiddleware } from './internal/request-logger.middleware';
 import { TenantMiddleware } from './tenant/tenant.middleware';
@@ -48,6 +49,7 @@ import { TenantMiddleware } from './tenant/tenant.middleware';
     TaxModule,
     ApModule,
     ArModule,
+    ArReceiptsModule,
     AuditModule,
     DashboardModule,
     BankModule,

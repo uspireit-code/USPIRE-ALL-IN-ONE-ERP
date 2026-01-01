@@ -39,6 +39,15 @@ export type CustomerInvoice = {
   lines: CustomerInvoiceLine[];
 };
 
+export type ArReceipt = {
+  id: string;
+  receiptNo: string;
+  date: string;
+  customer: string;
+  amount: number;
+  status: string;
+};
+
 export async function listCustomers() {
   return apiFetch<Customer[]>('/ar/customers', { method: 'GET' });
 }
@@ -92,4 +101,12 @@ export async function postInvoice(id: string, params?: { arControlAccountCode?: 
     method: 'POST',
     body: JSON.stringify({ arControlAccountCode: params?.arControlAccountCode || undefined }),
   });
+}
+
+export async function listReceipts() {
+  return apiFetch<ArReceipt[]>('/ar/receipts', { method: 'GET' });
+}
+
+export async function getReceiptById(id: string) {
+  return apiFetch<ArReceipt>(`/ar/receipts/${id}`, { method: 'GET' });
 }
