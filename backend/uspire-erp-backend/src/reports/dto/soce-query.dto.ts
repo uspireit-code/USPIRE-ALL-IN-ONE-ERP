@@ -1,6 +1,9 @@
-import { IsNumberString } from 'class-validator';
+import { IsDateString } from 'class-validator';
 
 export class SoceQueryDto {
-  @IsNumberString()
-  fiscalYear!: string;
+  @IsDateString()
+  from!: string;
+
+  @IsDateString()
+  to!: string;
 }
