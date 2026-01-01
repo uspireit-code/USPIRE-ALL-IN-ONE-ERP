@@ -1,0 +1,73 @@
+import { PrismaService } from '../prisma/prisma.service';
+export declare class InternalController {
+    private readonly prisma;
+    constructor(prisma: PrismaService);
+    listTenants(): Promise<{
+        id: string;
+        name: string;
+        organisationName: string;
+        organisationShortName: string | null;
+        logoUrl: string | null;
+        primaryColor: string;
+        secondaryColor: string | null;
+        legalName: string | null;
+        defaultCurrency: string | null;
+        country: string | null;
+        timezone: string | null;
+        financialYearStartMonth: number | null;
+        dateFormat: string | null;
+        numberFormat: string | null;
+        defaultLandingPage: string | null;
+        defaultDashboard: string | null;
+        defaultLanguage: string | null;
+        demoModeEnabled: boolean | null;
+        defaultUserRoleCode: string | null;
+        faviconUrl: string | null;
+        accentColor: string | null;
+        secondaryAccentColor: string | null;
+        coaFrozen: boolean;
+        coaLockedAt: Date | null;
+        status: import("@prisma/client").$Enums.TenantStatus;
+        createdAt: Date;
+        updatedAt: Date;
+    }[]>;
+    listEntities(): Promise<({
+        tenant: {
+            id: string;
+            name: string;
+            organisationName: string;
+            organisationShortName: string | null;
+            logoUrl: string | null;
+            primaryColor: string;
+            secondaryColor: string | null;
+            legalName: string | null;
+            defaultCurrency: string | null;
+            country: string | null;
+            timezone: string | null;
+            financialYearStartMonth: number | null;
+            dateFormat: string | null;
+            numberFormat: string | null;
+            defaultLandingPage: string | null;
+            defaultDashboard: string | null;
+            defaultLanguage: string | null;
+            demoModeEnabled: boolean | null;
+            defaultUserRoleCode: string | null;
+            faviconUrl: string | null;
+            accentColor: string | null;
+            secondaryAccentColor: string | null;
+            coaFrozen: boolean;
+            coaLockedAt: Date | null;
+            status: import("@prisma/client").$Enums.TenantStatus;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    } & {
+        id: string;
+        tenantId: string;
+        name: string;
+        createdAt: Date;
+        jurisdiction: string;
+        baseCurrency: string;
+        fiscalYearStart: number;
+    })[]>;
+}
