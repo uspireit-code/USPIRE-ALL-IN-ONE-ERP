@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "Tenant" ADD COLUMN     "accentColor" TEXT,
+ADD COLUMN     "country" TEXT,
+ADD COLUMN     "dateFormat" TEXT,
+ADD COLUMN     "defaultCurrency" TEXT,
+ADD COLUMN     "defaultDashboard" TEXT,
+ADD COLUMN     "defaultLandingPage" TEXT,
+ADD COLUMN     "defaultLanguage" TEXT,
+ADD COLUMN     "defaultUserRoleCode" TEXT,
+ADD COLUMN     "demoModeEnabled" BOOLEAN DEFAULT false,
+ADD COLUMN     "faviconUrl" TEXT,
+ADD COLUMN     "financialYearStartMonth" INTEGER,
+ADD COLUMN     "legalName" TEXT,
+ADD COLUMN     "numberFormat" TEXT,
+ADD COLUMN     "secondaryAccentColor" TEXT,
+ADD COLUMN     "timezone" TEXT;
