@@ -619,10 +619,11 @@ export class ReportPresentationService {
 
   async presentSOCE(
     req: Request,
-    params: { fiscalYear: number; compare?: 'prior_year' },
+    params: { from: string; to: string; compare?: 'prior_year' },
   ) {
     const current = await this.engine.computeSOCE(req, {
-      fiscalYear: params.fiscalYear,
+      from: params.from,
+      to: params.to,
     });
 
     let compare: null | Awaited<
@@ -632,11 +633,11 @@ export class ReportPresentationService {
     let compareOmittedReason: string | undefined;
 
     if (params.compare) {
-      const cYear = params.fiscalYear - 1;
+      const cFrom = this.addMonths(params.from, -12);
+      const cTo = this.addMonths(params.to, -12);
       try {
-        compare = await this.engine.computeSOCE(req, { fiscalYear: cYear });
+        compare = await this.engine.computeSOCE(req, { from: cFrom, to: cTo });
         comparePeriod = {
-          fiscalYear: cYear,
           from: compare.from,
           to: compare.to,
         };
@@ -677,7 +678,6 @@ export class ReportPresentationService {
       reportType: 'SOCE' as const,
       title: 'Statement of Changes in Equity',
       period: {
-        fiscalYear: current.fiscalYear,
         from: current.from,
         to: current.to,
       },

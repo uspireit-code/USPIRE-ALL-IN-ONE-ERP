@@ -96,31 +96,42 @@ type BalanceSheet = {
 };
 
 type Soce = {
-  fiscalYear: number;
   from: string;
   to: string;
   shareCapital: {
     opening: number;
+    ownerContributions: number;
+    dividendsOrDrawings: number;
     profitOrLoss: number;
     otherMovements: number;
+    movements: number;
     closing: number;
   };
   retainedEarnings: {
     opening: number;
+    ownerContributions: number;
+    dividendsOrDrawings: number;
     profitOrLoss: number;
     otherMovements: number;
+    movements: number;
     closing: number;
   };
   otherReserves: {
     opening: number;
+    ownerContributions: number;
+    dividendsOrDrawings: number;
     profitOrLoss: number;
     otherMovements: number;
+    movements: number;
     closing: number;
   };
   totalEquity: {
     opening: number;
+    ownerContributions: number;
+    dividendsOrDrawings: number;
     profitOrLoss: number;
     otherMovements: number;
+    movements: number;
     closing: number;
   };
 };
@@ -568,6 +579,41 @@ export class FinancialStatementsService {
     return n.includes('share capital') || n.includes('issued capital');
   }
 
+  private classifyOtherReservesEquityAccount(a: {
+    code: string;
+    name: string;
+    type: string;
+  }) {
+    if (a.type !== 'EQUITY') return false;
+    const n = `${a.code} ${a.name}`.toLowerCase();
+    if (
+      n.includes('share capital') ||
+      n.includes('issued capital') ||
+      n.includes('retained earnings') ||
+      n.includes('retained profit') ||
+      n.includes('dividend') ||
+      n.includes('drawing')
+    ) {
+      return false;
+    }
+    return (
+      n.includes('reserve') ||
+      n.includes('revaluation') ||
+      n.includes('translation') ||
+      n.includes('surplus')
+    );
+  }
+
+  private classifyDividendsOrDrawingsEquityAccount(a: {
+    code: string;
+    name: string;
+    type: string;
+  }) {
+    if (a.type !== 'EQUITY') return false;
+    const n = `${a.code} ${a.name}`.toLowerCase();
+    return n.includes('dividend') || n.includes('drawing') || n.includes('drawings');
+  }
+
   private classifyRetainedEarningsEquityAccount(a: {
     code: string;
     name: string;
@@ -877,6 +923,7 @@ export class FinancialStatementsService {
     let nonCurrentOtherLiabilities = 0;
 
     let shareCapital = 0;
+    let otherReserves = 0;
 
     for (const g of grouped) {
       const a = aById.get(g.accountId);
@@ -984,6 +1031,10 @@ export class FinancialStatementsService {
         const bal = this.round2(credit - debit);
         if (this.classifyShareCapital(a)) {
           shareCapital = this.round2(shareCapital + bal);
+          continue;
+        }
+        if (this.classifyOtherReservesEquityAccount(a)) {
+          otherReserves = this.round2(otherReserves + bal);
           continue;
         }
         // Ignore all other equity accounts (including retained earnings accounts)
@@ -1112,14 +1163,6 @@ export class FinancialStatementsService {
         balance: cashAndEquivalents,
       });
 
-    // Equity: enforce structure (always show Share capital, Retained earnings, Other reserves).
-    equity.push({
-      accountCode: 'SHARE_CAPITAL',
-      accountName: 'Share capital',
-      reportSection: 'EQUITY',
-      balance: shareCapital,
-    });
-
     // Liabilities: Non-current then Current.
     if (nonCurrentBorrowings !== 0)
       liabilities.push({
@@ -1191,8 +1234,16 @@ export class FinancialStatementsService {
       liabilities.reduce((s, r) => s + r.balance, 0),
     );
 
+    // Equity: enforce structure (always show Share capital, Retained earnings, Other reserves).
+    equity.push({
+      accountCode: 'SHARE_CAPITAL',
+      accountName: 'Share capital',
+      reportSection: 'EQUITY',
+      balance: shareCapital,
+    });
+
     const retainedEarningsDerived = this.round2(
-      totalAssets - totalLiabilities - shareCapital,
+      totalAssets - totalLiabilities - shareCapital - otherReserves,
     );
     equity.push({
       accountCode: 'RETAINED_EARNINGS',
@@ -1205,7 +1256,7 @@ export class FinancialStatementsService {
       accountCode: 'OTHER_RESERVES',
       accountName: 'Other reserves',
       reportSection: 'EQUITY',
-      balance: 0,
+      balance: otherReserves,
     });
 
     const totalEquity = this.round2(equity.reduce((s, r) => s + r.balance, 0));
@@ -1225,103 +1276,78 @@ export class FinancialStatementsService {
     };
   }
 
-  private async resolveFiscalYearRange(params: {
-    tenantId: string;
-    fiscalYear: number;
-  }) {
-    const periods = await this.prisma.accountingPeriod.findMany({
-      where: {
-        tenantId: params.tenantId,
-        name: { not: this.OPENING_PERIOD_NAME },
-      },
-      orderBy: { startDate: 'asc' },
-      select: { id: true, name: true, startDate: true, endDate: true },
-    });
-
-    const inYear = periods.filter(
-      (p) => p.startDate.getUTCFullYear() === params.fiscalYear,
-    );
-
-    if (inYear.length === 0)
-      throw new BadRequestException(
-        'No accounting periods exist for the requested fiscal year',
-      );
-
-    return {
-      from: new Date(inYear[0].startDate.getTime()),
-      to: new Date(inYear[inYear.length - 1].endDate.getTime()),
-    };
-  }
-
-  async computeSOCE(
-    req: Request,
-    params: { fiscalYear: number },
-  ): Promise<Soce> {
+  async computeSOCE(req: Request, params: { from: string; to: string }): Promise<Soce> {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');
 
-    const range = await this.resolveFiscalYearRange({
+    const norm = await this.normalizeFromToWithCutover({
       tenantId: tenant.id,
-      fiscalYear: params.fiscalYear,
+      from: this.parseDateOnly(params.from),
+      to: this.parseDateOnly(params.to),
     });
 
-    const cutover = await this.getCutoverDateIfLocked({ tenantId: tenant.id });
-    if (cutover && range.to < cutover) {
+    if (norm.empty) {
       return {
-        fiscalYear: params.fiscalYear,
-        from: range.from.toISOString().slice(0, 10),
-        to: range.to.toISOString().slice(0, 10),
+        from: params.from,
+        to: params.to,
         shareCapital: {
           opening: 0,
+          ownerContributions: 0,
+          dividendsOrDrawings: 0,
           profitOrLoss: 0,
           otherMovements: 0,
+          movements: 0,
           closing: 0,
         },
         retainedEarnings: {
           opening: 0,
+          ownerContributions: 0,
+          dividendsOrDrawings: 0,
           profitOrLoss: 0,
           otherMovements: 0,
+          movements: 0,
           closing: 0,
         },
         otherReserves: {
           opening: 0,
+          ownerContributions: 0,
+          dividendsOrDrawings: 0,
           profitOrLoss: 0,
           otherMovements: 0,
+          movements: 0,
           closing: 0,
         },
         totalEquity: {
           opening: 0,
+          ownerContributions: 0,
+          dividendsOrDrawings: 0,
           profitOrLoss: 0,
           otherMovements: 0,
+          movements: 0,
           closing: 0,
         },
       };
     }
 
-    let from = range.from;
-    const to = range.to;
+    await this.assertPeriodCoverage({ tenantId: tenant.id, from: norm.from, to: norm.to });
 
-    if (cutover && from < cutover) from = cutover;
-
-    await this.assertPeriodCoverage({ tenantId: tenant.id, from, to });
+    const from = norm.from;
+    const to = norm.to;
 
     const dayBeforeFrom = this.addUtcDays(this.utcDateOnly(from), -1);
 
     const bsOpening = await this.computeBalanceSheet(req, {
       asOf: dayBeforeFrom.toISOString().slice(0, 10),
-    }).catch(() => null);
+    });
 
     const openingShareCapital = this.round2(
-      bsOpening?.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')
-        ?.balance ?? 0,
+      bsOpening.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')?.balance ?? 0,
     );
     const openingRetainedEarnings = this.round2(
-      bsOpening?.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')
-        ?.balance ?? 0,
+      bsOpening.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')?.balance ?? 0,
     );
     const openingOtherReserves = this.round2(
-      bsOpening?.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')
-        ?.balance ?? 0,
+      bsOpening.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')?.balance ?? 0,
     );
     const openingEquityTotal = this.round2(
       openingShareCapital + openingRetainedEarnings + openingOtherReserves,
@@ -1333,67 +1359,146 @@ export class FinancialStatementsService {
     });
     const netProfit = pl.profitOrLoss;
 
+    const groupedEquityMovements = await this.prisma.journalLine.groupBy({
+      by: ['accountId'],
+      where: {
+        journalEntry: {
+          tenantId: tenant.id,
+          status: 'POSTED',
+          journalDate: { gte: from, lte: to },
+        },
+        account: {
+          tenantId: tenant.id,
+          type: 'EQUITY',
+        },
+      },
+      _sum: { debit: true, credit: true },
+    });
+
+    const equityAccountIds = groupedEquityMovements.map((g) => g.accountId);
+    const equityAccounts = await this.prisma.account.findMany({
+      where: { tenantId: tenant.id, id: { in: equityAccountIds } },
+      select: { id: true, code: true, name: true, type: true },
+    });
+    const equityAccountById = new Map(
+      equityAccounts.map((a) => [a.id, a] as const),
+    );
+
+    let ownerContributions = 0;
+    let dividendsOrDrawings = 0;
+
+    for (const g of groupedEquityMovements) {
+      const a = equityAccountById.get(g.accountId);
+      if (!a) continue;
+      const debit = Number(g._sum?.debit ?? 0);
+      const credit = Number(g._sum?.credit ?? 0);
+      const movement = this.round2(credit - debit);
+      if (movement === 0) continue;
+
+      if (this.classifyShareCapital(a)) {
+        ownerContributions = this.round2(ownerContributions + movement);
+        continue;
+      }
+
+      if (this.classifyDividendsOrDrawingsEquityAccount(a)) {
+        dividendsOrDrawings = this.round2(dividendsOrDrawings + movement);
+        continue;
+      }
+    }
+
     const bsClosing = await this.computeBalanceSheet(req, {
       asOf: to.toISOString().slice(0, 10),
     });
 
     const closingShareCapital = this.round2(
-      bsClosing.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')
-        ?.balance ?? 0,
+      bsClosing.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')?.balance ?? 0,
     );
     const closingRetainedEarnings = this.round2(
-      bsClosing.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')
-        ?.balance ?? 0,
+      bsClosing.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')?.balance ?? 0,
     );
     const closingOtherReserves = this.round2(
-      bsClosing.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')
-        ?.balance ?? 0,
+      bsClosing.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')?.balance ?? 0,
     );
     const closingEquityTotal = this.round2(
       closingShareCapital + closingRetainedEarnings + closingOtherReserves,
     );
 
-    const otherShareCapital = this.round2(
-      closingShareCapital - openingShareCapital,
+    const deltaShareCapital = this.round2(closingShareCapital - openingShareCapital);
+    const deltaRetainedEarnings = this.round2(
+      closingRetainedEarnings - openingRetainedEarnings,
     );
-    const otherRetainedEarnings = this.round2(
-      closingRetainedEarnings - openingRetainedEarnings - netProfit,
+    const deltaOtherReserves = this.round2(closingOtherReserves - openingOtherReserves);
+    const deltaTotal = this.round2(closingEquityTotal - openingEquityTotal);
+
+    const shareCapitalOtherMovements = this.round2(
+      deltaShareCapital - ownerContributions,
     );
-    const otherOtherReserves = this.round2(
-      closingOtherReserves - openingOtherReserves,
+    const retainedEarningsOtherMovements = this.round2(
+      deltaRetainedEarnings - this.round2(netProfit) - dividendsOrDrawings,
     );
-    const otherTotal = this.round2(
-      closingEquityTotal - openingEquityTotal - netProfit,
+    const otherReservesOtherMovements = this.round2(deltaOtherReserves);
+    const totalOtherMovements = this.round2(
+      deltaTotal - this.round2(netProfit) - ownerContributions - dividendsOrDrawings,
     );
 
+    const mk = (params: {
+      opening: number;
+      ownerContributions?: number;
+      dividendsOrDrawings?: number;
+      profitOrLoss?: number;
+      otherMovements: number;
+      closing: number;
+    }) => {
+      const ownerContributions = this.round2(params.ownerContributions ?? 0);
+      const dividendsOrDrawings = this.round2(params.dividendsOrDrawings ?? 0);
+      const profitOrLoss = this.round2(params.profitOrLoss ?? 0);
+      const otherMovements = this.round2(params.otherMovements);
+      const movements = this.round2(
+        ownerContributions + dividendsOrDrawings + profitOrLoss + otherMovements,
+      );
+      return {
+        opening: this.round2(params.opening),
+        ownerContributions,
+        dividendsOrDrawings,
+        profitOrLoss,
+        otherMovements,
+        movements,
+        closing: this.round2(params.closing),
+      };
+    };
+
     return {
-      fiscalYear: params.fiscalYear,
-      from: from.toISOString().slice(0, 10),
-      to: to.toISOString().slice(0, 10),
-      shareCapital: {
+      from:
+        norm.cutover && new Date(params.from) < norm.cutover
+          ? norm.cutover.toISOString().slice(0, 10)
+          : params.from,
+      to: params.to,
+      shareCapital: mk({
         opening: openingShareCapital,
-        profitOrLoss: 0,
-        otherMovements: otherShareCapital,
+        ownerContributions,
+        otherMovements: shareCapitalOtherMovements,
         closing: closingShareCapital,
-      },
-      retainedEarnings: {
+      }),
+      retainedEarnings: mk({
         opening: openingRetainedEarnings,
+        dividendsOrDrawings,
         profitOrLoss: this.round2(netProfit),
-        otherMovements: otherRetainedEarnings,
+        otherMovements: retainedEarningsOtherMovements,
         closing: closingRetainedEarnings,
-      },
-      otherReserves: {
+      }),
+      otherReserves: mk({
         opening: openingOtherReserves,
-        profitOrLoss: 0,
-        otherMovements: otherOtherReserves,
+        otherMovements: otherReservesOtherMovements,
         closing: closingOtherReserves,
-      },
-      totalEquity: {
+      }),
+      totalEquity: mk({
         opening: openingEquityTotal,
+        ownerContributions,
+        dividendsOrDrawings,
         profitOrLoss: this.round2(netProfit),
-        otherMovements: otherTotal,
+        otherMovements: totalOtherMovements,
         closing: closingEquityTotal,
-      },
+      }),
     };
   }
 

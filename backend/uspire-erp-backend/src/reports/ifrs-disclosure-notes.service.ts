@@ -1342,13 +1342,11 @@ export class IfrsDisclosureNotesService {
     req: Request,
     params: { from: string; to: string; openingAsOf: string },
   ): Promise<IfrsDisclosureNoteDto> {
-    const fiscalYear = this.utcDateOnly(new Date(params.from)).getUTCFullYear();
-
     const [bsOpening, bsClosing, pl, soce] = await Promise.all([
       this.fs.computeBalanceSheet(req, { asOf: params.openingAsOf }),
       this.fs.computeBalanceSheet(req, { asOf: params.to }),
       this.fs.computeProfitAndLoss(req, { from: params.from, to: params.to }),
-      this.fs.computeSOCE(req, { fiscalYear }),
+      this.fs.computeSOCE(req, { from: params.from, to: params.to }),
     ]);
 
     if (soce.from !== params.from || soce.to !== params.to) {

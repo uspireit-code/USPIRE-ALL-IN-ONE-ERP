@@ -452,6 +452,109 @@ export class ReportExportService {
     });
   }
 
+  async toSocePdf(params: {
+    soce: {
+      from: string;
+      to: string;
+      shareCapital: { opening: number; movements: number; closing: number };
+      retainedEarnings: { opening: number; movements: number; closing: number };
+      otherReserves: { opening: number; movements: number; closing: number };
+      totalEquity: { opening: number; movements: number; closing: number };
+    };
+    header: PdfHeaderBlock;
+  }): Promise<Buffer> {
+    const PDFDocument = this.ensurePdfKit();
+
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const drawHeader = () => this.renderHeaderBlock(doc, params.header);
+    drawHeader();
+
+    const width = this.pageWidth(doc);
+    const x = this.x0(doc);
+
+    const colLabel = Math.max(180, width - 120 * 3);
+    const colNum = 120;
+
+    const drawTableHeader = () => {
+      this.ensureSpace(doc, 18, drawHeader);
+      const y = doc.y;
+      doc.font('Helvetica-Bold').fontSize(9);
+      doc.text('Component', x, y, { width: colLabel, align: 'left' });
+      doc.text('Opening', x + colLabel, y, { width: colNum, align: 'right' });
+      doc.text('Movements', x + colLabel + colNum, y, {
+        width: colNum,
+        align: 'right',
+      });
+      doc.text('Closing', x + colLabel + colNum * 2, y, {
+        width: colNum,
+        align: 'right',
+      });
+      doc.moveDown(0.5);
+      doc
+        .moveTo(x, doc.y)
+        .lineTo(x + width, doc.y)
+        .strokeColor('#ddd')
+        .stroke();
+      doc.strokeColor('#000');
+      doc.moveDown(0.35);
+      doc.font('Helvetica').fontSize(9);
+    };
+
+    const drawPageHeader = () => {
+      drawHeader();
+      drawTableHeader();
+    };
+
+    const row = (
+      label: string,
+      values: { opening: number; movements: number; closing: number },
+      opts?: { bold?: boolean; separatorAbove?: boolean },
+    ) => {
+      this.ensureSpace(doc, 16, drawPageHeader);
+      if (opts?.separatorAbove) {
+        doc
+          .moveTo(x, doc.y)
+          .lineTo(x + width, doc.y)
+          .strokeColor('#000')
+          .stroke();
+        doc.strokeColor('#000');
+        doc.moveDown(0.25);
+      }
+      const y = doc.y;
+      doc.font(opts?.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9);
+      doc.text(label, x, y, { width: colLabel, align: 'left' });
+      doc.text(this.formatMoney(values.opening), x + colLabel, y, {
+        width: colNum,
+        align: 'right',
+      });
+      doc.text(this.formatMoney(values.movements), x + colLabel + colNum, y, {
+        width: colNum,
+        align: 'right',
+      });
+      doc.text(this.formatMoney(values.closing), x + colLabel + colNum * 2, y, {
+        width: colNum,
+        align: 'right',
+      });
+      doc.moveDown(0.9);
+    };
+
+    drawTableHeader();
+
+    row('Share capital', params.soce.shareCapital);
+    row('Retained earnings', params.soce.retainedEarnings);
+    row('Other reserves', params.soce.otherReserves);
+    row('Total equity', params.soce.totalEquity, { bold: true, separatorAbove: true });
+
+    return await new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.end();
+    });
+  }
+
   async trialBalanceToXlsx(params: {
     title: string;
     from: string;

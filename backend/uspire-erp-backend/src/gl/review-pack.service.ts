@@ -401,7 +401,8 @@ export class ReviewPackService {
     const bs = await this.reports.presentBS(req, { asOf: tbTo });
     const cf = await this.reports.presentCF(req, { from: tbFrom, to: tbTo });
     const soce = await this.reports.presentSOCE(req, {
-      fiscalYear: period.startDate.getUTCFullYear(),
+      from: tbFrom,
+      to: tbTo,
     });
 
     filesToInclude.push({

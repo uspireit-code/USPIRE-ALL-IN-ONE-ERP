@@ -143,18 +143,11 @@ export class ReportsController {
     @Req() req: Request,
     @Query() dto: SoceQueryDto & ReportCompareQueryDto,
   ) {
-    assertNoUnsupportedDimensions(req.query as any, ['fiscalYear', 'compare']);
-
-    const fiscalYear = Number(dto.fiscalYear);
-    if (
-      !Number.isFinite(fiscalYear) ||
-      String(fiscalYear) !== String(dto.fiscalYear)
-    ) {
-      throw new BadRequestException('Invalid fiscalYear');
-    }
+    assertNoUnsupportedDimensions(req.query as any, ['from', 'to', 'compare']);
 
     const presented = await this.presentation.presentSOCE(req, {
-      fiscalYear,
+      from: dto.from,
+      to: dto.to,
       compare: dto.compare === 'prior_year' ? 'prior_year' : undefined,
     });
 
@@ -437,21 +430,15 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     assertNoUnsupportedDimensions(req.query as any, [
-      'fiscalYear',
+      'from',
+      'to',
       'compare',
       'format',
     ]);
 
-    const fiscalYear = Number(dto.fiscalYear);
-    if (
-      !Number.isFinite(fiscalYear) ||
-      String(fiscalYear) !== String(dto.fiscalYear)
-    ) {
-      throw new BadRequestException('Invalid fiscalYear');
-    }
-
     const presented = await this.presentation.presentSOCE(req, {
-      fiscalYear,
+      from: dto.from,
+      to: dto.to,
       compare: dto.compare === 'prior_year' ? 'prior_year' : undefined,
     });
     const entity = buildDeterministicReportEntityId({
@@ -477,7 +464,7 @@ export class ReportsController {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="Statement_of_Changes_in_Equity_${fiscalYear}.csv"`,
+        `attachment; filename="Statement_of_Changes_in_Equity_${dto.from}_to_${dto.to}.csv"`,
       );
       res.send(body);
       return;
@@ -500,7 +487,7 @@ export class ReportsController {
       );
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="Statement_of_Changes_in_Equity_${fiscalYear}.xlsx"`,
+        `attachment; filename="Statement_of_Changes_in_Equity_${dto.from}_to_${dto.to}.xlsx"`,
       );
       res.send(body);
       return;
@@ -509,12 +496,12 @@ export class ReportsController {
     if (dto.format === 'pdf') {
       const { entityLegalName, currencyIsoCode } =
         this.getTenantPdfMetaOrThrow(req);
-      const body = await this.exports.toPdf({
-        report: presented,
+      const body = await this.exports.toSocePdf({
+        soce: await this.financial.computeSOCE(req, { from: dto.from, to: dto.to }),
         header: {
           entityLegalName,
           reportName: 'Statement of Changes in Equity',
-          periodLine: `For the period ${presented.period.from} to ${presented.period.to}`,
+          periodLine: `For the period ${dto.from} to ${dto.to}`,
           currencyIsoCode,
         },
       });
@@ -530,7 +517,7 @@ export class ReportsController {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="Statement_of_Changes_in_Equity_${fiscalYear}.pdf"`,
+        `attachment; filename="Statement_of_Changes_in_Equity_${dto.from}_to_${dto.to}.pdf"`,
       );
       res.send(body);
       return;
@@ -680,9 +667,7 @@ export class ReportsController {
   @Get('soce-engine')
   @Permissions('FINANCE_SOE_VIEW')
   async soce(@Req() req: Request, @Query() dto: SoceQueryDto) {
-    return this.financial.computeSOCE(req, {
-      fiscalYear: Number(dto.fiscalYear),
-    });
+    return this.financial.computeSOCE(req, dto);
   }
 
   @Get('cash-flow')
