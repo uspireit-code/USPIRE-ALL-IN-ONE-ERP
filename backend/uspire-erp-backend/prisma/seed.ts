@@ -188,6 +188,10 @@ async function main() {
     { code: 'AR_RECEIPTS_VIEW', description: 'View customer receipts' },
     { code: 'AR_RECEIPTS_CREATE', description: 'Create customer receipts' },
     { code: 'AR_RECEIPT_VOID', description: 'Void customer receipts' },
+    { code: 'CUSTOMERS_VIEW', description: 'View customer master data' },
+    { code: 'CUSTOMERS_CREATE', description: 'Create customers (master)' },
+    { code: 'CUSTOMERS_EDIT', description: 'Edit customers (master)' },
+    { code: 'CUSTOMERS_IMPORT', description: 'Import customers in bulk' },
     { code: 'BANK_ACCOUNT_CREATE', description: 'Create bank accounts' },
     { code: 'PAYMENT_CREATE', description: 'Create payments' },
     { code: 'PAYMENT_APPROVE', description: 'Approve payments' },
@@ -611,6 +615,59 @@ async function main() {
       await prisma.rolePermission.createMany({
         data: arReceiptsRoles.flatMap((r) =>
           arReceiptsPermIds.map((permissionId) => ({
+            roleId: r.id,
+            permissionId,
+          })),
+        ),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  // Customer Master (AR-CUSTOMERS) RBAC backfill (idempotent):
+  // - ADMIN / FINANCE_OFFICER / FINANCE_MANAGER / FINANCE_CONTROLLER must have:
+  //   - CUSTOMERS_VIEW
+  //   - CUSTOMERS_CREATE
+  //   - CUSTOMERS_EDIT
+  //   - CUSTOMERS_IMPORT
+  const customersViewPerm = await prisma.permission.findUnique({
+    where: { code: 'CUSTOMERS_VIEW' },
+    select: { id: true },
+  });
+  const customersCreatePerm = await prisma.permission.findUnique({
+    where: { code: 'CUSTOMERS_CREATE' },
+    select: { id: true },
+  });
+  const customersEditPerm = await prisma.permission.findUnique({
+    where: { code: 'CUSTOMERS_EDIT' },
+    select: { id: true },
+  });
+  const customersImportPerm = await prisma.permission.findUnique({
+    where: { code: 'CUSTOMERS_IMPORT' },
+    select: { id: true },
+  });
+
+  const customersPermIds = [
+    customersViewPerm?.id,
+    customersCreatePerm?.id,
+    customersEditPerm?.id,
+    customersImportPerm?.id,
+  ].filter(Boolean) as string[];
+
+  if (customersPermIds.length > 0) {
+    const customerRoles = await prisma.role.findMany({
+      where: {
+        name: {
+          in: ['ADMIN', 'FINANCE_OFFICER', 'FINANCE_MANAGER', 'FINANCE_CONTROLLER'],
+        },
+      },
+      select: { id: true },
+    });
+
+    if (customerRoles.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: customerRoles.flatMap((r) =>
+          customersPermIds.map((permissionId) => ({
             roleId: r.id,
             permissionId,
           })),

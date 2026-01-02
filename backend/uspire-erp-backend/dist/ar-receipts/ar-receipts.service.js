@@ -305,11 +305,14 @@ let ArReceiptsService = class ArReceiptsService {
         const tenant = this.ensureTenant(req);
         const user = this.ensureUser(req);
         const customer = await this.prisma.customer.findFirst({
-            where: { id: dto.customerId, tenantId: tenant.id, isActive: true },
-            select: { id: true },
+            where: { id: dto.customerId, tenantId: tenant.id },
+            select: { id: true, status: true },
         });
         if (!customer) {
-            throw new common_1.BadRequestException('Customer not found or inactive');
+            throw new common_1.BadRequestException('Customer not found');
+        }
+        if (customer.status !== 'ACTIVE') {
+            throw new common_1.BadRequestException('Customer is inactive and cannot be used for new transactions.');
         }
         await this.validateLines({
             tenantId: tenant.id,
@@ -358,11 +361,14 @@ let ArReceiptsService = class ArReceiptsService {
         const nextCurrency = dto.currency ?? String(current.currency);
         if (dto.customerId) {
             const customer = await this.prisma.customer.findFirst({
-                where: { id: dto.customerId, tenantId: tenant.id, isActive: true },
-                select: { id: true },
+                where: { id: dto.customerId, tenantId: tenant.id },
+                select: { id: true, status: true },
             });
             if (!customer) {
-                throw new common_1.BadRequestException('Customer not found or inactive');
+                throw new common_1.BadRequestException('Customer not found');
+            }
+            if (customer.status !== 'ACTIVE') {
+                throw new common_1.BadRequestException('Customer is inactive and cannot be used for new transactions.');
             }
         }
         await this.validateLines({

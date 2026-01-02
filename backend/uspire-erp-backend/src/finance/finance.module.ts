@@ -7,10 +7,12 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CoaController } from './coa.controller';
 import { CoaService } from './coa.service';
+import { FinanceArCustomersController } from './ar/customers/customers.controller';
+import { FinanceArCustomersService } from './ar/customers/customers.service';
 
 @Module({
   imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule],
-  controllers: [CoaController],
-  providers: [CoaService, JwtAuthGuard, PermissionsGuard],
+  controllers: [CoaController, FinanceArCustomersController],
+  providers: [CoaService, FinanceArCustomersService, JwtAuthGuard, PermissionsGuard],
 })
 export class FinanceModule {}

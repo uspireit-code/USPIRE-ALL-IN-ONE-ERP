@@ -23,12 +23,12 @@ export class ArService {
       throw new BadRequestException('Missing tenant context');
     }
 
-    return this.prisma.customer.create({
+    return (this.prisma as any).customer.create({
       data: {
         tenantId: tenant.id,
         name: dto.name,
         taxNumber: dto.taxNumber,
-        isActive: true,
+        status: 'ACTIVE',
       },
     });
   }
@@ -39,8 +39,8 @@ export class ArService {
       throw new BadRequestException('Missing tenant context');
     }
 
-    return this.prisma.customer.findMany({
-      where: { tenantId: tenant.id, isActive: true },
+    return (this.prisma as any).customer.findMany({
+      where: { tenantId: tenant.id, status: 'ACTIVE' },
       orderBy: { name: 'asc' },
     });
   }
@@ -70,13 +70,18 @@ export class ArService {
       throw new BadRequestException('Missing tenant or user context');
     }
 
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: dto.customerId, tenantId: tenant.id, isActive: true },
-      select: { id: true },
+    const customer = await (this.prisma as any).customer.findFirst({
+      where: { id: dto.customerId, tenantId: tenant.id },
+      select: { id: true, status: true },
     });
 
     if (!customer) {
-      throw new BadRequestException('Customer not found or inactive');
+      throw new BadRequestException('Customer not found');
+    }
+    if (customer.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        'Customer is inactive and cannot be used for new transactions.',
+      );
     }
 
     const netAmount = this.round2(
