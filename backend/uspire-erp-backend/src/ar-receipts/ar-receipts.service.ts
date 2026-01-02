@@ -28,6 +28,97 @@ export class ArReceiptsService {
     return this.round2(Number(n ?? 0));
   }
 
+  private escapeHtml(s: any) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  private formatMoney(n: any) {
+    const v = Number(n ?? 0);
+    const fixed = this.round2(v).toFixed(2);
+    const [a, b] = fixed.split('.');
+    const withCommas = a.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `${withCommas}.${b}`;
+  }
+
+  private ensurePdfKit() {
+    let PDFDocument: any;
+    try {
+      PDFDocument = require('pdfkit');
+    } catch {
+      throw new BadRequestException('PDF export not available (missing dependency pdfkit)');
+    }
+    return PDFDocument;
+  }
+
+  private parseReference(dto: { paymentReference?: any; reference?: any }) {
+    const a = dto.paymentReference === undefined ? undefined : String(dto.paymentReference ?? '').trim();
+    const b = dto.reference === undefined ? undefined : String(dto.reference ?? '').trim();
+
+    if (a && b && a !== b) {
+      throw new BadRequestException(
+        'Provide either paymentReference or reference (alias), not both with different values',
+      );
+    }
+
+    const merged = (b ?? a ?? '').trim();
+    return merged ? merged : null;
+  }
+
+  private async validateAndNormalizeHeader(params: {
+    tenantId: string;
+    currency: string;
+    exchangeRate?: number | null;
+    totalAmount: number;
+  }) {
+    const amount = this.normalizeMoney(params.totalAmount);
+    if (!(amount > 0)) {
+      throw new BadRequestException('Receipt totalAmount must be > 0');
+    }
+
+    const receiptCurrency = String(params.currency ?? '').trim();
+    if (!receiptCurrency) {
+      throw new BadRequestException('Receipt currency is required');
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: params.tenantId },
+      select: { id: true, defaultCurrency: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const baseCurrency = String(tenant.defaultCurrency ?? '').trim();
+    if (!baseCurrency) {
+      throw new BadRequestException('Tenant defaultCurrency is not configured');
+    }
+
+    const nextExchangeRate = params.exchangeRate === null || params.exchangeRate === undefined
+      ? null
+      : Number(params.exchangeRate);
+
+    if (receiptCurrency === baseCurrency) {
+      if (nextExchangeRate !== null && !(Number(nextExchangeRate) === 1)) {
+        throw new BadRequestException('exchangeRate must be 1 when receipt currency equals base currency');
+      }
+      return { amount, receiptCurrency, exchangeRate: 1, baseCurrency };
+    }
+
+    if (nextExchangeRate === null || !(Number(nextExchangeRate) > 0)) {
+      throw new BadRequestException('exchangeRate is required and must be > 0 when currency differs from base currency');
+    }
+
+    return {
+      amount,
+      receiptCurrency,
+      exchangeRate: Number(nextExchangeRate),
+      baseCurrency,
+    };
+  }
+
   private ensureTenant(req: Request) {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');
@@ -300,9 +391,11 @@ export class ArReceiptsService {
       customerId: r.customerId,
       customerName: r.customer?.name ?? '',
       currency: r.currency,
+      exchangeRate: Number((r as any).exchangeRate ?? 1),
       totalAmount: Number(r.totalAmount),
       paymentMethod: r.paymentMethod,
       paymentReference: r.paymentReference,
+      reference: r.paymentReference,
       status: r.status,
       glJournalId: r.glJournalId ?? null,
       createdAt: r.createdAt.toISOString(),
@@ -327,9 +420,11 @@ export class ArReceiptsService {
       customerId: r.customerId,
       customerName: r.customer?.name ?? '',
       currency: r.currency,
+      exchangeRate: Number((r as any).exchangeRate ?? 1),
       totalAmount: Number(r.totalAmount),
       paymentMethod: r.paymentMethod,
       paymentReference: r.paymentReference,
+      reference: r.paymentReference,
       status: r.status,
       glJournalId: r.glJournalId ?? null,
       createdAt: r.createdAt.toISOString(),
@@ -343,6 +438,503 @@ export class ArReceiptsService {
         invoiceNumber: l.invoice?.invoiceNumber ?? '',
         appliedAmount: Number(l.appliedAmount),
       })),
+    };
+  }
+
+  async listCustomerOutstandingInvoices(req: Request, customerId: string, currency?: string) {
+    const tenant = this.ensureTenant(req);
+
+    const customer = await (this.prisma as any).customer.findFirst({
+      where: { id: customerId, tenantId: tenant.id },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    const where: any = {
+      tenantId: tenant.id,
+      customerId,
+      status: 'POSTED',
+    };
+    if (currency) {
+      const c = String(currency ?? '').trim();
+      if (c) where.currency = c;
+    }
+
+    const invoices = await this.prisma.customerInvoice.findMany({
+      where,
+      orderBy: [{ invoiceDate: 'desc' }, { invoiceNumber: 'desc' }],
+      select: {
+        id: true,
+        invoiceNumber: true,
+        invoiceDate: true,
+        dueDate: true,
+        totalAmount: true,
+        currency: true,
+      } as any,
+    });
+
+    if ((invoices ?? []).length === 0) {
+      return { customerId, currency: currency ?? null, invoices: [] };
+    }
+
+    const invoiceIds = invoices.map((i: any) => i.id);
+    const existingApplied = await (this.prisma as any).customerReceiptLine.groupBy({
+      by: ['invoiceId'],
+      where: {
+        tenantId: tenant.id,
+        invoiceId: { in: invoiceIds },
+        receipt: { tenantId: tenant.id, status: 'POSTED' },
+      } as any,
+      _sum: { appliedAmount: true },
+    });
+    const appliedByInvoiceId = new Map(
+      (existingApplied ?? []).map((g: any) => [
+        g.invoiceId,
+        this.normalizeMoney(Number(g._sum?.appliedAmount ?? 0)),
+      ]),
+    );
+
+    const rows = (invoices ?? [])
+      .map((inv: any) => {
+        const total = this.normalizeMoney(Number(inv.totalAmount ?? 0));
+        const applied = this.normalizeMoney(Number(appliedByInvoiceId.get(inv.id) ?? 0));
+        const outstanding = this.normalizeMoney(total - applied);
+        return {
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber ?? '',
+          invoiceDate: inv.invoiceDate ? new Date(inv.invoiceDate).toISOString().slice(0, 10) : null,
+          dueDate: inv.dueDate ? new Date(inv.dueDate).toISOString().slice(0, 10) : null,
+          currency: (inv as any).currency ?? null,
+          totalAmount: total,
+          outstandingAmount: outstanding,
+        };
+      })
+      .filter((r: any) => this.normalizeMoney(Number(r.outstandingAmount)) > 0);
+
+    return { customerId, currency: currency ?? null, invoices: rows };
+  }
+
+  async exportReceipt(req: Request, id: string, opts: { format: 'html' | 'pdf' }) {
+    const tenant = this.ensureTenant(req);
+
+    const [t, r] = await Promise.all([
+      this.prisma.tenant.findUnique({
+        where: { id: tenant.id },
+        select: { id: true, legalName: true, organisationName: true, defaultCurrency: true },
+      }),
+      (this.prisma as any).customerReceipt.findFirst({
+        where: { id, tenantId: tenant.id },
+        include: { customer: true, lines: { include: { invoice: true } } },
+      }),
+    ]);
+
+    if (!t) throw new NotFoundException('Tenant not found');
+    if (!r) throw new NotFoundException('Receipt not found');
+    if (String((r as any).status ?? '') !== 'POSTED') {
+      throw new BadRequestException('Receipt export is available for POSTED receipts only');
+    }
+
+    const tenantName = String((t as any).legalName ?? (t as any).organisationName ?? '').trim();
+    const baseCurrency = String((t as any).defaultCurrency ?? '').trim();
+    const receiptNumber = String((r as any).receiptNumber ?? '').trim();
+    const receiptDate = (r as any).receiptDate
+      ? new Date((r as any).receiptDate).toISOString().slice(0, 10)
+      : '';
+    const currency = String((r as any).currency ?? '').trim();
+    const exchangeRate = Number((r as any).exchangeRate ?? 1);
+    const receiptAmount = this.normalizeMoney(Number((r as any).totalAmount ?? 0));
+    const paymentMethod = String((r as any).paymentMethod ?? '').trim();
+    const reference = String((r as any).paymentReference ?? '').trim();
+
+    const customerName = String((r as any).customer?.name ?? '').trim();
+    const customerEmail = String((r as any).customer?.email ?? '').trim();
+    const customerPhone = String((r as any).customer?.phone ?? '').trim();
+    const customerAddress = String((r as any).customer?.billingAddress ?? '').trim();
+
+    const linesRaw = ((r as any).lines ?? []) as any[];
+    const receiptLines = linesRaw
+      .map((l: any) => ({
+        invoiceId: l.invoiceId,
+        invoiceNumber: String(l.invoice?.invoiceNumber ?? '').trim(),
+        invoiceDate: l.invoice?.invoiceDate
+          ? new Date(l.invoice.invoiceDate).toISOString().slice(0, 10)
+          : null,
+        dueDate: l.invoice?.dueDate
+          ? new Date(l.invoice.dueDate).toISOString().slice(0, 10)
+          : null,
+        invoiceTotalAmount: this.normalizeMoney(Number(l.invoice?.totalAmount ?? 0)),
+        appliedAmount: this.normalizeMoney(Number(l.appliedAmount ?? 0)),
+      }))
+      .filter((l) => l.appliedAmount > 0);
+
+    const invoiceIds = [...new Set(receiptLines.map((l) => l.invoiceId))];
+
+    const appliedAll = invoiceIds.length
+      ? await (this.prisma as any).customerReceiptLine.groupBy({
+          by: ['invoiceId'],
+          where: {
+            tenantId: tenant.id,
+            invoiceId: { in: invoiceIds },
+            receipt: {
+              tenantId: tenant.id,
+              status: 'POSTED',
+            },
+          } as any,
+          _sum: { appliedAmount: true },
+        })
+      : [];
+
+    const appliedAllByInvoiceId = new Map(
+      (appliedAll ?? []).map((g: any) => [
+        g.invoiceId,
+        this.normalizeMoney(Number(g._sum?.appliedAmount ?? 0)),
+      ]),
+    );
+
+    const appliedTotal = this.normalizeMoney(
+      receiptLines.reduce((s, l) => s + this.normalizeMoney(l.appliedAmount), 0),
+    );
+    const unappliedTotal = this.normalizeMoney(receiptAmount - appliedTotal);
+
+    const allocRows = receiptLines.map((l) => {
+      const appliedIncl = this.normalizeMoney(
+        Number(appliedAllByInvoiceId.get(l.invoiceId) ?? 0),
+      );
+      const balanceAfter = this.normalizeMoney(l.invoiceTotalAmount - appliedIncl);
+      return {
+        ...l,
+        balanceAfter,
+      };
+    });
+
+    const showExchange = !!currency && !!baseCurrency && currency !== baseCurrency;
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Receipt ${this.escapeHtml(receiptNumber)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #0B0C1E; margin: 32px; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+      .brand h1 { margin: 0; font-size: 22px; }
+      .muted { color: #667085; font-size: 12px; }
+      .block { margin-top: 18px; }
+      .row { display: flex; gap: 16px; }
+      .card { border: 1px solid #E4E7EC; border-radius: 10px; padding: 14px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border-bottom: 1px solid #E4E7EC; padding: 10px 8px; font-size: 13px; }
+      th { text-align: left; background: #F9FAFB; }
+      td.num, th.num { text-align: right; }
+      .totals { width: 340px; margin-left: auto; }
+      .totals .line { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+      .totals .grand { font-weight: 700; border-top: 1px solid #E4E7EC; margin-top: 8px; padding-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="brand">
+        <h1>${this.escapeHtml(tenantName || 'USPIRE PROFESSIONAL SERVICES')}</h1>
+        <div class="muted">Prepared in accordance with IFRS</div>
+      </div>
+      <div class="card" style="min-width: 300px;">
+        <div style="font-weight:700; font-size: 18px;">RECEIPT</div>
+        <div style="margin-top:8px;"><b>Receipt Number:</b> ${this.escapeHtml(receiptNumber)}</div>
+        <div><b>Date:</b> ${this.escapeHtml(receiptDate)}</div>
+        <div><b>Currency:</b> ${this.escapeHtml(currency)}</div>
+        ${showExchange ? `<div><b>Exchange Rate:</b> ${this.escapeHtml(String(exchangeRate))}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="row block">
+      <div class="card" style="flex:1;">
+        <div style="font-weight:700; margin-bottom:6px;">Received From</div>
+        <div>${this.escapeHtml(customerName)}</div>
+        ${customerEmail ? `<div class="muted">${this.escapeHtml(customerEmail)}</div>` : ''}
+        ${customerPhone ? `<div class="muted">${this.escapeHtml(customerPhone)}</div>` : ''}
+        ${customerAddress ? `<div class="muted" style="margin-top:6px; white-space:pre-wrap;">${this.escapeHtml(customerAddress)}</div>` : ''}
+      </div>
+      <div class="card" style="min-width:300px;">
+        <div style="font-weight:700; margin-bottom:6px;">Payment Details</div>
+        <div><b>Payment Method:</b> ${this.escapeHtml(paymentMethod)}</div>
+        ${reference ? `<div><b>Reference:</b> ${this.escapeHtml(reference)}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="block">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 140px;">Invoice #</th>
+            <th style="width: 110px;">Invoice Date</th>
+            <th style="width: 110px;">Due Date</th>
+            <th class="num" style="width: 140px;">Invoice Total</th>
+            <th class="num" style="width: 140px;">Amount Applied</th>
+            <th class="num" style="width: 140px;">Balance After</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${allocRows
+            .map((l: any) => `<tr>
+              <td>${this.escapeHtml(l.invoiceNumber)}</td>
+              <td>${this.escapeHtml(l.invoiceDate ?? '')}</td>
+              <td>${this.escapeHtml(l.dueDate ?? '')}</td>
+              <td class="num">${this.formatMoney(l.invoiceTotalAmount)}</td>
+              <td class="num">${this.formatMoney(l.appliedAmount)}</td>
+              <td class="num">${this.formatMoney(l.balanceAfter)}</td>
+            </tr>`)
+            .join('')}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="line"><span>Receipt Amount</span><span>${this.formatMoney(receiptAmount)}</span></div>
+        <div class="line"><span>Applied Total</span><span>${this.formatMoney(appliedTotal)}</span></div>
+        ${unappliedTotal > 0 ? `<div class="line"><span>Unapplied Total</span><span>${this.formatMoney(unappliedTotal)}</span></div>` : ''}
+        <div class="line grand"><span>Total</span><span>${this.formatMoney(receiptAmount)}</span></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="card">
+        <div style="font-weight:700;">Bank Details</div>
+        <div class="muted" style="margin-top:6px;">
+          Bank Name: FNB<br/>
+          Account Name: Uspire Professional Services Ltd<br/>
+          Account Number: 63144493680<br/>
+          Branch Name/Number: Commercial Suite / 260001<br/>
+          Swift Code: FIRNZMLX
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+    if (opts.format === 'html') {
+      return {
+        contentType: 'text/html; charset=utf-8',
+        fileName: `Receipt_${receiptNumber || id}.html`,
+        body: html,
+      };
+    }
+
+    const PDFDocument = this.ensurePdfKit();
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (d: any) => chunks.push(Buffer.from(d)));
+
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+
+    const page = {
+      left: doc.page.margins.left,
+      right: doc.page.margins.right,
+      top: doc.page.margins.top,
+      bottom: doc.page.margins.bottom,
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      yMax: doc.page.height - doc.page.margins.bottom,
+    };
+
+    const colors = {
+      text: '#0B0C1E',
+      muted: '#667085',
+      border: '#E4E7EC',
+      headerBg: '#F9FAFB',
+    };
+
+    const ensureSpace = (minHeight: number, onNewPage?: () => void) => {
+      if (doc.y + minHeight <= page.yMax) return;
+      doc.addPage();
+      if (onNewPage) onNewPage();
+    };
+
+    const drawDivider = () => {
+      doc.save();
+      doc.strokeColor(colors.border);
+      doc.moveTo(page.left, doc.y).lineTo(page.left + page.width, doc.y).stroke();
+      doc.restore();
+    };
+
+    const labelValue = (label: string, value: string, x: number, y: number, w: number) => {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(colors.text);
+      doc.text(label, x, y, { width: w });
+      doc.font('Helvetica').fontSize(10).fillColor(colors.text);
+      doc.text(value, x, doc.y, { width: w });
+    };
+
+    doc.fillColor(colors.text);
+    doc.font('Helvetica-Bold').fontSize(18).text(tenantName || 'USPIRE PROFESSIONAL SERVICES', page.left, doc.y);
+    doc.moveDown(0.2);
+    doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text('Prepared in accordance with IFRS');
+    doc.fillColor(colors.text);
+    doc.moveDown(0.6);
+
+    doc.font('Helvetica-Bold').fontSize(22).text('RECEIPT', page.left, doc.y, { align: 'right' });
+    doc.moveDown(0.2);
+
+    const metaTop = doc.y;
+    const colGap = 18;
+    const colW = (page.width - colGap) / 2;
+    const leftX = page.left;
+    const rightX = page.left + colW + colGap;
+    doc.font('Helvetica').fontSize(10).fillColor(colors.text);
+
+    labelValue('Receipt Number', receiptNumber, leftX, metaTop, colW);
+    doc.moveDown(0.2);
+    labelValue('Receipt Date', receiptDate, leftX, doc.y, colW);
+
+    doc.y = metaTop;
+    labelValue('Currency', currency, rightX, metaTop, colW);
+    if (showExchange) {
+      doc.moveDown(0.2);
+      labelValue('Exchange Rate', String(exchangeRate), rightX, doc.y, colW);
+    }
+
+    doc.y = Math.max(doc.y, metaTop + 54) + 10;
+    drawDivider();
+    doc.moveDown(0.8);
+
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(colors.text).text('Received From');
+    doc.font('Helvetica').fontSize(10).text(customerName || '', { continued: false });
+    if (customerEmail) doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(customerEmail);
+    if (customerPhone) doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(customerPhone);
+    if (customerAddress) {
+      doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(customerAddress, {
+        width: page.width,
+      });
+    }
+    doc.fillColor(colors.text);
+    doc.moveDown(0.6);
+
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(colors.text).text('Payment Details');
+    doc.font('Helvetica').fontSize(10).fillColor(colors.text).text(`Payment Method: ${paymentMethod}`);
+    if (reference) doc.text(`Reference: ${reference}`);
+    doc.moveDown(0.8);
+
+    const cols = {
+      invoice: 120,
+      invDate: 70,
+      dueDate: 70,
+      invTotal: 90,
+      applied: 90,
+      balance: 90,
+    };
+    const tableWidth =
+      cols.invoice + cols.invDate + cols.dueDate + cols.invTotal + cols.applied + cols.balance;
+    const scale = page.width / tableWidth;
+    Object.keys(cols).forEach((k) => ((cols as any)[k] = (cols as any)[k] * scale));
+
+    const xInvoice = page.left;
+    const xInvDate = xInvoice + cols.invoice;
+    const xDueDate = xInvDate + cols.invDate;
+    const xInvTotal = xDueDate + cols.dueDate;
+    const xApplied = xInvTotal + cols.invTotal;
+    const xBalance = xApplied + cols.applied;
+
+    const renderTableHeader = () => {
+      const y = doc.y;
+      doc.save();
+      doc.rect(page.left, y, page.width, 18).fill(colors.headerBg);
+      doc.restore();
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(colors.text);
+      doc.text('Invoice #', xInvoice + 4, y + 5, { width: cols.invoice - 8 });
+      doc.text('Inv Date', xInvDate + 4, y + 5, { width: cols.invDate - 8 });
+      doc.text('Due Date', xDueDate + 4, y + 5, { width: cols.dueDate - 8 });
+      doc.text('Invoice Total', xInvTotal + 4, y + 5, { width: cols.invTotal - 8, align: 'right' });
+      doc.text('Applied', xApplied + 4, y + 5, { width: cols.applied - 8, align: 'right' });
+      doc.text('Balance After', xBalance + 4, y + 5, { width: cols.balance - 8, align: 'right' });
+      doc.strokeColor(colors.border);
+      doc.moveTo(page.left, y + 18).lineTo(page.left + page.width, y + 18).stroke();
+      doc.y = y + 24;
+    };
+
+    const renderRow = (row: any) => {
+      doc.font('Helvetica').fontSize(9).fillColor(colors.text);
+
+      const y = doc.y;
+      const cellPadY = 6;
+      const maxH = Math.max(
+        doc.heightOfString(row.invoiceNumber || '', { width: cols.invoice - 8 }),
+        doc.heightOfString(String(row.invoiceDate ?? ''), { width: cols.invDate - 8 }),
+        doc.heightOfString(String(row.dueDate ?? ''), { width: cols.dueDate - 8 }),
+      );
+      const rowH = Math.max(16, maxH) + cellPadY;
+
+      ensureSpace(rowH + 8, renderTableHeader);
+
+      doc.text(row.invoiceNumber || '', xInvoice + 4, y, { width: cols.invoice - 8 });
+      doc.text(String(row.invoiceDate ?? ''), xInvDate + 4, y, { width: cols.invDate - 8 });
+      doc.text(String(row.dueDate ?? ''), xDueDate + 4, y, { width: cols.dueDate - 8 });
+      doc.text(this.formatMoney(row.invoiceTotalAmount), xInvTotal + 4, y, {
+        width: cols.invTotal - 8,
+        align: 'right',
+      });
+      doc.text(this.formatMoney(row.appliedAmount), xApplied + 4, y, {
+        width: cols.applied - 8,
+        align: 'right',
+      });
+      doc.text(this.formatMoney(row.balanceAfter), xBalance + 4, y, {
+        width: cols.balance - 8,
+        align: 'right',
+      });
+
+      doc.strokeColor(colors.border);
+      doc.moveTo(page.left, y + rowH).lineTo(page.left + page.width, y + rowH).stroke();
+      doc.y = y + rowH + 2;
+    };
+
+    renderTableHeader();
+    for (const row of allocRows) {
+      renderRow(row);
+    }
+
+    doc.moveDown(0.8);
+
+    const totalsLabelW = 140;
+    const totalsValueW = 120;
+    const totalsX = page.left + page.width - (totalsLabelW + totalsValueW);
+
+    const renderTotalLine = (label: string, value: string, bold?: boolean, borderTop?: boolean) => {
+      ensureSpace(16);
+      if (borderTop) {
+        doc.strokeColor(colors.border);
+        doc.moveTo(totalsX, doc.y).lineTo(totalsX + totalsLabelW + totalsValueW, doc.y).stroke();
+        doc.moveDown(0.35);
+      }
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(colors.text);
+      const y = doc.y;
+      doc.text(label, totalsX, y, { width: totalsLabelW, align: 'left' });
+      doc.text(value, totalsX + totalsLabelW, y, { width: totalsValueW, align: 'right' });
+      doc.y = y + 14;
+    };
+
+    renderTotalLine('Receipt Amount', this.formatMoney(receiptAmount));
+    renderTotalLine('Applied Total', this.formatMoney(appliedTotal));
+    if (unappliedTotal > 0) {
+      renderTotalLine('Unapplied Total', this.formatMoney(unappliedTotal));
+    }
+    renderTotalLine('Total', this.formatMoney(receiptAmount), true, true);
+
+    ensureSpace(110);
+    doc.moveDown(0.8);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(colors.text).text('Bank Details');
+    doc.font('Helvetica').fontSize(9).fillColor(colors.muted);
+    doc.text('Bank Name: FNB');
+    doc.text('Account Name: Uspire Professional Services Ltd');
+    doc.text('Account Number: 63144493680');
+    doc.text('Branch Name/Number: Commercial Suite / 260001');
+    doc.text('Swift Code: FIRNZMLX');
+    doc.fillColor(colors.text);
+
+    doc.end();
+    const pdf = await done;
+
+    return {
+      contentType: 'application/pdf',
+      fileName: `Receipt_${receiptNumber || id}.pdf`,
+      body: pdf,
     };
   }
 
@@ -363,13 +955,22 @@ export class ArReceiptsService {
       );
     }
 
+    const header = await this.validateAndNormalizeHeader({
+      tenantId: tenant.id,
+      currency: dto.currency,
+      exchangeRate: dto.exchangeRate ?? null,
+      totalAmount: dto.totalAmount,
+    });
+
     await this.validateLines({
       tenantId: tenant.id,
       customerId: dto.customerId,
-      receiptCurrency: dto.currency,
-      totalAmount: dto.totalAmount,
+      receiptCurrency: header.receiptCurrency,
+      totalAmount: header.amount,
       lines: dto.lines,
     });
+
+    const paymentReference = this.parseReference(dto);
 
     const created = await this.prisma.$transaction(async (tx) => {
       const receiptNumber = await this.nextReceiptNumber(tx, tenant.id);
@@ -379,10 +980,11 @@ export class ArReceiptsService {
           receiptNumber,
           receiptDate: new Date(dto.receiptDate),
           customerId: dto.customerId,
-          currency: dto.currency,
-          totalAmount: dto.totalAmount,
+          currency: header.receiptCurrency,
+          exchangeRate: header.exchangeRate,
+          totalAmount: header.amount,
           paymentMethod: dto.paymentMethod as any,
-          paymentReference: dto.paymentReference,
+          paymentReference,
           status: 'DRAFT' as any,
           createdById: user.id,
           lines: {
@@ -406,13 +1008,21 @@ export class ArReceiptsService {
 
     const current = await (this.prisma as any).customerReceipt.findFirst({
       where: { id, tenantId: tenant.id },
-      select: { id: true, customerId: true, currency: true, totalAmount: true },
+      select: {
+        id: true,
+        customerId: true,
+        currency: true,
+        exchangeRate: true,
+        totalAmount: true,
+      },
     });
     if (!current) throw new NotFoundException('Receipt not found');
 
     const nextCustomerId = dto.customerId ?? current.customerId;
     const nextTotalAmount = dto.totalAmount ?? Number(current.totalAmount);
     const nextCurrency = dto.currency ?? String(current.currency);
+    const nextExchangeRate =
+      dto.exchangeRate === undefined ? Number((current as any).exchangeRate ?? 1) : dto.exchangeRate;
 
     if (dto.customerId) {
       const customer = await (this.prisma as any).customer.findFirst({
@@ -429,14 +1039,26 @@ export class ArReceiptsService {
       }
     }
 
+    const header = await this.validateAndNormalizeHeader({
+      tenantId: tenant.id,
+      currency: nextCurrency,
+      exchangeRate: nextExchangeRate ?? null,
+      totalAmount: nextTotalAmount,
+    });
+
     await this.validateLines({
       tenantId: tenant.id,
       customerId: nextCustomerId,
-      receiptCurrency: nextCurrency,
-      totalAmount: nextTotalAmount,
+      receiptCurrency: header.receiptCurrency,
+      totalAmount: header.amount,
       lines: dto.lines,
       receiptIdForUpdate: id,
     });
+
+    const paymentReference =
+      dto.paymentReference === undefined && dto.reference === undefined
+        ? undefined
+        : this.parseReference(dto);
 
     await this.prisma.$transaction(async (tx) => {
       await (tx as any).customerReceipt.update({
@@ -444,10 +1066,11 @@ export class ArReceiptsService {
         data: {
           customerId: dto.customerId,
           receiptDate: dto.receiptDate ? new Date(dto.receiptDate) : undefined,
-          currency: dto.currency,
-          totalAmount: dto.totalAmount,
+          currency: dto.currency === undefined ? undefined : header.receiptCurrency,
+          exchangeRate: dto.currency === undefined && dto.exchangeRate === undefined ? undefined : header.exchangeRate,
+          totalAmount: dto.totalAmount === undefined ? undefined : header.amount,
           paymentMethod: dto.paymentMethod ? (dto.paymentMethod as any) : undefined,
-          paymentReference: dto.paymentReference,
+          paymentReference,
         },
       });
 
@@ -480,7 +1103,9 @@ export class ArReceiptsService {
         id: true,
         status: true,
         receiptDate: true,
+        customerId: true,
         currency: true,
+        exchangeRate: true,
         totalAmount: true,
         createdById: true,
         glJournalId: true,
@@ -501,22 +1126,19 @@ export class ArReceiptsService {
       select: { invoiceId: true, appliedAmount: true },
     });
 
-    const positiveLines = (draftLines ?? []).filter(
-      (l: any) => this.normalizeMoney(Number(l.appliedAmount)) > 0,
-    );
-    if (positiveLines.length < 1) {
-      throw new BadRequestException({
-        error: 'Receipt must have at least one allocation line before posting',
-        reason: 'NO_ALLOCATIONS',
-      });
-    }
+    const header = await this.validateAndNormalizeHeader({
+      tenantId: tenant.id,
+      currency: String(existing.currency),
+      exchangeRate: Number((existing as any).exchangeRate ?? 1),
+      totalAmount: Number(existing.totalAmount),
+    });
 
     await this.validateLines({
       tenantId: tenant.id,
       customerId: String((existing as any).customerId ?? ''),
-      receiptCurrency: String(existing.currency),
-      totalAmount: Number(existing.totalAmount),
-      lines: positiveLines.map((l: any) => ({
+      receiptCurrency: header.receiptCurrency,
+      totalAmount: header.amount,
+      lines: (draftLines ?? []).map((l: any) => ({
         invoiceId: l.invoiceId,
         appliedAmount: Number(l.appliedAmount),
       })),
@@ -570,6 +1192,7 @@ export class ArReceiptsService {
       select: {
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
+        unappliedReceiptsAccountId: true,
       },
     });
 
@@ -579,6 +1202,9 @@ export class ArReceiptsService {
     const bankClearingAccountId = (
       tenantConfig?.defaultBankClearingAccountId ?? null
     ) as string | null;
+    const unappliedReceiptsAccountId = (tenantConfig?.unappliedReceiptsAccountId ?? null) as
+      | string
+      | null;
     if (!bankClearingAccountId) {
       throw new BadRequestException({
         error: 'Missing configuration: default bank clearing account',
@@ -624,9 +1250,40 @@ export class ArReceiptsService {
       );
     }
 
-    const amount = Number(existing.totalAmount);
-    if (!(amount > 0)) {
-      throw new BadRequestException('Receipt totalAmount must be > 0 to post');
+    const amount = header.amount;
+
+    const allocatedTotal = this.normalizeMoney(
+      (draftLines ?? []).reduce(
+        (s: number, l: any) => s + this.normalizeMoney(Number(l.appliedAmount ?? 0)),
+        0,
+      ),
+    );
+    const unappliedTotal = this.normalizeMoney(amount - allocatedTotal);
+
+    if (unappliedTotal > 0 && !unappliedReceiptsAccountId) {
+      throw new BadRequestException({
+        error:
+          'Missing configuration: unapplied receipts account is required when receipt has unapplied amount',
+        field: 'Tenant.unappliedReceiptsAccountId',
+        unappliedTotal,
+      });
+    }
+
+    const unappliedAccount =
+      unappliedTotal > 0
+        ? await this.prisma.account.findFirst({
+            where: {
+              tenantId: tenant.id,
+              id: unappliedReceiptsAccountId as string,
+              isActive: true,
+            },
+            select: { id: true },
+          })
+        : null;
+    if (unappliedTotal > 0 && !unappliedAccount) {
+      throw new BadRequestException(
+        'Configured unapplied receipts GL account not found or inactive',
+      );
     }
 
     const posted = await this.prisma.$transaction(async (tx) => {
@@ -682,7 +1339,18 @@ export class ArReceiptsService {
           lines: {
             create: [
               { accountId: bankAccount.id, debit: amount, credit: 0 },
-              { accountId: arAccount.id, debit: 0, credit: amount },
+              ...(allocatedTotal > 0
+                ? [{ accountId: arAccount.id, debit: 0, credit: allocatedTotal }]
+                : []),
+              ...(unappliedTotal > 0
+                ? [
+                    {
+                      accountId: (unappliedAccount as any).id,
+                      debit: 0,
+                      credit: unappliedTotal,
+                    },
+                  ]
+                : []),
             ],
           },
         } as any,

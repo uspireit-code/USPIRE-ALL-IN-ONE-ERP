@@ -100,4 +100,9 @@ export class UpdateSystemConfigDto {
   @ValidateIf(isNotNull)
   @IsString()
   secondaryAccentColor?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  unappliedReceiptsAccountId?: string | null;
 }

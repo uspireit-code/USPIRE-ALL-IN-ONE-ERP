@@ -23,7 +23,11 @@ export class CreateReceiptDto {
   @IsString()
   currency!: string;
 
-  @Min(0)
+  @IsOptional()
+  @Min(0.000001)
+  exchangeRate?: number;
+
+  @Min(0.01)
   totalAmount!: number;
 
   @IsIn(PAYMENT_METHODS)
@@ -32,6 +36,10 @@ export class CreateReceiptDto {
   @IsOptional()
   @IsString()
   paymentReference?: string;
+
+  @IsOptional()
+  @IsString()
+  reference?: string;
 
   @IsOptional()
   @IsArray()

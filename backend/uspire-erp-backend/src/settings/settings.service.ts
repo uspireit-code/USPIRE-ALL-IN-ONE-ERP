@@ -954,6 +954,7 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        unappliedReceiptsAccountId: true,
         updatedAt: true,
       },
     });
@@ -994,6 +995,7 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        unappliedReceiptsAccountId: true,
         faviconUrl: true,
         logoUrl: true,
       },
@@ -1119,6 +1121,13 @@ export class SettingsService {
             : dto.secondaryAccentColor === null
               ? null
               : dto.secondaryAccentColor.trim() || null,
+
+        unappliedReceiptsAccountId:
+          (dto as any).unappliedReceiptsAccountId === undefined
+            ? undefined
+            : (dto as any).unappliedReceiptsAccountId === null
+              ? null
+              : String((dto as any).unappliedReceiptsAccountId).trim() || null,
       },
       select: {
         id: true,
@@ -1143,6 +1152,7 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        unappliedReceiptsAccountId: true,
         updatedAt: true,
       },
     });
@@ -1166,6 +1176,7 @@ export class SettingsService {
       secondaryColor: updated.secondaryColor,
       accentColor: updated.accentColor,
       secondaryAccentColor: updated.secondaryAccentColor,
+      unappliedReceiptsAccountId: (updated as any).unappliedReceiptsAccountId ?? null,
       faviconUrl: updated.faviconUrl,
       logoUrl: updated.logoUrl,
     };

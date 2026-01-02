@@ -628,6 +628,7 @@ model CustomerReceipt {
   receiptDate      DateTime
   customerId       String
   currency         String
+  exchangeRate     Decimal              @default(1.0) @db.Decimal(18, 6)
   totalAmount      Decimal              @db.Decimal(18, 2)
   paymentMethod    ReceiptPaymentMethod
   paymentReference String?
@@ -946,6 +947,7 @@ model Tenant {
 
   arControlAccountId          String?
   defaultBankClearingAccountId String?
+  unappliedReceiptsAccountId   String?
   coaFrozen               Boolean  @default(false)
   coaLockedAt             DateTime?
   status    TenantStatus @default(ACTIVE)
@@ -1015,6 +1017,7 @@ model Tenant {
 
   arControlAccount           Account? @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
   defaultBankClearingAccount Account? @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
+  unappliedReceiptsAccount   Account? @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
 
   @@unique([name])
   @@index([status])
@@ -1295,11 +1298,11 @@ model SoDViolationLog {
 }
 
 model Account {
-  id        String      @id @default(uuid())
-  tenantId  String
-  code      String
-  name      String
-  type      AccountType
+  id            String      @id @default(uuid())
+  tenantId      String
+  code          String
+  name          String
+  type          AccountType
   subCategory String?
   fsMappingLevel1 String?
   fsMappingLevel2 String?
@@ -1345,6 +1348,7 @@ model Account {
 
   tenantsAsArControlAccount            Tenant[] @relation("TenantArControlAccount")
   tenantsAsDefaultBankClearingAccount  Tenant[] @relation("TenantDefaultBankClearingAccount")
+  tenantsAsUnappliedReceiptsAccount    Tenant[] @relation("TenantUnappliedReceiptsAccount")
 
   @@unique([tenantId, code])
   @@index([tenantId])

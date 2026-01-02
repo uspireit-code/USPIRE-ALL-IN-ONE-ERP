@@ -27,7 +27,11 @@ export class UpdateReceiptDto {
   currency?: string;
 
   @IsOptional()
-  @Min(0)
+  @Min(0.000001)
+  exchangeRate?: number;
+
+  @IsOptional()
+  @Min(0.01)
   totalAmount?: number;
 
   @IsOptional()
@@ -37,6 +41,10 @@ export class UpdateReceiptDto {
   @IsOptional()
   @IsString()
   paymentReference?: string;
+
+  @IsOptional()
+  @IsString()
+  reference?: string;
 
   @IsOptional()
   @IsArray()

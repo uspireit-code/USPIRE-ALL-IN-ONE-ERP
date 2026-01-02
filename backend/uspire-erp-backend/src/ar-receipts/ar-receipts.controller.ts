@@ -1,5 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
@@ -20,10 +33,37 @@ export class ArReceiptsController {
     return this.receipts.listReceipts(req);
   }
 
+  @Get('customers/:customerId/outstanding-invoices')
+  @Permissions('AR_RECEIPTS_VIEW')
+  async listOutstandingInvoices(
+    @Req() req: Request,
+    @Param('customerId') customerId: string,
+    @Query('currency') currency?: string,
+  ) {
+    return this.receipts.listCustomerOutstandingInvoices(req, customerId, currency);
+  }
+
   @Get(':id')
   @Permissions('AR_RECEIPTS_VIEW')
   async getById(@Param('id') id: string, @Req() req: Request) {
     return this.receipts.getReceiptById(req, id);
+  }
+
+  @Get(':id/export')
+  @Permissions('AR_RECEIPTS_VIEW')
+  async exportReceipt(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Query('format') format: string,
+    @Res() res: Response,
+  ) {
+    const out = await this.receipts.exportReceipt(req, id, {
+      format: (format || 'html') as any,
+    });
+
+    res.setHeader('Content-Type', out.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
   }
 
   @Get(':id/allocations')
