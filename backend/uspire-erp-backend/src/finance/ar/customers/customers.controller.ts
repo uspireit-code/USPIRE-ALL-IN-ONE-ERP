@@ -7,11 +7,13 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../rbac/jwt-auth.guard';
@@ -57,5 +59,41 @@ export class FinanceArCustomersController {
   )
   async import(@Req() req: Request, @UploadedFile() file: any) {
     return this.customers.import(req, file);
+  }
+
+  @Post('import/preview')
+  @Permissions('CUSTOMERS_IMPORT')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async previewImport(@Req() req: Request, @UploadedFile() file: any) {
+    return this.customers.previewImport(req, file);
+  }
+
+  @Get('import/template.csv')
+  @Permissions('CUSTOMERS_IMPORT')
+  async downloadImportCsvTemplate(@Req() req: Request, @Res() res: Response) {
+    const out = await this.customers.getCustomerImportCsvTemplate(req);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
+  }
+
+  @Get('import/template.xlsx')
+  @Permissions('CUSTOMERS_IMPORT')
+  async downloadImportXlsxTemplate(@Req() req: Request, @Res() res: Response) {
+    const out = await this.customers.getCustomerImportXlsxTemplate(req);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
+  }
+
+  @Get(':id')
+  @Permissions('CUSTOMERS_VIEW')
+  async getById(@Req() req: Request, @Param('id') id: string) {
+    return this.customers.getById(req, id);
   }
 }

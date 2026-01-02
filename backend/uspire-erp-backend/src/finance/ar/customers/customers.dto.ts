@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Min } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, Min } from 'class-validator';
 
 const CUSTOMER_STATUSES = ['ACTIVE', 'INACTIVE'] as const;
 
@@ -27,11 +27,19 @@ export class CreateCustomerDto {
   name!: string;
 
   @IsOptional()
+  @IsIn(CUSTOMER_STATUSES)
+  status?: CustomerStatus;
+
+  @IsOptional()
   @IsString()
   customerCode?: string;
 
   @IsOptional()
   @IsString()
+  contactPerson?: string;
+
+  @IsOptional()
+  @IsEmail()
   email?: string;
 
   @IsOptional()
@@ -57,12 +65,16 @@ export class UpdateCustomerDto {
   status?: CustomerStatus;
 
   @IsOptional()
-  @IsString()
+  @IsEmail()
   email?: string;
 
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPerson?: string;
 
   @IsOptional()
   @IsString()

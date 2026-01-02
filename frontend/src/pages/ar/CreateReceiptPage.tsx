@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import type { Customer, CustomerInvoice, ReceiptLineInput } from '../../services/ar';
 import { createReceipt, listCustomers, listInvoices } from '../../services/ar';
+import { getApiErrorMessage } from '../../services/api';
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -43,15 +44,14 @@ export function CreateReceiptPage() {
     setLoadingLookups(true);
     setError(null);
 
-    Promise.all([listCustomers(), listInvoices()])
+    Promise.all([listCustomers({ status: 'ACTIVE' }), listInvoices()])
       .then(([custs, invs]) => {
         if (!mounted) return;
-        setCustomers(custs);
+        setCustomers(custs.items ?? []);
         setInvoices(invs);
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load lookups';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        setError(getApiErrorMessage(err, 'Failed to load lookups'));
       })
       .finally(() => {
         if (!mounted) return;

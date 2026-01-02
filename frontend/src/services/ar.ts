@@ -2,9 +2,21 @@ import { apiFetch } from './api';
 
 export type Customer = {
   id: string;
+  customerCode?: string | null;
   name: string;
   taxNumber?: string | null;
-  isActive: boolean;
+  contactPerson?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  billingAddress?: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+};
+
+export type CustomersListResponse = {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: Customer[];
 };
 
 export type AccountLookup = {
@@ -89,14 +101,75 @@ export type ArReceipt = {
   lines?: ReceiptLine[];
 };
 
-export async function listCustomers() {
-  return apiFetch<Customer[]>('/ar/customers', { method: 'GET' });
+export async function listCustomers(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
+}) {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+  if (params?.search) q.set('search', String(params.search));
+  if (params?.status) q.set('status', String(params.status));
+
+  const qs = q.toString();
+  return apiFetch<CustomersListResponse>(
+    `/finance/ar/customers${qs ? `?${qs}` : ''}`,
+    { method: 'GET' },
+  );
 }
 
-export async function createCustomer(params: { name: string; taxNumber?: string }) {
-  return apiFetch<Customer>('/ar/customers', {
+export async function createCustomer(params: {
+  name: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  customerCode?: string;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  billingAddress?: string;
+  taxNumber?: string;
+}) {
+  return apiFetch<Customer>('/finance/ar/customers', {
     method: 'POST',
-    body: JSON.stringify({ name: params.name, taxNumber: params.taxNumber || undefined }),
+    body: JSON.stringify({
+      name: params.name,
+      status: params.status,
+      customerCode: params.customerCode || undefined,
+      contactPerson: params.contactPerson || undefined,
+      email: params.email || undefined,
+      phone: params.phone || undefined,
+      billingAddress: params.billingAddress || undefined,
+      taxNumber: params.taxNumber || undefined,
+    }),
+  });
+}
+
+export async function getCustomerById(id: string) {
+  return apiFetch<Customer>(`/finance/ar/customers/${id}`, { method: 'GET' });
+}
+
+export async function updateCustomer(
+  id: string,
+  params: {
+    name: string;
+    status: 'ACTIVE' | 'INACTIVE';
+    contactPerson?: string;
+    email?: string;
+    phone?: string;
+    billingAddress?: string;
+  },
+) {
+  return apiFetch<Customer>(`/finance/ar/customers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: params.name,
+      status: params.status,
+      contactPerson: params.contactPerson || undefined,
+      email: params.email || undefined,
+      phone: params.phone || undefined,
+      billingAddress: params.billingAddress || undefined,
+    }),
   });
 }
 

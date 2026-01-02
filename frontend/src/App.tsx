@@ -16,6 +16,8 @@ import { InvoicesListPage } from './pages/ap/InvoicesListPage';
 import { SuppliersListPage } from './pages/ap/SuppliersListPage';
 import { ArHomePage } from './pages/ar/ArHomePage';
 import { CreateCustomerPage } from './pages/ar/CreateCustomerPage';
+import { CustomerDetailsPage } from './pages/ar/CustomerDetailsPage';
+import { EditCustomerPage } from './pages/ar/EditCustomerPage';
 import { CreateInvoicePage as CreateArInvoicePage } from './pages/ar/CreateInvoicePage';
 import { CreateReceiptPage } from './pages/ar/CreateReceiptPage';
 import { CustomersListPage } from './pages/ar/CustomersListPage';
@@ -261,6 +263,9 @@ export default function App() {
                 }
               />
               <Route path="finance/ar/customers" element={<CustomersListPage />} />
+              <Route path="finance/ar/customers/new" element={<CreateCustomerPage />} />
+              <Route path="finance/ar/customers/:id" element={<CustomerDetailsPage />} />
+              <Route path="finance/ar/customers/:id/edit" element={<EditCustomerPage />} />
               <Route path="finance/ar/invoices" element={<ArInvoicesListPage />} />
               <Route path="finance/ar/receipts" element={<ReceiptsPage />} />
               <Route path="finance/ar/receipts/new" element={<CreateReceiptPage />} />

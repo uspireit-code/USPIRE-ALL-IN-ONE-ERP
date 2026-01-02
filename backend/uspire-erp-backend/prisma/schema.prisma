@@ -356,6 +356,7 @@ model Customer {
   tenantId       String
   customerCode   String?
   name           String
+  contactPerson  String?
   email          String?
   phone          String?
   billingAddress String?

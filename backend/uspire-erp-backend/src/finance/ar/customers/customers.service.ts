@@ -16,6 +16,34 @@ export class FinanceArCustomersService {
     return tenant;
   }
 
+  private isValidEmail(email: string) {
+    const s = String(email ?? '').trim();
+    if (!s) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
+  private validateCustomerNameEmailOrThrow(params: { name: string; email: string }) {
+    const name = String(params.name ?? '').trim();
+    if (!name) throw new BadRequestException('Customer name is required');
+
+    const email = String(params.email ?? '').trim();
+    if (!email) throw new BadRequestException('Customer email is required');
+    if (!this.isValidEmail(email)) throw new BadRequestException('Invalid email format');
+
+    return { name, email };
+  }
+
+  async getById(req: Request, id: string) {
+    const tenant = this.ensureTenant(req);
+
+    const customer = await this.prisma.customer.findFirst({
+      where: { id, tenantId: tenant.id } as any,
+    });
+
+    if (!customer) throw new NotFoundException('Customer not found');
+    return customer;
+  }
+
   private normalizeHeaderKey(v: any) {
     return String(v ?? '')
       .trim()
@@ -186,8 +214,7 @@ export class FinanceArCustomersService {
   async create(req: Request, dto: CreateCustomerDto) {
     const tenant = this.ensureTenant(req);
 
-    const name = String(dto.name ?? '').trim();
-    if (!name) throw new BadRequestException('name is required');
+    const { name, email } = this.validateCustomerNameEmailOrThrow({ name: String(dto.name ?? ''), email: String(dto.email ?? '') });
 
     const created = await this.prisma.$transaction(async (tx) => {
       let customerCode = String(dto.customerCode ?? '').trim();
@@ -217,11 +244,12 @@ export class FinanceArCustomersService {
           tenantId: tenant.id,
           customerCode,
           name,
-          email: dto.email?.trim() || null,
+          contactPerson: dto.contactPerson?.trim() || null,
+          email,
           phone: dto.phone?.trim() || null,
           billingAddress: dto.billingAddress?.trim() || null,
           taxNumber: dto.taxNumber?.trim() || null,
-          status: 'ACTIVE',
+          status: dto.status ? String(dto.status) : 'ACTIVE',
         } as any,
       });
     });
@@ -246,8 +274,10 @@ export class FinanceArCustomersService {
       throw new BadRequestException('customerCode is immutable');
     }
 
-    const name = dto.name !== undefined ? String(dto.name ?? '').trim() : undefined;
-    if (name !== undefined && !name) throw new BadRequestException('name is required');
+    const nameRaw = dto.name !== undefined ? String(dto.name ?? '') : '';
+    const emailRaw = dto.email !== undefined ? String(dto.email ?? '') : '';
+
+    const { name, email } = this.validateCustomerNameEmailOrThrow({ name: nameRaw, email: emailRaw });
 
     const status = dto.status !== undefined ? String(dto.status) : undefined;
     if (status !== undefined && status !== 'ACTIVE' && status !== 'INACTIVE') {
@@ -257,14 +287,96 @@ export class FinanceArCustomersService {
     return this.prisma.customer.update({
       where: { id },
       data: {
-        ...(name !== undefined ? { name } : {}),
+        name,
         ...(status !== undefined ? { status } : {}),
-        ...(dto.email !== undefined ? { email: dto.email?.trim() || null } : {}),
+        email,
         ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
+        ...(dto.contactPerson !== undefined ? { contactPerson: dto.contactPerson?.trim() || null } : {}),
         ...(dto.billingAddress !== undefined ? { billingAddress: dto.billingAddress?.trim() || null } : {}),
         ...(dto.taxNumber !== undefined ? { taxNumber: dto.taxNumber?.trim() || null } : {}),
       } as any,
     });
+  }
+
+  private buildImportPreviewRows(rawRows: Array<{ rowNumber: number; row: Record<string, any> }>) {
+    type PreviewRow = {
+      rowNumber: number;
+      customerCode?: string;
+      name: string;
+      email: string;
+      contactPerson?: string;
+      phone?: string;
+      billingAddress?: string;
+      status?: 'ACTIVE' | 'INACTIVE';
+      errors: string[];
+    };
+
+    const preview: PreviewRow[] = [];
+
+    for (const r of rawRows) {
+      const rowNumber = r.rowNumber;
+      const row = r.row ?? {};
+
+      const name = String(row['name'] ?? row['customername'] ?? '').trim();
+      const customerCode = String(row['customercode'] ?? row['code'] ?? '').trim();
+      const email = String(row['email'] ?? '').trim();
+      const contactPerson = String(row['contactperson'] ?? row['contact'] ?? '').trim();
+      const phone = String(row['phone'] ?? '').trim();
+      const billingAddress = String(row['billingaddress'] ?? row['address'] ?? '').trim();
+      const statusRaw = String(row['status'] ?? '').trim().toUpperCase();
+      const status = statusRaw === 'INACTIVE' ? 'INACTIVE' : statusRaw === 'ACTIVE' ? 'ACTIVE' : undefined;
+
+      const errors: string[] = [];
+      if (!name) errors.push('Customer name is required');
+      if (!email) errors.push('Customer email is required');
+      if (email && !this.isValidEmail(email)) errors.push('Invalid email format');
+      if (statusRaw && !status) errors.push(`Invalid status '${statusRaw}'`);
+
+      preview.push({
+        rowNumber,
+        customerCode: customerCode || undefined,
+        name,
+        email,
+        contactPerson: contactPerson || undefined,
+        phone: phone || undefined,
+        billingAddress: billingAddress || undefined,
+        status,
+        errors,
+      });
+    }
+
+    return preview;
+  }
+
+  async previewImport(req: Request, file?: any) {
+    this.ensureTenant(req);
+
+    if (!file) throw new BadRequestException('Missing file');
+    if (!file.originalname) throw new BadRequestException('Missing file name');
+    if (!file.buffer) throw new BadRequestException('Missing file buffer');
+
+    const fileName = String(file.originalname);
+    const lower = fileName.toLowerCase();
+    const isXlsx = lower.endsWith('.xlsx');
+    const isCsv = lower.endsWith('.csv');
+    if (!isXlsx && !isCsv) {
+      throw new BadRequestException('Unsupported file type. Please upload .xlsx or .csv');
+    }
+
+    const rawRows = isCsv
+      ? this.parseCsvRows(file.buffer).map((r) => ({ rowNumber: r.rowNumber, row: r.row as any }))
+      : await this.readXlsxRows(file.buffer);
+
+    const preview = this.buildImportPreviewRows(rawRows);
+    const invalid = preview.filter((p) => p.errors.length > 0);
+    const valid = preview.filter((p) => p.errors.length === 0);
+
+    return {
+      totalRows: preview.length,
+      validCount: valid.length,
+      invalidCount: invalid.length,
+      rows: preview,
+    };
   }
 
   async import(req: Request, file?: any) {
@@ -306,6 +418,7 @@ export class FinanceArCustomersService {
 
       const name = String(row['name'] ?? row['customername'] ?? '').trim();
       const customerCodeRaw = String(row['customercode'] ?? row['code'] ?? '').trim();
+      const contactPerson = String(row['contactperson'] ?? row['contact'] ?? '').trim();
       const email = String(row['email'] ?? '').trim();
       const phone = String(row['phone'] ?? '').trim();
       const billingAddress = String(row['billingaddress'] ?? row['address'] ?? '').trim();
@@ -314,7 +427,17 @@ export class FinanceArCustomersService {
       const status = statusRaw === 'INACTIVE' ? 'INACTIVE' : statusRaw === 'ACTIVE' ? 'ACTIVE' : null;
 
       if (!name) {
-        failedRows.push({ rowNumber, reason: 'name is required' });
+        failedRows.push({ rowNumber, reason: 'Customer name is required' });
+        continue;
+      }
+
+      if (!email) {
+        failedRows.push({ rowNumber, reason: 'Customer email is required' });
+        continue;
+      }
+
+      if (!this.isValidEmail(email)) {
+        failedRows.push({ rowNumber, reason: 'Invalid email format' });
         continue;
       }
 
@@ -352,7 +475,8 @@ export class FinanceArCustomersService {
               tenantId: tenant.id,
               customerCode,
               name,
-              email: email || null,
+              contactPerson: contactPerson || null,
+              email,
               phone: phone || null,
               billingAddress: billingAddress || null,
               taxNumber: taxNumber || null,
@@ -375,5 +499,44 @@ export class FinanceArCustomersService {
       failedCount: failedRows.length,
       failedRows,
     };
+  }
+
+  async getCustomerImportCsvTemplate(req: Request): Promise<{ fileName: string; body: string }> {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    const headers = ['customerCode', 'name', 'email', 'contactPerson', 'phone', 'billingAddress', 'status'];
+    const sample = [
+      ['CUST-000001', 'Acme Trading', 'john.smith@acme.com', 'John Smith', '+1 555 0100', '123 Main St', 'ACTIVE'],
+    ];
+
+    const escape = (v: any) => {
+      const s = String(v ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replaceAll('"', '""')}"`;
+      }
+      return s;
+    };
+
+    const body = [headers.join(','), ...sample.map((r) => r.map(escape).join(','))].join('\n') + '\n';
+    return { fileName: 'customer_import_template.csv', body };
+  }
+
+  async getCustomerImportXlsxTemplate(req: Request): Promise<{ fileName: string; body: Buffer }> {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Customers');
+
+    ws.addRow(['customerCode', 'name', 'email', 'contactPerson', 'phone', 'billingAddress', 'status']);
+    ws.addRow(['CUST-000001', 'Acme Trading', 'john.smith@acme.com', 'John Smith', '+1 555 0100', '123 Main St', 'ACTIVE']);
+    ws.getRow(1).font = { bold: true };
+    ws.columns.forEach((c) => (c.width = 22));
+
+    const buf = await wb.xlsx.writeBuffer();
+    return { fileName: 'customer_import_template.xlsx', body: Buffer.from(buf as any) };
   }
 }

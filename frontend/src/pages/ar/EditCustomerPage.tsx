@@ -1,29 +1,79 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { createCustomer } from '../../services/ar';
+import type { Customer } from '../../services/ar';
+import { getCustomerById, updateCustomer } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
 
-export function CreateCustomerPage() {
+export function EditCustomerPage() {
+  const { id } = useParams();
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreateCustomer = hasPermission('CUSTOMERS_CREATE');
+  const canEdit = hasPermission('CUSTOMERS_EDIT');
 
+  const [loaded, setLoaded] = useState<Customer | null>(null);
   const [name, setName] = useState('');
   const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [contactPerson, setContactPerson] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    const customerId = String(id ?? '').trim();
+    if (!customerId) {
+      setError('Missing customer id');
+      setLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    getCustomerById(customerId)
+      .then((c) => {
+        if (!mounted) return;
+        setLoaded(c);
+        setName(c.name ?? '');
+        setStatus(c.status ?? 'ACTIVE');
+        setContactPerson(c.contactPerson ?? '');
+        setEmail(c.email ?? '');
+        setPhone(c.phone ?? '');
+        setBillingAddress(c.billingAddress ?? '');
+      })
+      .catch((e: any) => {
+        if (!mounted) return;
+        setError(getApiErrorMessage(e, 'Failed to load customer'));
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!canCreateCustomer) {
+    if (!canEdit) {
       setError('Permission denied');
+      return;
+    }
+
+    const customerId = String(id ?? '').trim();
+    if (!customerId) {
+      setError('Missing customer id');
       return;
     }
 
@@ -35,34 +85,43 @@ export function CreateCustomerPage() {
       return;
     }
 
-    setLoading(true);
+    const nameTrimmed = name.trim();
+    if (!nameTrimmed) {
+      setError('Customer Name is required');
+      return;
+    }
+
+    setSaving(true);
     try {
-      const created = await createCustomer({
-        name,
+      await updateCustomer(customerId, {
+        name: nameTrimmed,
         status,
         contactPerson: contactPerson.trim() || undefined,
         email: emailTrimmed || undefined,
         phone: phone.trim() || undefined,
         billingAddress: billingAddress.trim() || undefined,
       });
-      navigate(`/finance/ar/customers/${created.id}`, { replace: true });
+
+      navigate(`/finance/ar/customers/${customerId}`, { replace: true });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, 'Failed to create customer'));
+      setError(getApiErrorMessage(err, 'Failed to update customer'));
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
+  if (loading) return <div>Loading...</div>;
+
   return (
     <div>
-      <h2>Create Customer</h2>
+      <h2>Edit Customer</h2>
 
-      {!canCreateCustomer ? <div style={{ color: 'crimson' }}>You do not have permission to create customers.</div> : null}
+      {!canEdit ? <div style={{ color: 'crimson' }}>You do not have permission to edit customers.</div> : null}
 
       <form onSubmit={onSubmit} style={{ marginTop: 12, maxWidth: 520, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <label>
           Customer Code
-          <input value={''} disabled placeholder="(auto-generated)" style={{ width: '100%' }} />
+          <input value={loaded?.customerCode ?? ''} disabled style={{ width: '100%' }} />
         </label>
 
         <label>
@@ -101,10 +160,10 @@ export function CreateCustomerPage() {
         {error ? <div style={{ color: 'crimson', fontSize: 13 }}>{error}</div> : null}
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit" disabled={!canCreateCustomer || loading}>
-            {loading ? 'Saving...' : 'Create'}
+          <button type="submit" disabled={!canEdit || saving}>
+            {saving ? 'Saving...' : 'Save'}
           </button>
-          <button type="button" onClick={() => navigate('/finance/ar/customers')}>
+          <button type="button" onClick={() => navigate(`/finance/ar/customers/${id}`)}>
             Cancel
           </button>
         </div>

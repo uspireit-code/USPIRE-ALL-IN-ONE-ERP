@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { AccountLookup, Customer } from '../../services/ar';
 import { createInvoice, listEligibleAccounts, listCustomers } from '../../services/ar';
+import { getApiErrorMessage } from '../../services/api';
 
 type Line = {
   accountId: string;
@@ -44,12 +45,11 @@ export function CreateInvoicePage() {
     Promise.all([listCustomers(), listEligibleAccounts()])
       .then(([custs, accs]) => {
         if (!mounted) return;
-        setCustomers(custs);
+        setCustomers(custs.items ?? []);
         setAccounts(accs);
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load lookups';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        setError(getApiErrorMessage(err, 'Failed to load lookups'));
       })
       .finally(() => {
         if (!mounted) return;
