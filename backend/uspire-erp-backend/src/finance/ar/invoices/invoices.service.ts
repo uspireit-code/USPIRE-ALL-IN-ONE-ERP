@@ -315,6 +315,10 @@ export class FinanceArInvoicesService {
     if (!invoiceDate) throw new BadRequestException('invoiceDate is required');
     if (!dueDate) throw new BadRequestException('dueDate is required');
 
+    if (dueDate < invoiceDate) {
+      throw new BadRequestException('Due date cannot be earlier than invoice date');
+    }
+
     await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
 
     const currency = String(dto.currency ?? '').trim();
@@ -364,7 +368,7 @@ export class FinanceArInvoicesService {
       if (!l.accountId) throw new BadRequestException('Invoice line missing accountId');
       if (!description) throw new BadRequestException('Invoice line description is required');
       if (!(qty > 0)) throw new BadRequestException('Invoice line quantity must be > 0');
-      if (unitPrice < 0) throw new BadRequestException('Invoice line unitPrice must be >= 0');
+      if (!(unitPrice > 0)) throw new BadRequestException('Invoice line unitPrice must be > 0');
 
       const acct = byId.get(l.accountId);
       if (!acct) {
@@ -437,6 +441,10 @@ export class FinanceArInvoicesService {
     if (!inv) throw new NotFoundException('Invoice not found');
     if ((inv as any).status === 'POSTED') {
       throw new BadRequestException('Invoice is already posted');
+    }
+
+    if ((inv as any).dueDate && (inv as any).invoiceDate && (inv as any).dueDate < (inv as any).invoiceDate) {
+      throw new BadRequestException('Due date cannot be earlier than invoice date');
     }
 
     await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate: (inv as any).invoiceDate });
@@ -519,6 +527,7 @@ export class FinanceArInvoicesService {
   async getImportCsvTemplate(req: Request) {
     this.ensureTenant(req);
     const headers = [
+      'rowType',
       'invoiceRef',
       'customerCode',
       'invoiceDate',
@@ -531,7 +540,12 @@ export class FinanceArInvoicesService {
     ];
 
     const fileName = `invoice_import_template.csv`;
-    const body = `${headers.join(',')}\n`;
+    const sampleRows = [
+      ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', '1', '1500'],
+      ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', '2', '750'],
+      ['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', '1', '99'],
+    ];
+    const body = `${headers.join(',')}\n${sampleRows.map((r) => r.join(',')).join('\n')}\n`;
     return { fileName, body };
   }
 
@@ -540,6 +554,7 @@ export class FinanceArInvoicesService {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Invoices');
     ws.addRow([
+      'rowType',
       'invoiceRef',
       'customerCode',
       'invoiceDate',
@@ -550,6 +565,22 @@ export class FinanceArInvoicesService {
       'quantity',
       'unitPrice',
     ]);
+
+    // Header notes (Excel comments) to guide users; SAMPLE rows are ignored during preview/import.
+    try {
+      ws.getCell('A1').note = 'Optional. Use SAMPLE to include example rows (ignored during preview/import). Leave blank for real data.';
+      ws.getCell('B1').note = 'Required. Rows with the same invoiceRef are grouped into ONE invoice with multiple lines.';
+      ws.getCell('C1').note = 'Required. Must be consistent for all rows within the same invoiceRef group.';
+      ws.getCell('D1').note = 'Required. Must be consistent for all rows within the same invoiceRef group.';
+      ws.getCell('E1').note = 'Required. Must be consistent for all rows within the same invoiceRef group. Must be >= Invoice Date.';
+      ws.getCell('F1').note = 'Required. Use a valid ISO code (e.g. USD). Must be consistent within invoiceRef group.';
+    } catch {
+      // ignore if notes unsupported
+    }
+
+    ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', 1, 1500]);
+    ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', 2, 750]);
+    ws.addRow(['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', 1, 99]);
 
     const fileName = `invoice_import_template.xlsx`;
     const body = await (wb.xlsx as any).writeBuffer();
@@ -573,8 +604,10 @@ export class FinanceArInvoicesService {
 
     const rows = await this.readImportRows(file);
 
-    const parsed = rows.map((r) => {
+    const parsedAll = rows.map((r) => {
       const raw = r.row;
+      const rowTypeRaw = String(raw.rowtype ?? raw.row_type ?? raw.type ?? raw.flag ?? '').trim();
+      const isSample = rowTypeRaw.toUpperCase() === 'SAMPLE';
       const invoiceRef = String(raw.invoiceref ?? raw.invoice_ref ?? raw.invoicereference ?? '').trim();
       const customerCode = String(raw.customercode ?? raw.customer_code ?? raw.customer ?? '').trim();
       const invoiceDate = String(raw.invoicedate ?? raw.invoice_date ?? '').trim();
@@ -586,6 +619,22 @@ export class FinanceArInvoicesService {
       const currency = String(raw.currency ?? '').trim();
 
       const errors: string[] = [];
+      if (isSample) {
+        return {
+          rowNumber: r.rowNumber,
+          invoiceRef,
+          customerCode,
+          invoiceDate,
+          dueDate,
+          revenueAccountCode,
+          description,
+          quantity,
+          unitPrice,
+          currency,
+          errors,
+          _isSample: true,
+        };
+      }
       if (!invoiceRef) errors.push('invoiceRef is required');
       if (!customerCode) errors.push('Customer Code is required');
       if (!invoiceDate || !this.parseYmdToDateOrNull(invoiceDate)) errors.push('Invoice Date is required and must be a valid date');
@@ -594,7 +643,13 @@ export class FinanceArInvoicesService {
       if (!revenueAccountCode) errors.push('Revenue Account Code is required');
       if (!description) errors.push('Description is required');
       if (!(quantity > 0)) errors.push('Quantity must be > 0');
-      if (unitPrice < 0) errors.push('Unit Price must be >= 0');
+      if (!(unitPrice > 0)) errors.push('Unit Price must be > 0');
+
+      const invDateObj = this.parseYmdToDateOrNull(invoiceDate);
+      const dueDateObj = this.parseYmdToDateOrNull(dueDate);
+      if (invDateObj && dueDateObj && dueDateObj < invDateObj) {
+        errors.push('Due Date cannot be earlier than Invoice Date');
+      }
 
       return {
         rowNumber: r.rowNumber,
@@ -608,8 +663,11 @@ export class FinanceArInvoicesService {
         unitPrice,
         currency,
         errors,
+        _isSample: false,
       };
     });
+
+    const parsed = (parsedAll ?? []).filter((p: any) => !p._isSample);
 
     const customerCodes = [...new Set(parsed.map((p) => p.customerCode).filter(Boolean))];
     const accountCodes = [...new Set(parsed.map((p) => p.revenueAccountCode).filter(Boolean))];
@@ -649,6 +707,38 @@ export class FinanceArInvoicesService {
         } catch (e: any) {
           p.errors.push(String(e?.message ?? 'Invoice Date period is not OPEN'));
         }
+      }
+    }
+
+    // Group-level consistency checks: header fields must match within an invoiceRef group.
+    const groups = new Map<string, any[]>();
+    for (const p of parsed) {
+      const key = String(p.invoiceRef ?? '').trim();
+      if (!key) continue;
+      const prev = groups.get(key) ?? [];
+      prev.push(p);
+      groups.set(key, prev);
+    }
+
+    for (const [invoiceRef, rows] of groups.entries()) {
+      if (!rows || rows.length < 2) continue;
+      const base = rows[0];
+      const baseCustomer = String(base.customerCode ?? '').trim();
+      const baseCurrency = String(base.currency ?? '').trim().toUpperCase();
+      const baseInvDate = String(base.invoiceDate ?? '').trim();
+      const baseDueDate = String(base.dueDate ?? '').trim();
+
+      const mixedCustomer = rows.some((r) => String(r.customerCode ?? '').trim() !== baseCustomer);
+      const mixedCurrency = rows.some((r) => String(r.currency ?? '').trim().toUpperCase() !== baseCurrency);
+      const mixedInvDate = rows.some((r) => String(r.invoiceDate ?? '').trim() !== baseInvDate);
+      const mixedDueDate = rows.some((r) => String(r.dueDate ?? '').trim() !== baseDueDate);
+
+      if (!mixedCustomer && !mixedCurrency && !mixedInvDate && !mixedDueDate) continue;
+
+      for (const r of rows) {
+        if (mixedCustomer) r.errors.push(`Mixed customers in invoiceRef group: ${invoiceRef}`);
+        if (mixedCurrency) r.errors.push(`Mixed currencies in invoiceRef group: ${invoiceRef}`);
+        if (mixedInvDate || mixedDueDate) r.errors.push(`Mixed invoice/due dates in invoiceRef group: ${invoiceRef}`);
       }
     }
 
@@ -721,6 +811,10 @@ export class FinanceArInvoicesService {
           throw new BadRequestException('Invalid grouping key');
         }
 
+        if (dueDate < invoiceDate) {
+          throw new BadRequestException('Due date cannot be earlier than invoice date');
+        }
+
         await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
 
         // Ensure the customer is ACTIVE and snapshot details are captured
@@ -742,6 +836,8 @@ export class FinanceArInvoicesService {
           if (!accountId) throw new BadRequestException('Revenue account not found');
           const qty = this.toNum(rr.quantity ?? 1);
           const unitPrice = this.toNum(rr.unitPrice ?? 0);
+          if (!(qty > 0)) throw new BadRequestException('Quantity must be > 0');
+          if (!(unitPrice > 0)) throw new BadRequestException('Unit Price must be > 0');
           const lineTotal = this.round2(qty * unitPrice);
           return {
             accountId,

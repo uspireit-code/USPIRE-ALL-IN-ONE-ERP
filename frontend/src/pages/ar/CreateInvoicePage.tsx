@@ -8,6 +8,8 @@ import { getApiErrorMessage } from '../../services/api';
 
 type Line = {
   accountId: string;
+  accountSearch: string;
+  accountPickerOpen: boolean;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -35,14 +37,23 @@ export function CreateInvoicePage() {
   const [saving, setSaving] = useState(false);
 
   const [customerId, setCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(todayIsoDate());
   const [dueDate, setDueDate] = useState(todayIsoDate());
   const tenantDefaultCurrency = String(effective?.defaultCurrency ?? '').trim();
+  const currencyOptions = useMemo(() => {
+    const base = String(tenantDefaultCurrency ?? '').trim().toUpperCase();
+    const common = ['USD', 'EUR', 'GBP', 'ZAR', 'KES', 'NGN', 'GHS', 'UGX', 'TZS', 'AED', 'SAR', 'INR', 'AUD', 'CAD'];
+    const all = [...new Set([base, ...common].filter(Boolean))];
+    return all.length > 0 ? all : ['USD'];
+  }, [tenantDefaultCurrency]);
+
   const [currency, setCurrency] = useState(tenantDefaultCurrency || 'USD');
   const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
   const [lines, setLines] = useState<Line[]>([
-    { accountId: '', description: '', quantity: '1', unitPrice: '' },
+    { accountId: '', accountSearch: '', accountPickerOpen: false, description: '', quantity: '1', unitPrice: '' },
   ]);
 
   useEffect(() => {
@@ -75,9 +86,37 @@ export function CreateInvoicePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantDefaultCurrency]);
 
+  useEffect(() => {
+    const normalized = String(currency ?? '').trim().toUpperCase();
+    if (!normalized) {
+      setCurrency(currencyOptions[0] ?? 'USD');
+      return;
+    }
+    if (!currencyOptions.includes(normalized)) {
+      setCurrency(currencyOptions[0] ?? 'USD');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currencyOptions]);
+
   const selectedCustomer = useMemo(() => {
     return customers.find((c) => c.id === customerId) ?? null;
   }, [customerId, customers]);
+
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    const code = String(selectedCustomer.customerCode ?? '').trim();
+    setCustomerSearch(code ? `${code} - ${selectedCustomer.name}` : selectedCustomer.name);
+  }, [selectedCustomer]);
+
+  const filteredCustomers = useMemo(() => {
+    const q = String(customerSearch ?? '').trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) => {
+      const name = String(c.name ?? '').toLowerCase();
+      const code = String(c.customerCode ?? '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    });
+  }, [customerSearch, customers]);
 
   const normalizedCurrency = useMemo(() => String(currency ?? '').trim().toUpperCase(), [currency]);
   const normalizedBase = useMemo(() => String(tenantDefaultCurrency ?? '').trim().toUpperCase(), [tenantDefaultCurrency]);
@@ -86,6 +125,34 @@ export function CreateInvoicePage() {
   useEffect(() => {
     if (isBaseCurrency) setExchangeRate('1');
   }, [isBaseCurrency]);
+
+  const exchangeRateNum = useMemo(() => Number(exchangeRate), [exchangeRate]);
+  const exchangeRateInvalid = useMemo(() => {
+    if (isBaseCurrency) return false;
+    return !(exchangeRateNum > 0);
+  }, [exchangeRateNum, isBaseCurrency]);
+
+  const exchangeRateError = useMemo(() => {
+    if (!exchangeRateInvalid) return null;
+    return 'Exchange rate is required when invoice currency differs from base currency';
+  }, [exchangeRateInvalid]);
+
+  const isLineValid = useMemo(() => {
+    return (l: Line) => {
+      const qty = Number(l.quantity);
+      const unitPrice = Number(l.unitPrice);
+      const desc = String(l.description ?? '').trim();
+      return Boolean(l.accountId && desc && qty > 0 && unitPrice > 0);
+    };
+  }, []);
+
+  const hasAnyValidLine = useMemo(() => lines.some((l) => isLineValid(l)), [isLineValid, lines]);
+  const allLinesValid = useMemo(() => lines.every((l) => isLineValid(l)), [isLineValid, lines]);
+  const canAddLine = useMemo(() => {
+    const last = lines[lines.length - 1];
+    if (!last) return false;
+    return isLineValid(last);
+  }, [isLineValid, lines]);
 
   const computed = useMemo(() => {
     const lineTotals = lines.map((l) => {
@@ -104,7 +171,14 @@ export function CreateInvoicePage() {
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { accountId: '', description: '', quantity: '1', unitPrice: '' }]);
+    setLines((prev) => {
+      const last = prev[prev.length - 1];
+      if (!last || !isLineValid(last)) return prev;
+      return [
+        ...prev,
+        { accountId: '', accountSearch: '', accountPickerOpen: false, description: '', quantity: '1', unitPrice: '' },
+      ];
+    });
   }
 
   function removeLine(idx: number) {
@@ -125,32 +199,24 @@ export function CreateInvoicePage() {
       return;
     }
 
-    const ex = Number(exchangeRate);
-    if (!isBaseCurrency && !(ex > 0)) {
-      setError('Exchange rate is required and must be > 0 for non-base currency');
+    if (new Date(dueDate) < new Date(invoiceDate)) {
+      setError('Due date cannot be earlier than invoice date');
       return;
     }
 
-    if (lines.length < 1) {
-      setError('Invoice must have at least 1 line');
+    if (exchangeRateInvalid) {
+      setError('Exchange rate is required when invoice currency differs from base currency');
       return;
     }
 
-    for (const l of lines) {
-      const qty = Number(l.quantity);
-      const unitPrice = Number(l.unitPrice);
-      if (!l.accountId || !l.description) {
-        setError('Each line requires account and description');
-        return;
-      }
-      if (!(qty > 0)) {
-        setError('Each line requires quantity > 0');
-        return;
-      }
-      if (!(unitPrice >= 0)) {
-        setError('Each line requires unit price >= 0');
-        return;
-      }
+    if (!hasAnyValidLine) {
+      setError('Invoice must have at least 1 valid line');
+      return;
+    }
+
+    if (!allLinesValid) {
+      setError('All invoice lines must have an account, description, quantity > 0, and unit price > 0');
+      return;
     }
 
     setSaving(true);
@@ -191,14 +257,74 @@ export function CreateInvoicePage() {
       <form onSubmit={onSubmit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 900 }}>
         <label>
           Customer
-          <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} required style={{ width: '100%' }}>
-            <option value="">-- select --</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div style={{ position: 'relative' }}>
+            <input
+              value={customerSearch}
+              onChange={(e) => {
+                setCustomerSearch(e.target.value);
+                setCustomerId('');
+                setCustomerPickerOpen(true);
+              }}
+              onFocus={() => setCustomerPickerOpen(true)}
+              onBlur={() => {
+                window.setTimeout(() => setCustomerPickerOpen(false), 150);
+              }}
+              placeholder="Search by customer name or code..."
+              style={{ width: '100%' }}
+              required
+            />
+            {customerPickerOpen ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: '100%',
+                  marginTop: 4,
+                  background: '#fff',
+                  border: '1px solid rgba(11,12,30,0.15)',
+                  borderRadius: 10,
+                  boxShadow: '0 10px 24px rgba(11,12,30,0.12)',
+                  maxHeight: 260,
+                  overflowY: 'auto',
+                  zIndex: 10,
+                }}
+              >
+                {filteredCustomers.length === 0 ? (
+                  <div style={{ padding: 10, fontSize: 13, color: '#666' }}>No matches</div>
+                ) : (
+                  filteredCustomers.slice(0, 50).map((c) => {
+                    const code = String(c.customerCode ?? '').trim();
+                    const label = code ? `${code} - ${c.name}` : c.name;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setCustomerId(c.id);
+                          setCustomerSearch(label);
+                          setCustomerPickerOpen(false);
+                        }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>{label}</div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
         </label>
 
         <label>
@@ -220,7 +346,13 @@ export function CreateInvoicePage() {
         <div style={{ display: 'flex', gap: 12 }}>
           <label style={{ flex: 1 }}>
             Currency
-            <input value={currency} onChange={(e) => setCurrency(e.target.value)} required style={{ width: '100%' }} />
+            <select value={normalizedCurrency} onChange={(e) => setCurrency(e.target.value)} required style={{ width: '100%' }}>
+              {currencyOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </label>
           <label style={{ flex: 1 }}>
             Exchange Rate {normalizedBase ? `(base: ${normalizedBase})` : ''}
@@ -232,6 +364,7 @@ export function CreateInvoicePage() {
               inputMode="decimal"
               style={{ width: '100%' }}
             />
+            {exchangeRateError ? <div style={{ marginTop: 4, fontSize: 12, color: 'crimson' }}>{exchangeRateError}</div> : null}
           </label>
           <label style={{ flex: 2 }}>
             Reference (optional)
@@ -260,7 +393,7 @@ export function CreateInvoicePage() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 600 }}>Invoice Lines</div>
-            <button type="button" onClick={addLine}>
+            <button type="button" onClick={addLine} disabled={!canAddLine}>
               Add line
             </button>
           </div>
@@ -280,14 +413,79 @@ export function CreateInvoicePage() {
               {lines.map((l, idx) => (
                 <tr key={idx}>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                    <select value={l.accountId} onChange={(e) => updateLine(idx, { accountId: e.target.value })} required style={{ width: '100%' }}>
-                      <option value="">-- select --</option>
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.code} - {a.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        value={l.accountSearch}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updateLine(idx, { accountSearch: v, accountId: '' });
+                        }}
+                        onFocus={() => updateLine(idx, { accountPickerOpen: true })}
+                        onBlur={() => {
+                          window.setTimeout(() => updateLine(idx, { accountPickerOpen: false }), 150);
+                        }}
+                        placeholder="Search by account code or name..."
+                        style={{ width: '100%' }}
+                        required
+                      />
+                      {l.accountPickerOpen ? (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: '100%',
+                            marginTop: 4,
+                            background: '#fff',
+                            border: '1px solid rgba(11,12,30,0.15)',
+                            borderRadius: 10,
+                            boxShadow: '0 10px 24px rgba(11,12,30,0.12)',
+                            maxHeight: 220,
+                            overflowY: 'auto',
+                            zIndex: 10,
+                          }}
+                        >
+                          {(() => {
+                            const q = String(l.accountSearch ?? '').trim().toLowerCase();
+                            const list = !q
+                              ? accounts
+                              : accounts.filter((a) => {
+                                  const code = String(a.code ?? '').toLowerCase();
+                                  const name = String(a.name ?? '').toLowerCase();
+                                  return code.includes(q) || name.includes(q);
+                                });
+                            if (list.length === 0) {
+                              return <div style={{ padding: 10, fontSize: 13, color: '#666' }}>No matches</div>;
+                            }
+                            return list.slice(0, 50).map((a) => {
+                              const label = `${a.code} - ${a.name}`;
+                              return (
+                                <button
+                                  key={a.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    updateLine(idx, { accountId: a.id, accountSearch: label, accountPickerOpen: false });
+                                  }}
+                                  style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    padding: '10px 12px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    fontSize: 13,
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 700 }}>{label}</div>
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                      ) : null}
+                    </div>
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                     <input value={l.description} onChange={(e) => updateLine(idx, { description: e.target.value })} required style={{ width: '100%' }} />
@@ -333,7 +531,7 @@ export function CreateInvoicePage() {
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit" disabled={!canCreate || saving || loadingLookups}>
+          <button type="submit" disabled={!canCreate || saving || loadingLookups || exchangeRateInvalid || !hasAnyValidLine || !allLinesValid}>
             {saving ? 'Creating...' : 'Create (DRAFT)'}
           </button>
           <button type="button" onClick={() => navigate('/finance/ar/invoices')}>

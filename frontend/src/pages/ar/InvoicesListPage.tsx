@@ -274,6 +274,10 @@ export function InvoicesListPage() {
                 <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(11,12,30,0.62)' }}>
                   Upload a CSV/XLSX template. Valid rows will create DRAFT invoices; invalid rows will be rejected with reasons.
                 </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(11,12,30,0.62)', lineHeight: 1.4 }}>
+                  Grouping: rows with the same <b>invoiceRef</b> are grouped into <b>one invoice</b> with <b>multiple lines</b>.
+                  Template rows flagged as <b>SAMPLE</b> are ignored during preview/import.
+                </div>
               </div>
               <button type="button" onClick={onCloseImport}>
                 Close
