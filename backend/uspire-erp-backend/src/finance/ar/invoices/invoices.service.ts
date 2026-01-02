@@ -1267,99 +1267,359 @@ export class FinanceArInvoicesService {
         doc.on('error', reject);
       });
 
-      doc.font('Helvetica-Bold').fontSize(16).text(tenantName || 'Invoice', { align: 'center' });
-      doc.moveDown(0.5);
-      doc.font('Helvetica').fontSize(10).fillColor('#444').text('Prepared in accordance with IFRS', { align: 'center' });
-      doc.fillColor('#000');
-      doc.moveDown(1);
-
-      doc.font('Helvetica-Bold').fontSize(11).text(`Invoice: ${invoiceNumber}`);
-      doc.font('Helvetica').fontSize(10).text(`Date: ${String((inv as any).invoiceDate).slice(0, 10)}`);
-      doc.text(`Due: ${String((inv as any).dueDate).slice(0, 10)}`);
-      doc.text(`Currency: ${currency}`);
-      doc.moveDown(1);
-
-      doc.font('Helvetica-Bold').text('Bill To');
-      doc.font('Helvetica').text(String((inv as any).customerNameSnapshot || (inv as any).customer?.name || '').trim());
-      if ((inv as any).customerEmailSnapshot) doc.text(String((inv as any).customerEmailSnapshot));
-      if ((inv as any).customerBillingAddressSnapshot) doc.text(String((inv as any).customerBillingAddressSnapshot));
-      doc.moveDown(1);
-
-      // Lines table
-      const startX = doc.page.margins.left;
-      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      const col = {
-        line: startX,
-        desc: startX + 40,
-        qty: startX + (hasDiscount ? 300 : 340),
-        unit: startX + (hasDiscount ? 370 : 420),
-        disc: startX + 450,
-        total: startX + (hasDiscount ? 520 : 520),
+      const page = {
+        left: doc.page.margins.left,
+        right: doc.page.margins.right,
+        top: doc.page.margins.top,
+        bottom: doc.page.margins.bottom,
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        height: doc.page.height - doc.page.margins.top - doc.page.margins.bottom,
       };
-      const descWidth = (hasDiscount ? 250 : 290);
 
-      const headerY = doc.y;
-      doc.font('Helvetica-Bold').fontSize(10);
-      doc.text('Line #', col.line, headerY, { width: 40, align: 'right' });
-      doc.text('Description', col.desc, headerY, { width: descWidth, align: 'left' });
-      doc.text('Quantity', col.qty, headerY, { width: 70, align: 'right' });
-      doc.text('Unit Price', col.unit, headerY, { width: 80, align: 'right' });
-      if (hasDiscount) {
-        doc.text('Discount', col.disc, headerY, { width: 70, align: 'right' });
-      }
-      doc.text('Line Total', col.total, headerY, { width: 80, align: 'right' });
-      doc.moveDown(0.5);
-      doc.moveTo(startX, doc.y).lineTo(startX + pageWidth, doc.y).strokeColor('#E4E7EC').stroke();
-      doc.strokeColor('#000');
-      doc.moveDown(0.4);
+      const colors = {
+        text: '#0B0C1E',
+        muted: '#667085',
+        border: '#E4E7EC',
+        headerBg: '#F9FAFB',
+      };
 
-      doc.font('Helvetica').fontSize(9);
-      invLines.forEach((l, idx) => {
+      const font = {
+        body: 'Helvetica',
+        bold: 'Helvetica-Bold',
+      };
+
+      const invoiceDate = String((inv as any).invoiceDate).slice(0, 10);
+      const dueDate = String((inv as any).dueDate).slice(0, 10);
+      const billToName = String((inv as any).customerNameSnapshot || (inv as any).customer?.name || '').trim();
+      const billToEmail = (inv as any).customerEmailSnapshot ? String((inv as any).customerEmailSnapshot).trim() : '';
+      const billToAddress = (inv as any).customerBillingAddressSnapshot
+        ? String((inv as any).customerBillingAddressSnapshot).trim()
+        : '';
+
+      const drawDivider = (y: number) => {
+        doc.save();
+        doc.strokeColor(colors.border);
+        doc.moveTo(page.left, y).lineTo(page.left + page.width, y).stroke();
+        doc.restore();
+      };
+
+      const drawHeaderFirstPage = () => {
+        doc.fillColor(colors.text);
+        doc.font(font.bold).fontSize(20).text(tenantName || 'Invoice', page.left, doc.y, { align: 'left' });
+        doc.moveDown(0.2);
+        doc.font(font.body).fontSize(9).fillColor(colors.muted).text('Prepared in accordance with IFRS', { align: 'left' });
+        doc.fillColor(colors.text);
+        doc.moveDown(0.8);
+
+        doc.font(font.bold).fontSize(24).text('INVOICE', { align: 'right' });
+        doc.moveDown(0.2);
+
+        const metaTopY = doc.y;
+        const colGap = 18;
+        const colWidth = (page.width - colGap) / 2;
+        const leftX = page.left;
+        const rightX = page.left + colWidth + colGap;
+        doc.font(font.body).fontSize(10).fillColor(colors.text);
+
+        const label = (t: string) => {
+          doc.font(font.bold).text(t);
+          doc.font(font.body);
+        };
+
+        doc.save();
+        doc.x = leftX;
+        doc.y = metaTopY;
+        label('Invoice Number');
+        doc.text(invoiceNumber || '');
+        doc.moveDown(0.2);
+        label('Invoice Date');
+        doc.text(invoiceDate || '');
+        doc.moveDown(0.2);
+        label('Due Date');
+        doc.text(dueDate || '');
+        doc.restore();
+
+        doc.save();
+        doc.x = rightX;
+        doc.y = metaTopY;
+        label('Currency');
+        doc.text(currency || '');
+        doc.restore();
+
+        const blockBottom = Math.max(doc.y, metaTopY + 54);
+        doc.y = blockBottom + 12;
+        drawDivider(doc.y);
+        doc.moveDown(0.8);
+
+        doc.font(font.bold).fontSize(11).fillColor(colors.text).text('Bill To', page.left, doc.y);
+        doc.moveDown(0.3);
+        doc.font(font.body).fontSize(10).text(billToName || '');
+        if (billToEmail) {
+          doc.font(font.body).fillColor(colors.muted).text(billToEmail);
+          doc.fillColor(colors.text);
+        }
+        if (billToAddress) {
+          doc.font(font.body).fillColor(colors.muted).text(billToAddress, { width: page.width });
+          doc.fillColor(colors.text);
+        }
+        doc.moveDown(0.9);
+        drawDivider(doc.y);
+        doc.moveDown(0.8);
+      };
+
+      const startNewPage = () => {
+        doc.addPage({ size: 'A4', margin: 36 });
+        doc.fillColor(colors.text);
+      };
+
+      const colPaddingX = 6;
+      const rowPaddingY = 6;
+
+      const table = (() => {
+        const qtyW = 40;
+        const unitW = 92;
+        const discW = hasDiscount ? 78 : 0;
+        const totalW = 98;
+        const descW = page.width - qtyW - unitW - discW - totalW;
+        const qtyX = page.left;
+        const descX = qtyX + qtyW;
+        const unitX = descX + descW;
+        const discX = unitX + unitW;
+        const totalX = discX + discW;
+        return {
+          qtyW,
+          descW,
+          unitW,
+          discW,
+          totalW,
+          qtyX,
+          descX,
+          unitX,
+          discX,
+          totalX,
+        };
+      })();
+
+      const drawTableHeader = () => {
+        const headerH = 22;
         const y0 = doc.y;
+        const y1 = y0 + headerH;
+
+        doc.save();
+        doc.fillColor(colors.headerBg);
+        doc.rect(page.left, y0, page.width, headerH).fill();
+        doc.restore();
+
+        doc.save();
+        doc.strokeColor(colors.border);
+        doc.rect(page.left, y0, page.width, headerH).stroke();
+        doc.restore();
+
+        doc.font(font.bold).fontSize(9).fillColor(colors.text);
+
+        doc.text('Qty', table.qtyX + colPaddingX, y0 + 6, {
+          width: table.qtyW - colPaddingX * 2,
+          align: 'center',
+          lineBreak: false,
+        });
+        doc.text('Description', table.descX + colPaddingX, y0 + 6, {
+          width: table.descW - colPaddingX * 2,
+          align: 'left',
+          lineBreak: false,
+        });
+        doc.text('Unit Price', table.unitX + colPaddingX, y0 + 6, {
+          width: table.unitW - colPaddingX * 2,
+          align: 'right',
+          lineBreak: false,
+        });
+        if (hasDiscount) {
+          doc.fillColor(colors.muted);
+          doc.text('Discount', table.discX + colPaddingX, y0 + 6, {
+            width: table.discW - colPaddingX * 2,
+            align: 'right',
+            lineBreak: false,
+          });
+          doc.fillColor(colors.text);
+        }
+        doc.text('Line Total', table.totalX + colPaddingX, y0 + 6, {
+          width: table.totalW - colPaddingX * 2,
+          align: 'right',
+          lineBreak: false,
+        });
+
+        doc.y = y1;
+      };
+
+      const estimateTotalsHeight = () => {
+        const totalsLines = hasDiscount ? 5 : 3;
+        const totalsHeaderSpacing = 8;
+        const lineH = 14;
+        return totalsHeaderSpacing + totalsLines * lineH + 6;
+      };
+
+      const estimateBankDetailsHeight = () => {
+        return 18 + 5 * 12 + 10;
+      };
+
+      const estimateNoteHeight = () => {
+        if (!invoiceNote) return 0;
+        doc.font(font.body).fontSize(9);
+        const h = doc.heightOfString(invoiceNote, { width: page.width });
+        return 18 + h + 8;
+      };
+
+      const ensureSpace = (neededHeight: number, onNewPage?: () => void) => {
+        const bottomLimit = doc.page.height - doc.page.margins.bottom;
+        if (doc.y + neededHeight > bottomLimit) {
+          startNewPage();
+          if (onNewPage) onNewPage();
+        }
+      };
+
+      drawHeaderFirstPage();
+
+      ensureSpace(30, undefined);
+      drawTableHeader();
+
+      doc.font(font.body).fontSize(9).fillColor(colors.text);
+
+      const minRowH = 18;
+
+      invLines.forEach((l, idx) => {
         const discountText = hasDiscount
           ? l.discountTotal > 0
             ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : this.formatMoney(l.discountTotal, currency))
             : ''
           : '';
 
-        doc.text(String(idx + 1), col.line, y0, { width: 40, align: 'right' });
-        doc.text(String(l.description ?? ''), col.desc, y0, { width: descWidth, align: 'left' });
-        doc.text(this.formatMoney(l.qty, currency), col.qty, y0, { width: 70, align: 'right' });
-        doc.text(this.formatMoney(l.unitPrice, currency), col.unit, y0, { width: 80, align: 'right' });
+        doc.font(font.body).fontSize(9);
+        const descText = String(l.description ?? '');
+        const descH = doc.heightOfString(descText, {
+          width: table.descW - colPaddingX * 2,
+          align: 'left',
+        });
+        const rowH = Math.max(minRowH, descH + rowPaddingY * 2);
+
+        ensureSpace(rowH + 6, () => {
+          drawTableHeader();
+          doc.font(font.body).fontSize(9).fillColor(colors.text);
+        });
+
+        const y0 = doc.y;
+
+        doc.save();
+        doc.strokeColor(colors.border);
+        doc.moveTo(page.left, y0 + rowH).lineTo(page.left + page.width, y0 + rowH).stroke();
+        doc.restore();
+
+        doc.text(this.formatMoney(l.qty, currency), table.qtyX + colPaddingX, y0 + rowPaddingY, {
+          width: table.qtyW - colPaddingX * 2,
+          align: 'center',
+          lineBreak: false,
+        });
+
+        doc.text(descText, table.descX + colPaddingX, y0 + rowPaddingY, {
+          width: table.descW - colPaddingX * 2,
+          align: 'left',
+        });
+
+        doc.text(this.formatMoney(l.unitPrice, currency), table.unitX + colPaddingX, y0 + rowPaddingY, {
+          width: table.unitW - colPaddingX * 2,
+          align: 'right',
+          lineBreak: false,
+        });
+
         if (hasDiscount) {
-          doc.text(discountText, col.disc, y0, { width: 70, align: 'right' });
+          doc.fillColor(colors.muted);
+          doc.text(discountText, table.discX + colPaddingX, y0 + rowPaddingY, {
+            width: table.discW - colPaddingX * 2,
+            align: 'right',
+            lineBreak: false,
+          });
+          doc.fillColor(colors.text);
         }
-        doc.text(this.formatMoney(l.lineTotal, currency), col.total, y0, { width: 80, align: 'right' });
 
-        doc.moveDown(0.9);
+        doc.text(this.formatMoney(l.lineTotal, currency), table.totalX + colPaddingX, y0 + rowPaddingY, {
+          width: table.totalW - colPaddingX * 2,
+          align: 'right',
+          lineBreak: false,
+        });
+
+        doc.y = y0 + rowH;
       });
-      doc.moveDown(0.5);
 
-      if (hasDiscount) {
-        doc.font('Helvetica-Bold').text(`Gross Subtotal: ${this.formatMoney(grossSubtotal, currency)}`, { align: 'right' });
-        doc.font('Helvetica-Bold').text(`Less: Discount: ${this.formatMoney(discountTotalSum, currency)}`, { align: 'right' });
-        doc.font('Helvetica-Bold').text(`Net Subtotal: ${this.formatMoney(Number((inv as any).subtotal ?? 0), currency)}`, { align: 'right' });
-      } else {
-        doc.font('Helvetica-Bold').text(`Subtotal: ${this.formatMoney(Number((inv as any).subtotal ?? 0), currency)}`, { align: 'right' });
-      }
-      doc.font('Helvetica-Bold').text(`Tax: ${this.formatMoney(Number((inv as any).taxAmount ?? 0), currency)}`, { align: 'right' });
-      doc.font('Helvetica-Bold').text(`Total: ${this.formatMoney(Number((inv as any).totalAmount ?? 0), currency)}`, { align: 'right' });
-      doc.moveDown(1);
+      const totalsH = estimateTotalsHeight();
+      const bankH = estimateBankDetailsHeight();
+      const noteH = estimateNoteHeight();
+      const reservedBottom = Math.max(bankH + 10, 0);
+      const remainingBlocksH = totalsH + 16 + noteH + reservedBottom;
+      ensureSpace(remainingBlocksH, undefined);
 
-      doc.font('Helvetica-Bold').fontSize(10).text('Bank Details');
-      doc.font('Helvetica').fontSize(9);
-      doc.text('Bank Name: FNB');
-      doc.text('Account Name: Uspire Professional Services Ltd');
-      doc.text('Account Number: 63144493680');
-      doc.text('Branch Name/Number: Commercial Suite / 260001');
-      doc.text('Swift Code: FIRNZMLX');
       doc.moveDown(0.8);
 
-      if (invoiceNote) {
-        doc.font('Helvetica-Bold').fontSize(10).text('Note');
-        doc.font('Helvetica').fontSize(9).text(invoiceNote);
-        doc.moveDown(0.6);
+      const totalsBlockWidth = 240;
+      const totalsX = page.left + page.width - totalsBlockWidth;
+
+      const totalsLine = (label: string, value: string, opts?: { bold?: boolean }) => {
+        doc.font(opts?.bold ? font.bold : font.body).fontSize(10).fillColor(colors.text);
+        const y = doc.y;
+        doc.text(label, totalsX, y, { width: totalsBlockWidth * 0.62, align: 'left' });
+        doc.text(value, totalsX + totalsBlockWidth * 0.62, y, { width: totalsBlockWidth * 0.38, align: 'right', lineBreak: false });
+        doc.y = y + 14;
+      };
+
+      if (hasDiscount) {
+        totalsLine('Gross Subtotal', this.formatMoney(grossSubtotal, currency));
+        totalsLine('Less: Discount', this.formatMoney(discountTotalSum, currency));
+        totalsLine('Net Subtotal', this.formatMoney(Number((inv as any).subtotal ?? 0), currency));
+      } else {
+        totalsLine('Subtotal', this.formatMoney(Number((inv as any).subtotal ?? 0), currency));
       }
+      totalsLine('Tax', this.formatMoney(Number((inv as any).taxAmount ?? 0), currency));
+      doc.save();
+      doc.strokeColor(colors.border);
+      doc.moveTo(totalsX, doc.y + 2).lineTo(totalsX + totalsBlockWidth, doc.y + 2).stroke();
+      doc.restore();
+      doc.y += 6;
+      doc.font(font.bold).fontSize(11).fillColor(colors.text);
+      const totalY = doc.y;
+      doc.text('Total', totalsX, totalY, { width: totalsBlockWidth * 0.62, align: 'left' });
+      doc.text(this.formatMoney(Number((inv as any).totalAmount ?? 0), currency), totalsX + totalsBlockWidth * 0.62, totalY, {
+        width: totalsBlockWidth * 0.38,
+        align: 'right',
+        lineBreak: false,
+      });
+      doc.y = totalY + 16;
+
+      if (invoiceNote) {
+        doc.moveDown(0.8);
+        doc.font(font.bold).fontSize(10).fillColor(colors.text).text('Invoice Note', page.left, doc.y);
+        doc.moveDown(0.3);
+        doc.font(font.body).fontSize(9).fillColor(colors.text).text(invoiceNote, page.left, doc.y, { width: page.width });
+      }
+
+      const bankBlockH = estimateBankDetailsHeight();
+      const bankY = doc.page.height - doc.page.margins.bottom - bankBlockH;
+
+      if (doc.y + 18 > bankY) {
+        startNewPage();
+      }
+
+      const bankYFinal = doc.page.height - doc.page.margins.bottom - bankBlockH;
+      doc.save();
+      doc.rect(page.left, bankYFinal, page.width, bankBlockH).strokeColor(colors.border).stroke();
+      doc.restore();
+
+      doc.font(font.bold).fontSize(10).fillColor(colors.text).text('Bank Details', page.left + 10, bankYFinal + 8);
+      doc.font(font.body).fontSize(9).fillColor(colors.muted);
+      const bankText =
+        'Bank Name: FNB\n' +
+        'Account Name: Uspire Professional Services Ltd\n' +
+        'Account Number: 63144493680\n' +
+        'Branch Name/Number: Commercial Suite/260001\n' +
+        'Swift Code: FIRNZMLX';
+      doc.text(bankText, page.left + 10, bankYFinal + 26, { width: page.width - 20 });
+      doc.fillColor(colors.text);
 
       doc.end();
       const pdf = await done;
