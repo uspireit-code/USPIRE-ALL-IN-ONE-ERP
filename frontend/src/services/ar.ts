@@ -53,6 +53,22 @@ export type ReceiptLine = ReceiptLineInput & {
   invoiceNumber: string;
 };
 
+export type ReceiptAllocationLine = {
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceDate?: string | null;
+  invoiceTotalAmount?: number | null;
+  currency?: string | null;
+  appliedAmount: number;
+  createdAt?: string | null;
+};
+
+export type ReceiptAllocationsResponse = {
+  receiptId: string;
+  lines: ReceiptAllocationLine[];
+};
+
 export type ArReceipt = {
   id: string;
   receiptNumber: string;
@@ -64,8 +80,10 @@ export type ArReceipt = {
   paymentMethod: ReceiptPaymentMethod;
   paymentReference?: string | null;
   status: ReceiptStatus;
+  glJournalId?: string | null;
   createdAt: string;
   postedAt?: string | null;
+  postedById?: string | null;
   voidedAt?: string | null;
   voidReason?: string | null;
   lines?: ReceiptLine[];
@@ -182,6 +200,17 @@ export async function updateReceipt(id: string, params: {
 
 export async function postReceipt(id: string) {
   return apiFetch<ArReceipt>(`/ar/receipts/${id}/post`, { method: 'POST' });
+}
+
+export async function getReceiptAllocations(id: string) {
+  return apiFetch<ReceiptAllocationsResponse>(`/ar/receipts/${id}/allocations`, { method: 'GET' });
+}
+
+export async function setReceiptAllocations(id: string, params: { lines?: ReceiptLineInput[] }) {
+  return apiFetch<ReceiptAllocationsResponse>(`/ar/receipts/${id}/allocations`, {
+    method: 'PUT',
+    body: JSON.stringify({ lines: params.lines ?? [] }),
+  });
 }
 
 export async function voidReceipt(id: string, reason: string) {

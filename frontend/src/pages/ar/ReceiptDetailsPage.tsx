@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import type { ArReceipt, ReceiptLineInput } from '../../services/ar';
-import { getReceiptById, postReceipt, updateReceipt, voidReceipt } from '../../services/ar';
+import { getReceiptById, postReceipt, setReceiptAllocations, updateReceipt, voidReceipt } from '../../services/ar';
+import { getApiErrorMessage } from '../../services/api';
+import { getArAging } from '../../services/reports';
 
 function formatMoney(n: number) {
   return Number(n ?? 0).toFixed(2);
@@ -33,6 +35,9 @@ export function ReceiptDetailsPage() {
   const [editPaymentMethod, setEditPaymentMethod] = useState<'CASH' | 'CARD' | 'EFT' | 'CHEQUE' | 'OTHER'>('EFT');
   const [editPaymentReference, setEditPaymentReference] = useState('');
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [invoiceRows, setInvoiceRows] = useState<
+    Array<{ invoiceId: string; invoiceNumber: string; invoiceDate?: string | null; openBalance: number }>
+  >([]);
 
   useEffect(() => {
     if (!canRead) return;
@@ -58,10 +63,45 @@ export function ReceiptDetailsPage() {
           map[l.invoiceId] = String(l.appliedAmount);
         }
         setAllocations(map);
+
+        getArAging({ asOf: new Date().toISOString().slice(0, 10) })
+          .then((aging) => {
+            if (!mounted) return;
+            const group = (aging.customers ?? []).find((c) => c.customerId === r.customerId);
+            const rows = (group?.invoices ?? [])
+              .filter((inv) => Number(inv.outstanding ?? 0) > 0)
+              .map((inv) => ({
+                invoiceId: inv.invoiceId,
+                invoiceNumber: inv.invoiceNumber,
+                invoiceDate: inv.invoiceDate,
+                openBalance: round2(Number(inv.outstanding ?? 0)),
+              }));
+
+            const existingLines = (r.lines ?? []).map((l) => ({
+              invoiceId: l.invoiceId,
+              invoiceNumber: l.invoiceNumber || l.invoiceId,
+              invoiceDate: null as string | null,
+              openBalance: 0,
+            }));
+
+            const byId = new Map<string, { invoiceId: string; invoiceNumber: string; invoiceDate?: string | null; openBalance: number }>();
+            for (const row of rows) byId.set(row.invoiceId, row);
+            for (const row of existingLines) if (!byId.has(row.invoiceId)) byId.set(row.invoiceId, row);
+
+            setInvoiceRows(Array.from(byId.values()));
+          })
+          .catch(() => {
+            if (!mounted) return;
+            setInvoiceRows((r.lines ?? []).map((l) => ({
+              invoiceId: l.invoiceId,
+              invoiceNumber: l.invoiceNumber || l.invoiceId,
+              invoiceDate: null,
+              openBalance: 0,
+            })));
+          });
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load receipt';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        setError(getApiErrorMessage(err, 'Failed to load receipt'));
       })
       .finally(() => {
         if (!mounted) return;
@@ -75,6 +115,8 @@ export function ReceiptDetailsPage() {
 
   const isDraft = receipt?.status === 'DRAFT';
 
+  const receiptAmount = round2(Number(editTotalAmount) || 0);
+
   const lines: ReceiptLineInput[] = useMemo(() => {
     return Object.entries(allocations)
       .map(([invoiceId, amount]) => ({ invoiceId, appliedAmount: round2(Number(amount) || 0) }))
@@ -85,6 +127,10 @@ export function ReceiptDetailsPage() {
     const sum = lines.reduce((s, l) => s + (Number(l.appliedAmount) || 0), 0);
     return round2(sum);
   }, [lines]);
+
+  const unappliedAmount = useMemo(() => {
+    return round2(receiptAmount - appliedTotal);
+  }, [appliedTotal, receiptAmount]);
 
   async function refresh() {
     if (!id) return;
@@ -105,26 +151,39 @@ export function ReceiptDetailsPage() {
 
     setError(null);
 
-    const totalAmount = round2(Number(editTotalAmount) || 0);
-    if (appliedTotal > totalAmount) {
+    for (const inv of invoiceRows) {
+      const v = round2(Number(allocations[inv.invoiceId] ?? 0) || 0);
+      if (v < 0) {
+        setError('Applied amount cannot be negative');
+        return;
+      }
+      if (inv.openBalance > 0 && v > inv.openBalance) {
+        setError(`Applied amount exceeds open balance for invoice ${inv.invoiceNumber}`);
+        return;
+      }
+    }
+
+    if (appliedTotal > receiptAmount) {
       setError('Applied total cannot exceed receipt amount');
       return;
     }
 
     setActing(true);
     try {
-      const updated = await updateReceipt(id, {
+      await updateReceipt(id, {
         receiptDate: editReceiptDate,
         currency: editCurrency,
-        totalAmount,
+        totalAmount: receiptAmount,
         paymentMethod: editPaymentMethod,
         paymentReference: editPaymentReference || undefined,
-        lines,
       });
+
+      await setReceiptAllocations(id, { lines });
+
+      const updated = await getReceiptById(id);
       setReceipt(updated);
     } catch (err: any) {
-      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to save receipt';
-      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      setError(getApiErrorMessage(err, 'Failed to save receipt'));
     } finally {
       setActing(false);
     }
@@ -137,14 +196,16 @@ export function ReceiptDetailsPage() {
       return;
     }
 
+    const ok = window.confirm('Post this receipt? This action is irreversible.');
+    if (!ok) return;
+
     setError(null);
     setActing(true);
     try {
       const updated = await postReceipt(id);
       setReceipt(updated);
     } catch (err: any) {
-      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to post receipt';
-      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      setError(getApiErrorMessage(err, 'Failed to post receipt'));
     } finally {
       setActing(false);
     }
@@ -169,8 +230,7 @@ export function ReceiptDetailsPage() {
       const updated = await voidReceipt(id, reason);
       setReceipt(updated);
     } catch (err: any) {
-      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to void receipt';
-      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      setError(getApiErrorMessage(err, 'Failed to void receipt'));
     } finally {
       setActing(false);
     }
@@ -238,6 +298,21 @@ export function ReceiptDetailsPage() {
         <div>
           <b>Status:</b> {receipt.status}
         </div>
+        {receipt.postedAt ? (
+          <div>
+            <b>Posted at:</b> {receipt.postedAt}
+          </div>
+        ) : null}
+        {receipt.postedById ? (
+          <div>
+            <b>Posted by:</b> {receipt.postedById}
+          </div>
+        ) : null}
+        {receipt.glJournalId ? (
+          <div>
+            <b>GL journal:</b> <Link to={`/finance/gl/journals/${receipt.glJournalId}`}>{receipt.glJournalId}</Link>
+          </div>
+        ) : null}
         <div>
           <b>Customer:</b> {receipt.customerName}
         </div>
@@ -280,30 +355,48 @@ export function ReceiptDetailsPage() {
         <div>
           <div style={{ fontWeight: 600 }}>Invoice allocation</div>
 
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', marginTop: 8, fontSize: 13 }}>
+            <div>
+              Receipt amount: <b>{formatMoney(receiptAmount)}</b>
+            </div>
+            <div>
+              Applied total: <b>{formatMoney(appliedTotal)}</b>
+            </div>
+            <div>
+              Unapplied: <b>{formatMoney(unappliedAmount)}</b>
+            </div>
+          </div>
+
           <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 8 }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice #</th>
+                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice Date</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Open Balance</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Applied</th>
               </tr>
             </thead>
             <tbody>
-              {(receipt.lines ?? []).length === 0 ? (
+              {invoiceRows.length === 0 ? (
                 <tr>
-                  <td colSpan={2} style={{ padding: 8, color: '#666' }}>
-                    No allocations
+                  <td colSpan={4} style={{ padding: 8, color: '#666' }}>
+                    No open invoices
                   </td>
                 </tr>
               ) : null}
-              {(receipt.lines ?? []).map((l) => (
-                <tr key={l.id}>
+              {invoiceRows.map((inv) => (
+                <tr key={inv.invoiceId}>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                    <Link to={`/ar/invoices/${l.invoiceId}`}>{l.invoiceNumber || l.invoiceId}</Link>
+                    <Link to={`/ar/invoices/${inv.invoiceId}`}>{inv.invoiceNumber || inv.invoiceId}</Link>
+                  </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.invoiceDate ?? ''}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                    {inv.openBalance > 0 ? formatMoney(inv.openBalance) : ''}
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
                     <input
-                      value={allocations[l.invoiceId] ?? String(l.appliedAmount)}
-                      onChange={(e) => setAllocations((s) => ({ ...s, [l.invoiceId]: e.target.value }))}
+                      value={allocations[inv.invoiceId] ?? ''}
+                      onChange={(e) => setAllocations((s) => ({ ...s, [inv.invoiceId]: e.target.value }))}
                       disabled={!isDraft}
                       inputMode="decimal"
                       style={{ width: 120, textAlign: 'right' }}
@@ -313,10 +406,6 @@ export function ReceiptDetailsPage() {
               ))}
             </tbody>
           </table>
-
-          <div style={{ marginTop: 8, textAlign: 'right' }}>
-            Applied total: <b>{formatMoney(appliedTotal)}</b>
-          </div>
         </div>
 
         {!isDraft ? <div style={{ fontSize: 12, color: '#666' }}>This receipt is {receipt.status} and cannot be edited.</div> : null}

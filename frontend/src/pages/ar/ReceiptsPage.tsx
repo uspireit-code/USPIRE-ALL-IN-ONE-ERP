@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import type { ArReceipt } from '../../services/ar';
-import { listReceipts } from '../../services/ar';
+import { listReceipts, postReceipt } from '../../services/ar';
+import { getApiErrorMessage } from '../../services/api';
 
 function formatMoney(n: number) {
   return Number(n ?? 0).toFixed(2);
@@ -34,6 +35,7 @@ export function ReceiptsPage() {
   const [rows, setRows] = useState<ArReceipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canView) return;
@@ -48,8 +50,7 @@ export function ReceiptsPage() {
         setRows(data);
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load receipts';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        setError(getApiErrorMessage(err, 'Failed to load receipts'));
       })
       .finally(() => {
         if (!mounted) return;
@@ -60,6 +61,28 @@ export function ReceiptsPage() {
       mounted = false;
     };
   }, [canView]);
+
+  async function onPost(id: string) {
+    if (!canCreate) {
+      setError('Permission denied');
+      return;
+    }
+
+    const ok = window.confirm('Post this receipt? This action is irreversible.');
+    if (!ok) return;
+
+    setError(null);
+    setActingId(id);
+    try {
+      await postReceipt(id);
+      const data = await listReceipts();
+      setRows(data);
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Failed to post receipt'));
+    } finally {
+      setActingId(null);
+    }
+  }
 
   const content = useMemo(() => {
     if (!canView) return <div style={{ color: 'crimson' }}>Permission denied</div>;
@@ -75,6 +98,7 @@ export function ReceiptsPage() {
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Customer</th>
             <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Amount</th>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -89,12 +113,22 @@ export function ReceiptsPage() {
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                 <StatusBadge status={r.status} />
               </td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {r.status === 'DRAFT' && canCreate ? (
+                    <button type="button" disabled={actingId === r.id} onClick={() => onPost(r.id)}>
+                      Post
+                    </button>
+                  ) : null}
+                  <Link to={`/ar/receipts/${r.id}`}>Open</Link>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     );
-  }, [canView, error, loading, rows]);
+  }, [actingId, canCreate, canView, error, loading, rows]);
 
   return (
     <PageLayout
