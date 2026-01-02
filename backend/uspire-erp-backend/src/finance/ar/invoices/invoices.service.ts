@@ -23,6 +23,10 @@ export class FinanceArInvoicesService {
     return Math.round(Number(n ?? 0) * 100) / 100;
   }
 
+  private round6(n: number) {
+    return Math.round(Number(n ?? 0) * 1_000_000) / 1_000_000;
+  }
+
   private ensureTenant(req: Request) {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');
@@ -316,9 +320,18 @@ export class FinanceArInvoicesService {
     const currency = String(dto.currency ?? '').trim();
     if (!currency) throw new BadRequestException('currency is required');
 
+    const tenantCurrency = String((tenant as any)?.defaultCurrency ?? '').trim();
+    const exchangeRate =
+      tenantCurrency && currency.toUpperCase() === tenantCurrency.toUpperCase()
+        ? 1
+        : this.round6(this.toNum((dto as any).exchangeRate ?? 0));
+    if (!(exchangeRate > 0)) {
+      throw new BadRequestException('exchangeRate is required and must be > 0 for non-base currency');
+    }
+
     const customer = await (this.prisma as any).customer.findFirst({
       where: { id: dto.customerId, tenantId: tenant.id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, name: true, email: true, billingAddress: true },
     });
 
     if (!customer) throw new BadRequestException('Customer not found');
@@ -385,7 +398,11 @@ export class FinanceArInvoicesService {
           invoiceDate,
           dueDate,
           currency,
+          exchangeRate,
           reference: dto.reference ? String(dto.reference).trim() : undefined,
+          customerNameSnapshot: String((customer as any).name ?? '').trim(),
+          customerEmailSnapshot: (customer as any).email ? String((customer as any).email).trim() : undefined,
+          customerBillingAddressSnapshot: (customer as any).billingAddress ? String((customer as any).billingAddress).trim() : undefined,
           subtotal,
           taxAmount,
           totalAmount,
@@ -502,15 +519,15 @@ export class FinanceArInvoicesService {
   async getImportCsvTemplate(req: Request) {
     this.ensureTenant(req);
     const headers = [
-      'Customer Code',
-      'Invoice Date',
-      'Due Date',
-      'Revenue Account Code',
-      'Description',
-      'Quantity',
-      'Unit Price',
-      'Currency',
-      'Reference',
+      'invoiceRef',
+      'customerCode',
+      'invoiceDate',
+      'dueDate',
+      'currency',
+      'revenueAccountCode',
+      'description',
+      'quantity',
+      'unitPrice',
     ];
 
     const fileName = `invoice_import_template.csv`;
@@ -523,15 +540,15 @@ export class FinanceArInvoicesService {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Invoices');
     ws.addRow([
-      'Customer Code',
-      'Invoice Date',
-      'Due Date',
-      'Revenue Account Code',
-      'Description',
-      'Quantity',
-      'Unit Price',
-      'Currency',
-      'Reference',
+      'invoiceRef',
+      'customerCode',
+      'invoiceDate',
+      'dueDate',
+      'currency',
+      'revenueAccountCode',
+      'description',
+      'quantity',
+      'unitPrice',
     ]);
 
     const fileName = `invoice_import_template.xlsx`;
@@ -558,6 +575,7 @@ export class FinanceArInvoicesService {
 
     const parsed = rows.map((r) => {
       const raw = r.row;
+      const invoiceRef = String(raw.invoiceref ?? raw.invoice_ref ?? raw.invoicereference ?? '').trim();
       const customerCode = String(raw.customercode ?? raw.customer_code ?? raw.customer ?? '').trim();
       const invoiceDate = String(raw.invoicedate ?? raw.invoice_date ?? '').trim();
       const dueDate = String(raw.duedate ?? raw.due_date ?? '').trim();
@@ -566,9 +584,9 @@ export class FinanceArInvoicesService {
       const quantity = this.toNum(raw.quantity ?? 1);
       const unitPrice = this.toNum(raw.unitprice ?? raw.unit_price ?? 0);
       const currency = String(raw.currency ?? '').trim();
-      const reference = String(raw.reference ?? '').trim();
 
       const errors: string[] = [];
+      if (!invoiceRef) errors.push('invoiceRef is required');
       if (!customerCode) errors.push('Customer Code is required');
       if (!invoiceDate || !this.parseYmdToDateOrNull(invoiceDate)) errors.push('Invoice Date is required and must be a valid date');
       if (!dueDate || !this.parseYmdToDateOrNull(dueDate)) errors.push('Due Date is required and must be a valid date');
@@ -580,6 +598,7 @@ export class FinanceArInvoicesService {
 
       return {
         rowNumber: r.rowNumber,
+        invoiceRef,
         customerCode,
         invoiceDate,
         dueDate,
@@ -588,7 +607,6 @@ export class FinanceArInvoicesService {
         quantity,
         unitPrice,
         currency,
-        reference: reference || undefined,
         errors,
       };
     });
@@ -683,7 +701,8 @@ export class FinanceArInvoicesService {
 
     const groups = new Map<string, any[]>();
     for (const r of validRows) {
-      const key = `${r.customerCode}|${r.invoiceDate}|${r.dueDate}|${r.currency}|${r.reference ?? ''}`;
+      const key = String(r.invoiceRef ?? '').trim();
+      if (!key) continue;
       const prev = groups.get(key) ?? [];
       prev.push(r);
       groups.set(key, prev);
@@ -703,6 +722,20 @@ export class FinanceArInvoicesService {
         }
 
         await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
+
+        // Ensure the customer is ACTIVE and snapshot details are captured
+        const customer = await (this.prisma as any).customer.findFirst({
+          where: { tenantId: tenant.id, id: customerId },
+          select: { id: true, status: true, name: true, email: true, billingAddress: true },
+        });
+        if (!customer) throw new BadRequestException('Customer not found');
+        if ((customer as any).status !== 'ACTIVE') throw new BadRequestException('Customer is inactive');
+
+        const tenantCurrency = String((tenant as any)?.defaultCurrency ?? '').trim();
+        const exchangeRate =
+          tenantCurrency && String(first.currency).trim().toUpperCase() === tenantCurrency.toUpperCase()
+            ? 1
+            : 1;
 
         const computedLines = rows.map((rr) => {
           const accountId = accountIdByCode.get(rr.revenueAccountCode);
@@ -733,7 +766,10 @@ export class FinanceArInvoicesService {
               invoiceDate,
               dueDate,
               currency: String(first.currency).trim(),
-              reference: first.reference ? String(first.reference).trim() : undefined,
+              exchangeRate,
+              customerNameSnapshot: String((customer as any).name ?? '').trim(),
+              customerEmailSnapshot: (customer as any).email ? String((customer as any).email).trim() : undefined,
+              customerBillingAddressSnapshot: (customer as any).billingAddress ? String((customer as any).billingAddress).trim() : undefined,
               subtotal,
               taxAmount,
               totalAmount,
@@ -768,6 +804,179 @@ export class FinanceArInvoicesService {
       createdCount,
       failedCount: failedRows.length,
       failedRows,
+    };
+  }
+
+  async exportInvoice(req: Request, id: string, opts: { format: 'html' | 'pdf' }) {
+    const tenant = this.ensureTenant(req);
+
+    const inv = await this.prisma.customerInvoice.findFirst({
+      where: { id, tenantId: tenant.id } as any,
+      include: { lines: true, customer: true } as any,
+    });
+
+    if (!inv) throw new NotFoundException('Invoice not found');
+    if ((inv as any).status !== 'POSTED') {
+      throw new BadRequestException('Invoice export is available for POSTED invoices only');
+    }
+
+    const tenantName = String((tenant as any).legalName ?? (tenant as any).organisationName ?? '');
+    const invoiceNumber = String((inv as any).invoiceNumber ?? '').trim();
+    const currency = String((inv as any).currency ?? '').trim();
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice ${invoiceNumber}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #0B0C1E; margin: 32px; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+      .brand h1 { margin: 0; font-size: 22px; }
+      .muted { color: #667085; font-size: 12px; }
+      .block { margin-top: 18px; }
+      .row { display: flex; gap: 16px; }
+      .card { border: 1px solid #E4E7EC; border-radius: 10px; padding: 14px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border-bottom: 1px solid #E4E7EC; padding: 10px 8px; font-size: 13px; }
+      th { text-align: left; background: #F9FAFB; }
+      td.num, th.num { text-align: right; }
+      .totals { width: 320px; margin-left: auto; }
+      .totals .line { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+      .totals .grand { font-weight: 700; border-top: 1px solid #E4E7EC; margin-top: 8px; padding-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="brand">
+        <h1>${tenantName || 'Invoice'}</h1>
+        <div class="muted">Prepared in accordance with IFRS</div>
+      </div>
+      <div class="card" style="min-width: 280px;">
+        <div><b>Invoice:</b> ${invoiceNumber}</div>
+        <div><b>Date:</b> ${String((inv as any).invoiceDate).slice(0, 10)}</div>
+        <div><b>Due:</b> ${String((inv as any).dueDate).slice(0, 10)}</div>
+        <div><b>Currency:</b> ${currency}</div>
+      </div>
+    </div>
+
+    <div class="row block">
+      <div class="card" style="flex: 1;">
+        <div style="font-weight: 700; margin-bottom: 6px;">Bill To</div>
+        <div>${String((inv as any).customerNameSnapshot || (inv as any).customer?.name || '').trim()}</div>
+        ${(inv as any).customerEmailSnapshot ? `<div class="muted">${String((inv as any).customerEmailSnapshot)}</div>` : ''}
+        ${(inv as any).customerBillingAddressSnapshot ? `<div class="muted" style="margin-top: 6px; white-space: pre-wrap;">${String((inv as any).customerBillingAddressSnapshot)}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="block">
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="num">Qty</th>
+            <th class="num">Unit Price</th>
+            <th class="num">Line Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${((inv as any).lines ?? [])
+            .map((l: any) => {
+              const qty = Number(l.quantity ?? 0);
+              const unitPrice = Number(l.unitPrice ?? 0);
+              const lineTotal = Number(l.lineTotal ?? 0);
+              return `<tr>
+                <td>${String(l.description ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+                <td class="num">${qty.toFixed(2)}</td>
+                <td class="num">${unitPrice.toFixed(2)}</td>
+                <td class="num">${lineTotal.toFixed(2)}</td>
+              </tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="line"><span>Subtotal</span><span>${Number((inv as any).subtotal ?? 0).toFixed(2)}</span></div>
+        <div class="line"><span>Tax</span><span>${Number((inv as any).taxAmount ?? 0).toFixed(2)}</span></div>
+        <div class="line grand"><span>Total</span><span>${Number((inv as any).totalAmount ?? 0).toFixed(2)}</span></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="card">
+        <div style="font-weight: 700;">Payment details</div>
+        <div class="muted">Please contact accounts for payment instructions.</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+    if (opts.format === 'pdf') {
+      let PDFDocument: any;
+      try {
+        PDFDocument = require('pdfkit');
+      } catch {
+        throw new BadRequestException('PDF export not available (missing dependency pdfkit)');
+      }
+
+      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (d: any) => chunks.push(Buffer.from(d)));
+      const done = new Promise<Buffer>((resolve, reject) => {
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+      });
+
+      doc.font('Helvetica-Bold').fontSize(16).text(tenantName || 'Invoice', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.font('Helvetica').fontSize(10).fillColor('#444').text('Prepared in accordance with IFRS', { align: 'center' });
+      doc.fillColor('#000');
+      doc.moveDown(1);
+
+      doc.font('Helvetica-Bold').fontSize(11).text(`Invoice: ${invoiceNumber}`);
+      doc.font('Helvetica').fontSize(10).text(`Date: ${String((inv as any).invoiceDate).slice(0, 10)}`);
+      doc.text(`Due: ${String((inv as any).dueDate).slice(0, 10)}`);
+      doc.text(`Currency: ${currency}`);
+      doc.moveDown(1);
+
+      doc.font('Helvetica-Bold').text('Bill To');
+      doc.font('Helvetica').text(String((inv as any).customerNameSnapshot || (inv as any).customer?.name || '').trim());
+      if ((inv as any).customerEmailSnapshot) doc.text(String((inv as any).customerEmailSnapshot));
+      if ((inv as any).customerBillingAddressSnapshot) doc.text(String((inv as any).customerBillingAddressSnapshot));
+      doc.moveDown(1);
+
+      doc.font('Helvetica-Bold').text('Lines');
+      doc.moveDown(0.3);
+      for (const l of (inv as any).lines ?? []) {
+        const qty = Number(l.quantity ?? 0);
+        const unitPrice = Number(l.unitPrice ?? 0);
+        const lineTotal = Number(l.lineTotal ?? 0);
+        doc.font('Helvetica').fontSize(10).text(`${String(l.description ?? '')} | ${qty.toFixed(2)} x ${unitPrice.toFixed(2)} = ${lineTotal.toFixed(2)}`);
+      }
+      doc.moveDown(1);
+
+      doc.font('Helvetica-Bold').text(`Subtotal: ${Number((inv as any).subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+      doc.font('Helvetica-Bold').text(`Tax: ${Number((inv as any).taxAmount ?? 0).toFixed(2)}`, { align: 'right' });
+      doc.font('Helvetica-Bold').text(`Total: ${Number((inv as any).totalAmount ?? 0).toFixed(2)}`, { align: 'right' });
+      doc.moveDown(1);
+
+      doc.font('Helvetica').fontSize(9).fillColor('#444').text('Payment details: Please contact accounts for payment instructions.', { align: 'left' });
+      doc.fillColor('#000');
+
+      doc.end();
+      const pdf = await done;
+      return {
+        fileName: `Invoice-${invoiceNumber}.pdf`,
+        contentType: 'application/pdf',
+        body: pdf,
+      };
+    }
+
+    return {
+      fileName: `Invoice-${invoiceNumber}.html`,
+      contentType: 'text/html; charset=utf-8',
+      body: html,
     };
   }
 }

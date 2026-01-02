@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { CustomerInvoice } from '../../services/ar';
-import { getInvoiceById, postInvoice } from '../../services/ar';
+import { downloadInvoiceExport, getInvoiceById, postInvoice } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
 
 function formatMoney(n: number) {
@@ -20,6 +20,7 @@ export function InvoiceDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -56,8 +57,34 @@ export function InvoiceDetailsPage() {
     const status = invoice?.status;
     return {
       post: Boolean(invoice) && status === 'DRAFT' && canPost,
+      export: Boolean(invoice) && status === 'POSTED',
     };
   }, [canPost, invoice]);
+
+  const triggerDownload = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  async function onExport(format: 'html' | 'pdf') {
+    if (!invoice) return;
+    setExportBusy(true);
+    setActionError(null);
+    try {
+      const out = await downloadInvoiceExport(invoice.id, format);
+      triggerDownload(out.blob, out.fileName);
+    } catch (err: any) {
+      setActionError(getApiErrorMessage(err, 'Export failed'));
+    } finally {
+      setExportBusy(false);
+    }
+  }
 
   async function runAction() {
     if (!invoice) return;
@@ -129,6 +156,16 @@ export function InvoiceDetailsPage() {
         <button onClick={() => runAction()} disabled={!allowed.post || acting}>
           Post
         </button>
+        {allowed.export ? (
+          <>
+            <button type="button" onClick={() => void onExport('html')} disabled={exportBusy}>
+              {exportBusy ? 'Exporting…' : 'Export (HTML)'}
+            </button>
+            <button type="button" onClick={() => void onExport('pdf')} disabled={exportBusy}>
+              {exportBusy ? 'Exporting…' : 'Export (PDF)'}
+            </button>
+          </>
+        ) : null}
       </div>
 
       {actionError ? <div style={{ color: 'crimson', marginTop: 12 }}>{actionError}</div> : null}

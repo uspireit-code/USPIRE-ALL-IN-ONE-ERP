@@ -39,6 +39,11 @@ export class CreateCustomerInvoiceDto {
   currency!: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  exchangeRate?: number;
+
+  @IsOptional()
   @IsString()
   reference?: string;
 

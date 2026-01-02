@@ -8,6 +8,7 @@ import {
   importInvoices,
   listInvoices,
   previewInvoicesImport,
+  type InvoicesImportPreviewRow,
   type InvoicesImportPreviewResponse,
   type InvoicesImportResponse,
 } from '../../services/ar';
@@ -59,6 +60,18 @@ export function InvoicesListPage() {
       mounted = false;
     };
   };
+
+  const groupedPreview = useMemo(() => {
+    if (!preview) return [] as Array<{ invoiceRef: string; rows: InvoicesImportPreviewRow[] }>;
+    const map = new Map<string, InvoicesImportPreviewRow[]>();
+    for (const r of preview.rows ?? []) {
+      const key = String((r as any).invoiceRef ?? '').trim() || '(missing invoiceRef)';
+      const prev = map.get(key) ?? [];
+      prev.push(r);
+      map.set(key, prev);
+    }
+    return [...map.entries()].map(([invoiceRef, rows]) => ({ invoiceRef, rows }));
+  }, [preview]);
 
   useEffect(() => {
     return load();
@@ -308,41 +321,56 @@ export function InvoicesListPage() {
                     Preview: {preview.totalRows} rows ({preview.validCount} valid, {preview.invalidCount} invalid)
                   </div>
                   <div style={{ overflowX: 'auto', marginTop: 10 }}>
-                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Row</th>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Customer Code</th>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice Date</th>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Due Date</th>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Revenue Acct</th>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Currency</th>
-                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
-                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
-                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Errors</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.rows.map((r) => {
-                          const invalid = (r.errors ?? []).length > 0;
-                          return (
-                            <tr key={r.rowNumber} style={{ background: invalid ? 'rgba(220,20,60,0.08)' : 'transparent' }}>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.rowNumber}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.customerCode}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.invoiceDate}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.dueDate}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.revenueAccountCode}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.currency}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.quantity ?? 0).toFixed(2)}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.unitPrice ?? 0).toFixed(2)}</td>
-                              <td style={{ padding: 8, borderBottom: '1px solid #eee', color: invalid ? 'crimson' : '#444' }}>
-                                {(r.errors ?? []).join('; ')}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    {groupedPreview.map((g) => {
+                      const anyInvalid = g.rows.some((r) => (r.errors ?? []).length > 0);
+                      return (
+                        <div key={g.invoiceRef} style={{ marginBottom: 14, border: '1px solid rgba(11,12,30,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+                          <div style={{ padding: 10, background: anyInvalid ? 'rgba(220,20,60,0.08)' : 'rgba(11,12,30,0.03)', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                            <div style={{ fontWeight: 800 }}>Invoice Ref: {g.invoiceRef}</div>
+                            <div style={{ fontSize: 12, color: anyInvalid ? 'crimson' : '#444' }}>
+                              {g.rows.filter((r) => (r.errors ?? []).length === 0).length} valid / {g.rows.length} rows
+                            </div>
+                          </div>
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Row</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Customer Code</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice Date</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Due Date</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Revenue Acct</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Currency</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Errors</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {g.rows.map((r) => {
+                                  const invalid = (r.errors ?? []).length > 0;
+                                  return (
+                                    <tr key={r.rowNumber} style={{ background: invalid ? 'rgba(220,20,60,0.08)' : 'transparent' }}>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.rowNumber}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.customerCode}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.invoiceDate}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.dueDate}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.revenueAccountCode}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.currency}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.quantity ?? 0).toFixed(2)}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.unitPrice ?? 0).toFixed(2)}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.description}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', color: invalid ? 'crimson' : '#444' }}>{(r.errors ?? []).join('; ')}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}

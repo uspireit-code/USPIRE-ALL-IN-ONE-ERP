@@ -42,7 +42,11 @@ export type CustomerInvoice = {
   invoiceDate: string;
   dueDate: string;
   currency: string;
+  exchangeRate: number;
   reference?: string | null;
+  customerNameSnapshot?: string | null;
+  customerEmailSnapshot?: string | null;
+  customerBillingAddressSnapshot?: string | null;
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
@@ -65,6 +69,7 @@ export type InvoicesListResponse = {
 
 export type InvoicesImportPreviewRow = {
   rowNumber: number;
+  invoiceRef: string;
   customerCode: string;
   invoiceDate: string;
   dueDate: string;
@@ -73,7 +78,6 @@ export type InvoicesImportPreviewRow = {
   quantity: number;
   unitPrice: number;
   currency: string;
-  reference?: string;
   errors: string[];
 };
 
@@ -308,6 +312,7 @@ export async function createInvoice(params: {
   invoiceDate: string;
   dueDate: string;
   currency: string;
+  exchangeRate?: number;
   reference?: string;
   lines: Array<{
     accountId: string;
@@ -323,10 +328,17 @@ export async function createInvoice(params: {
       invoiceDate: params.invoiceDate,
       dueDate: params.dueDate,
       currency: params.currency,
+      exchangeRate: params.exchangeRate,
       reference: params.reference || undefined,
       lines: params.lines,
     }),
   });
+}
+
+export async function downloadInvoiceExport(id: string, format: 'html' | 'pdf' = 'html') {
+  const q = new URLSearchParams();
+  q.set('format', format);
+  return downloadBlob(`/finance/ar/invoices/${id}/export?${q.toString()}`);
 }
 
 export async function postInvoice(id: string, params?: { arControlAccountCode?: string }) {

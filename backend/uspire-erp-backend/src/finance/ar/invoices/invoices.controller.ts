@@ -92,6 +92,23 @@ export class FinanceArInvoicesController {
     return this.invoices.getById(req, id);
   }
 
+  @Get(':id/export')
+  @Permissions('AR_INVOICE_VIEW')
+  async exportInvoice(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Query('format') format: string,
+    @Res() res: Response,
+  ) {
+    const out = await this.invoices.exportInvoice(req, id, {
+      format: (format || 'html') as any,
+    });
+
+    res.setHeader('Content-Type', out.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
+  }
+
   @Post(':id/post')
   @Permissions('AR_INVOICE_POST')
   async postInvoice(@Req() req: Request, @Param('id') id: string, @Body() dto: PostInvoiceDto) {

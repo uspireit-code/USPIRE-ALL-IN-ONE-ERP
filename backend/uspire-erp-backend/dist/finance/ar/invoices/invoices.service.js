@@ -1,0 +1,912 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.FinanceArInvoicesService = void 0;
+const common_1 = require("@nestjs/common");
+const exceljs_1 = __importDefault(require("exceljs"));
+const prisma_service_1 = require("../../../prisma/prisma.service");
+let FinanceArInvoicesService = class FinanceArInvoicesService {
+    prisma;
+    INVOICE_NUMBER_SEQUENCE_NAME = 'AR_INVOICE_NUMBER';
+    OPENING_PERIOD_NAME = 'Opening Balances';
+    constructor(prisma) {
+        this.prisma = prisma;
+    }
+    round2(n) {
+        return Math.round(Number(n ?? 0) * 100) / 100;
+    }
+    round6(n) {
+        return Math.round(Number(n ?? 0) * 1_000_000) / 1_000_000;
+    }
+    ensureTenant(req) {
+        const tenant = req.tenant;
+        if (!tenant)
+            throw new common_1.BadRequestException('Missing tenant context');
+        return tenant;
+    }
+    ensureUser(req) {
+        const user = req.user;
+        if (!user)
+            throw new common_1.BadRequestException('Missing user context');
+        return user;
+    }
+    normalizeHeaderKey(v) {
+        return String(v ?? '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9]/g, '');
+    }
+    parseCsvRows(buf) {
+        const text = buf.toString('utf8');
+        const lines = text
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .split('\n')
+            .filter((l) => l.trim().length > 0);
+        if (lines.length === 0)
+            return [];
+        const parseLine = (line) => {
+            const out = [];
+            let cur = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    }
+                    else {
+                        inQuotes = !inQuotes;
+                    }
+                    continue;
+                }
+                if (ch === ',' && !inQuotes) {
+                    out.push(cur);
+                    cur = '';
+                    continue;
+                }
+                cur += ch;
+            }
+            out.push(cur);
+            return out;
+        };
+        const headers = parseLine(lines[0]).map((h) => this.normalizeHeaderKey(h));
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const cols = parseLine(lines[i]);
+            const row = {};
+            for (let j = 0; j < headers.length; j++) {
+                row[headers[j]] = String(cols[j] ?? '').trim();
+            }
+            const hasAny = Object.values(row).some((v) => String(v ?? '').trim() !== '');
+            if (hasAny)
+                rows.push({ rowNumber: i + 1, row });
+        }
+        return rows;
+    }
+    async readXlsxRows(buf) {
+        const wb = new exceljs_1.default.Workbook();
+        await wb.xlsx.load(buf);
+        const ws = wb.worksheets[0];
+        if (!ws)
+            return [];
+        const headerRow = ws.getRow(1);
+        const headers = [];
+        headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            const raw = cell.value?.text ?? cell.value;
+            headers[colNumber - 1] = this.normalizeHeaderKey(raw);
+        });
+        const rows = [];
+        ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber === 1)
+                return;
+            const obj = {};
+            headers.forEach((h, idx) => {
+                const cell = row.getCell(idx + 1);
+                const v = cell.value?.text ?? cell.value;
+                obj[h] = v;
+            });
+            const hasAny = Object.values(obj).some((v) => String(v ?? '').trim() !== '');
+            if (hasAny)
+                rows.push({ rowNumber, row: obj });
+        });
+        return rows;
+    }
+    parseYmdToDateOrNull(v) {
+        const s = String(v ?? '').trim();
+        if (!s)
+            return null;
+        const d = new Date(s);
+        if (Number.isNaN(d.getTime()))
+            return null;
+        return d;
+    }
+    toNum(v) {
+        if (v === null || v === undefined)
+            return 0;
+        if (typeof v === 'number')
+            return Number.isFinite(v) ? v : 0;
+        const n = Number(String(v).trim());
+        return Number.isFinite(n) ? n : 0;
+    }
+    async assertOpenPeriodForInvoiceDate(params) {
+        const period = await this.prisma.accountingPeriod.findFirst({
+            where: {
+                tenantId: params.tenantId,
+                startDate: { lte: params.invoiceDate },
+                endDate: { gte: params.invoiceDate },
+            },
+            select: { id: true, status: true, name: true, startDate: true },
+        });
+        if (!period || period.status !== 'OPEN') {
+            throw new common_1.ForbiddenException(!period
+                ? 'Invoice date must fall within an OPEN accounting period'
+                : `Invoice date period is not OPEN: ${period.name}`);
+        }
+        if (period.name === this.OPENING_PERIOD_NAME) {
+            throw new common_1.ForbiddenException('Operational postings are not allowed in the Opening Balances period');
+        }
+        const cutoverLocked = await this.prisma.accountingPeriod.findFirst({
+            where: {
+                tenantId: params.tenantId,
+                name: this.OPENING_PERIOD_NAME,
+                status: 'CLOSED',
+            },
+            orderBy: { startDate: 'desc' },
+            select: { startDate: true },
+        });
+        if (cutoverLocked && params.invoiceDate < cutoverLocked.startDate) {
+            throw new common_1.ForbiddenException(`Invoice date is before cutover and cannot be used (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`);
+        }
+    }
+    async nextInvoiceNumber(tx, tenantId) {
+        const counter = await tx.tenantSequenceCounter.upsert({
+            where: {
+                tenantId_name: {
+                    tenantId,
+                    name: this.INVOICE_NUMBER_SEQUENCE_NAME,
+                },
+            },
+            create: {
+                tenantId,
+                name: this.INVOICE_NUMBER_SEQUENCE_NAME,
+                value: 0,
+            },
+            update: {},
+            select: { id: true },
+        });
+        const bumped = await tx.tenantSequenceCounter.update({
+            where: { id: counter.id },
+            data: { value: { increment: 1 } },
+            select: { value: true },
+        });
+        return `INV-${String(bumped.value).padStart(6, '0')}`;
+    }
+    async computeOutstandingBalance(params) {
+        const g = await this.prisma.customerReceiptLine.groupBy({
+            by: ['invoiceId'],
+            where: {
+                tenantId: params.tenantId,
+                invoiceId: params.invoiceId,
+                receipt: {
+                    tenantId: params.tenantId,
+                    status: 'POSTED',
+                },
+            },
+            _sum: { appliedAmount: true },
+        });
+        const applied = this.round2(Number(g?.[0]?._sum?.appliedAmount ?? 0));
+        const total = this.round2(Number(params.totalAmount ?? 0));
+        return this.round2(total - applied);
+    }
+    async list(req, q) {
+        const tenant = this.ensureTenant(req);
+        const page = q.page ?? 1;
+        const pageSize = q.pageSize ?? 50;
+        const where = { tenantId: tenant.id };
+        if (q.status)
+            where.status = q.status;
+        if (q.customerId)
+            where.customerId = q.customerId;
+        if (q.search) {
+            const s = String(q.search).trim();
+            if (s) {
+                where.OR = [
+                    { invoiceNumber: { contains: s, mode: 'insensitive' } },
+                    { reference: { contains: s, mode: 'insensitive' } },
+                    { customer: { name: { contains: s, mode: 'insensitive' } } },
+                ];
+            }
+        }
+        const [total, items] = await Promise.all([
+            this.prisma.customerInvoice.count({ where }),
+            this.prisma.customerInvoice.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+                include: { customer: true },
+            }),
+        ]);
+        const rows = await Promise.all((items ?? []).map(async (inv) => ({
+            ...inv,
+            subtotal: Number(inv.subtotal),
+            taxAmount: Number(inv.taxAmount),
+            totalAmount: Number(inv.totalAmount),
+            outstandingBalance: await this.computeOutstandingBalance({
+                tenantId: tenant.id,
+                invoiceId: inv.id,
+                totalAmount: Number(inv.totalAmount),
+            }),
+        })));
+        return { page, pageSize, total, items: rows };
+    }
+    async getById(req, id) {
+        const tenant = this.ensureTenant(req);
+        const inv = await this.prisma.customerInvoice.findFirst({
+            where: { id, tenantId: tenant.id },
+            include: { customer: true, lines: true },
+        });
+        if (!inv)
+            throw new common_1.NotFoundException('Invoice not found');
+        return {
+            ...inv,
+            subtotal: Number(inv.subtotal),
+            taxAmount: Number(inv.taxAmount),
+            totalAmount: Number(inv.totalAmount),
+            lines: inv.lines.map((l) => ({
+                ...l,
+                quantity: Number(l.quantity),
+                unitPrice: Number(l.unitPrice),
+                lineTotal: Number(l.lineTotal),
+            })),
+            outstandingBalance: await this.computeOutstandingBalance({
+                tenantId: tenant.id,
+                invoiceId: inv.id,
+                totalAmount: Number(inv.totalAmount),
+            }),
+        };
+    }
+    async create(req, dto) {
+        const tenant = this.ensureTenant(req);
+        const user = this.ensureUser(req);
+        const invoiceDate = this.parseYmdToDateOrNull(dto.invoiceDate);
+        const dueDate = this.parseYmdToDateOrNull(dto.dueDate);
+        if (!invoiceDate)
+            throw new common_1.BadRequestException('invoiceDate is required');
+        if (!dueDate)
+            throw new common_1.BadRequestException('dueDate is required');
+        await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
+        const currency = String(dto.currency ?? '').trim();
+        if (!currency)
+            throw new common_1.BadRequestException('currency is required');
+        const tenantCurrency = String(tenant?.defaultCurrency ?? '').trim();
+        const exchangeRate = tenantCurrency && currency.toUpperCase() === tenantCurrency.toUpperCase()
+            ? 1
+            : this.round6(this.toNum(dto.exchangeRate ?? 0));
+        if (!(exchangeRate > 0)) {
+            throw new common_1.BadRequestException('exchangeRate is required and must be > 0 for non-base currency');
+        }
+        const customer = await this.prisma.customer.findFirst({
+            where: { id: dto.customerId, tenantId: tenant.id },
+            select: { id: true, status: true, name: true, email: true, billingAddress: true },
+        });
+        if (!customer)
+            throw new common_1.BadRequestException('Customer not found');
+        if (customer.status !== 'ACTIVE') {
+            throw new common_1.BadRequestException('Customer is inactive and cannot be used for new transactions.');
+        }
+        if (!dto.lines || dto.lines.length < 1) {
+            throw new common_1.BadRequestException('Invoice must have at least 1 line');
+        }
+        const accountIds = [...new Set(dto.lines.map((l) => l.accountId))];
+        const accounts = await this.prisma.account.findMany({
+            where: {
+                tenantId: tenant.id,
+                id: { in: accountIds },
+                isActive: true,
+            },
+            select: { id: true, type: true },
+        });
+        const byId = new Map(accounts.map((a) => [a.id, a]));
+        const computedLines = dto.lines.map((l) => {
+            const qty = this.toNum(l.quantity ?? 1);
+            const unitPrice = this.toNum(l.unitPrice);
+            const description = String(l.description ?? '').trim();
+            if (!l.accountId)
+                throw new common_1.BadRequestException('Invoice line missing accountId');
+            if (!description)
+                throw new common_1.BadRequestException('Invoice line description is required');
+            if (!(qty > 0))
+                throw new common_1.BadRequestException('Invoice line quantity must be > 0');
+            if (unitPrice < 0)
+                throw new common_1.BadRequestException('Invoice line unitPrice must be >= 0');
+            const acct = byId.get(l.accountId);
+            if (!acct) {
+                throw new common_1.BadRequestException(`Account not found or inactive: ${l.accountId}`);
+            }
+            if (acct.type !== 'INCOME') {
+                throw new common_1.BadRequestException(`Invoice line account must be INCOME: ${l.accountId}`);
+            }
+            const lineTotal = this.round2(qty * unitPrice);
+            return {
+                accountId: l.accountId,
+                description,
+                quantity: qty,
+                unitPrice,
+                lineTotal,
+            };
+        });
+        const subtotal = this.round2(computedLines.reduce((s, l) => s + l.lineTotal, 0));
+        const taxAmount = 0;
+        const totalAmount = this.round2(subtotal + taxAmount);
+        const created = await this.prisma.$transaction(async (tx) => {
+            const invoiceNumber = await this.nextInvoiceNumber(tx, tenant.id);
+            return tx.customerInvoice.create({
+                data: {
+                    tenantId: tenant.id,
+                    customerId: dto.customerId,
+                    invoiceNumber,
+                    invoiceDate,
+                    dueDate,
+                    currency,
+                    exchangeRate,
+                    reference: dto.reference ? String(dto.reference).trim() : undefined,
+                    customerNameSnapshot: String(customer.name ?? '').trim(),
+                    customerEmailSnapshot: customer.email ? String(customer.email).trim() : undefined,
+                    customerBillingAddressSnapshot: customer.billingAddress ? String(customer.billingAddress).trim() : undefined,
+                    subtotal,
+                    taxAmount,
+                    totalAmount,
+                    status: 'DRAFT',
+                    createdById: user.id,
+                    lines: {
+                        create: computedLines.map((l) => ({
+                            accountId: l.accountId,
+                            description: l.description,
+                            quantity: l.quantity,
+                            unitPrice: l.unitPrice,
+                            lineTotal: l.lineTotal,
+                        })),
+                    },
+                },
+                include: { customer: true, lines: true },
+            });
+        });
+        return this.getById(req, created.id);
+    }
+    async post(req, id, opts) {
+        const tenant = this.ensureTenant(req);
+        const user = this.ensureUser(req);
+        const inv = await this.prisma.customerInvoice.findFirst({
+            where: { id, tenantId: tenant.id },
+            include: { lines: true },
+        });
+        if (!inv)
+            throw new common_1.NotFoundException('Invoice not found');
+        if (inv.status === 'POSTED') {
+            throw new common_1.BadRequestException('Invoice is already posted');
+        }
+        await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate: inv.invoiceDate });
+        const arCode = String(opts?.arControlAccountCode ?? '1100');
+        const arAccount = await this.prisma.account.findFirst({
+            where: {
+                tenantId: tenant.id,
+                code: arCode,
+                isActive: true,
+                type: 'ASSET',
+            },
+            select: { id: true, code: true, name: true },
+        });
+        if (!arAccount) {
+            throw new common_1.BadRequestException(`AR control account not found or invalid: ${arCode}`);
+        }
+        const lines = (inv.lines ?? []).map((l) => ({
+            accountId: l.accountId,
+            lineTotal: this.round2(Number(l.lineTotal)),
+        }));
+        if (lines.length < 1)
+            throw new common_1.BadRequestException('Invoice must have at least 1 line');
+        const creditsTotal = this.round2(lines.reduce((s, l) => s + l.lineTotal, 0));
+        const invTotal = this.round2(Number(inv.totalAmount));
+        if (creditsTotal !== invTotal) {
+            throw new common_1.BadRequestException('Invoice totals failed validation before posting');
+        }
+        const journal = await this.prisma.journalEntry.create({
+            data: {
+                tenantId: tenant.id,
+                journalDate: inv.invoiceDate,
+                reference: `AR-INVOICE:${inv.id}`,
+                description: `AR invoice posting: ${inv.invoiceNumber}`,
+                createdById: inv.createdById,
+                lines: {
+                    create: [
+                        {
+                            accountId: arAccount.id,
+                            debit: inv.totalAmount,
+                            credit: 0,
+                        },
+                        ...lines.map((l) => ({
+                            accountId: l.accountId,
+                            debit: 0,
+                            credit: l.lineTotal,
+                        })),
+                    ],
+                },
+            },
+            include: { lines: true },
+        });
+        const postedJournal = await this.prisma.journalEntry.update({
+            where: { id: journal.id },
+            data: {
+                status: 'POSTED',
+                postedById: user.id,
+                postedAt: new Date(),
+            },
+            include: { lines: true },
+        });
+        const updated = await this.prisma.customerInvoice.update({
+            where: { id: inv.id },
+            data: {
+                status: 'POSTED',
+                postedById: user.id,
+                postedAt: new Date(),
+            },
+            include: { customer: true, lines: true },
+        });
+        return { invoice: await this.getById(req, updated.id), glJournal: postedJournal };
+    }
+    async getImportCsvTemplate(req) {
+        this.ensureTenant(req);
+        const headers = [
+            'invoiceRef',
+            'customerCode',
+            'invoiceDate',
+            'dueDate',
+            'currency',
+            'revenueAccountCode',
+            'description',
+            'quantity',
+            'unitPrice',
+        ];
+        const fileName = `invoice_import_template.csv`;
+        const body = `${headers.join(',')}\n`;
+        return { fileName, body };
+    }
+    async getImportXlsxTemplate(req) {
+        this.ensureTenant(req);
+        const wb = new exceljs_1.default.Workbook();
+        const ws = wb.addWorksheet('Invoices');
+        ws.addRow([
+            'invoiceRef',
+            'customerCode',
+            'invoiceDate',
+            'dueDate',
+            'currency',
+            'revenueAccountCode',
+            'description',
+            'quantity',
+            'unitPrice',
+        ]);
+        const fileName = `invoice_import_template.xlsx`;
+        const body = await wb.xlsx.writeBuffer();
+        return { fileName, body };
+    }
+    async readImportRows(file) {
+        if (!file?.buffer)
+            throw new common_1.BadRequestException('Missing file');
+        const name = String(file.originalname ?? '').toLowerCase();
+        const buf = file.buffer;
+        if (name.endsWith('.xlsx')) {
+            return this.readXlsxRows(buf);
+        }
+        return this.parseCsvRows(buf).map((r) => ({ rowNumber: r.rowNumber, row: r.row }));
+    }
+    async previewImport(req, file) {
+        const tenant = this.ensureTenant(req);
+        const rows = await this.readImportRows(file);
+        const parsed = rows.map((r) => {
+            const raw = r.row;
+            const invoiceRef = String(raw.invoiceref ?? raw.invoice_ref ?? raw.invoicereference ?? '').trim();
+            const customerCode = String(raw.customercode ?? raw.customer_code ?? raw.customer ?? '').trim();
+            const invoiceDate = String(raw.invoicedate ?? raw.invoice_date ?? '').trim();
+            const dueDate = String(raw.duedate ?? raw.due_date ?? '').trim();
+            const revenueAccountCode = String(raw.revenueaccountcode ?? raw.revenue_account_code ?? raw.accountcode ?? raw.account_code ?? '').trim();
+            const description = String(raw.description ?? '').trim();
+            const quantity = this.toNum(raw.quantity ?? 1);
+            const unitPrice = this.toNum(raw.unitprice ?? raw.unit_price ?? 0);
+            const currency = String(raw.currency ?? '').trim();
+            const errors = [];
+            if (!invoiceRef)
+                errors.push('invoiceRef is required');
+            if (!customerCode)
+                errors.push('Customer Code is required');
+            if (!invoiceDate || !this.parseYmdToDateOrNull(invoiceDate))
+                errors.push('Invoice Date is required and must be a valid date');
+            if (!dueDate || !this.parseYmdToDateOrNull(dueDate))
+                errors.push('Due Date is required and must be a valid date');
+            if (!currency)
+                errors.push('Currency is required');
+            if (!revenueAccountCode)
+                errors.push('Revenue Account Code is required');
+            if (!description)
+                errors.push('Description is required');
+            if (!(quantity > 0))
+                errors.push('Quantity must be > 0');
+            if (unitPrice < 0)
+                errors.push('Unit Price must be >= 0');
+            return {
+                rowNumber: r.rowNumber,
+                invoiceRef,
+                customerCode,
+                invoiceDate,
+                dueDate,
+                revenueAccountCode,
+                description,
+                quantity,
+                unitPrice,
+                currency,
+                errors,
+            };
+        });
+        const customerCodes = [...new Set(parsed.map((p) => p.customerCode).filter(Boolean))];
+        const accountCodes = [...new Set(parsed.map((p) => p.revenueAccountCode).filter(Boolean))];
+        const [customersRaw, accountsRaw] = await Promise.all([
+            this.prisma.customer.findMany({
+                where: { tenantId: tenant.id, customerCode: { in: customerCodes } },
+                select: { id: true, customerCode: true, status: true },
+            }),
+            this.prisma.account.findMany({
+                where: { tenantId: tenant.id, code: { in: accountCodes }, isActive: true },
+                select: { id: true, code: true, type: true },
+            }),
+        ]);
+        const customers = (customersRaw ?? []);
+        const accounts = (accountsRaw ?? []);
+        const customerByCode = new Map(customers.map((c) => [String(c.customerCode), c]));
+        const accountByCode = new Map(accounts.map((a) => [String(a.code), a]));
+        for (const p of parsed) {
+            if (p.customerCode) {
+                const c = customerByCode.get(p.customerCode);
+                if (!c)
+                    p.errors.push('Customer not found');
+                else if (c.status !== 'ACTIVE')
+                    p.errors.push('Customer is inactive');
+            }
+            if (p.revenueAccountCode) {
+                const a = accountByCode.get(p.revenueAccountCode);
+                if (!a)
+                    p.errors.push('Revenue account not found or inactive');
+                else if (a.type !== 'INCOME')
+                    p.errors.push('Revenue account must be INCOME');
+            }
+            const invDate = this.parseYmdToDateOrNull(p.invoiceDate);
+            if (invDate) {
+                try {
+                    await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate: invDate });
+                }
+                catch (e) {
+                    p.errors.push(String(e?.message ?? 'Invoice Date period is not OPEN'));
+                }
+            }
+        }
+        const validCount = parsed.filter((p) => p.errors.length === 0).length;
+        const invalidCount = parsed.length - validCount;
+        return {
+            totalRows: parsed.length,
+            validCount,
+            invalidCount,
+            rows: parsed,
+        };
+    }
+    async import(req, file) {
+        const tenant = this.ensureTenant(req);
+        const user = this.ensureUser(req);
+        const preview = await this.previewImport(req, file);
+        const validRows = preview.rows.filter((r) => (r.errors ?? []).length === 0);
+        const failedRows = preview.rows
+            .filter((r) => (r.errors ?? []).length > 0)
+            .map((r) => ({ rowNumber: r.rowNumber, reason: (r.errors ?? []).join('; ') }));
+        if (validRows.length === 0) {
+            return {
+                totalRows: preview.totalRows,
+                createdCount: 0,
+                failedCount: failedRows.length,
+                failedRows,
+            };
+        }
+        const customerCodes = [...new Set(validRows.map((r) => r.customerCode))];
+        const accountCodes = [...new Set(validRows.map((r) => r.revenueAccountCode))];
+        const [customers, accounts] = await Promise.all([
+            this.prisma.customer.findMany({
+                where: { tenantId: tenant.id, customerCode: { in: customerCodes } },
+                select: { id: true, customerCode: true },
+            }),
+            this.prisma.account.findMany({
+                where: { tenantId: tenant.id, code: { in: accountCodes }, isActive: true, type: 'INCOME' },
+                select: { id: true, code: true },
+            }),
+        ]);
+        const customerIdByCode = new Map(customers.map((c) => [String(c.customerCode), c.id]));
+        const accountIdByCode = new Map(accounts.map((a) => [String(a.code), a.id]));
+        const groups = new Map();
+        for (const r of validRows) {
+            const key = String(r.invoiceRef ?? '').trim();
+            if (!key)
+                continue;
+            const prev = groups.get(key) ?? [];
+            prev.push(r);
+            groups.set(key, prev);
+        }
+        let createdCount = 0;
+        for (const [, rows] of groups.entries()) {
+            try {
+                const first = rows[0];
+                const customerId = customerIdByCode.get(first.customerCode);
+                const invoiceDate = this.parseYmdToDateOrNull(first.invoiceDate);
+                const dueDate = this.parseYmdToDateOrNull(first.dueDate);
+                if (!customerId || !invoiceDate || !dueDate) {
+                    throw new common_1.BadRequestException('Invalid grouping key');
+                }
+                await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
+                const customer = await this.prisma.customer.findFirst({
+                    where: { tenantId: tenant.id, id: customerId },
+                    select: { id: true, status: true, name: true, email: true, billingAddress: true },
+                });
+                if (!customer)
+                    throw new common_1.BadRequestException('Customer not found');
+                if (customer.status !== 'ACTIVE')
+                    throw new common_1.BadRequestException('Customer is inactive');
+                const tenantCurrency = String(tenant?.defaultCurrency ?? '').trim();
+                const exchangeRate = tenantCurrency && String(first.currency).trim().toUpperCase() === tenantCurrency.toUpperCase()
+                    ? 1
+                    : 1;
+                const computedLines = rows.map((rr) => {
+                    const accountId = accountIdByCode.get(rr.revenueAccountCode);
+                    if (!accountId)
+                        throw new common_1.BadRequestException('Revenue account not found');
+                    const qty = this.toNum(rr.quantity ?? 1);
+                    const unitPrice = this.toNum(rr.unitPrice ?? 0);
+                    const lineTotal = this.round2(qty * unitPrice);
+                    return {
+                        accountId,
+                        description: String(rr.description ?? '').trim(),
+                        quantity: qty,
+                        unitPrice,
+                        lineTotal,
+                    };
+                });
+                const subtotal = this.round2(computedLines.reduce((s, l) => s + l.lineTotal, 0));
+                const taxAmount = 0;
+                const totalAmount = this.round2(subtotal + taxAmount);
+                await this.prisma.$transaction(async (tx) => {
+                    const invoiceNumber = await this.nextInvoiceNumber(tx, tenant.id);
+                    await tx.customerInvoice.create({
+                        data: {
+                            tenantId: tenant.id,
+                            customerId,
+                            invoiceNumber,
+                            invoiceDate,
+                            dueDate,
+                            currency: String(first.currency).trim(),
+                            exchangeRate,
+                            customerNameSnapshot: String(customer.name ?? '').trim(),
+                            customerEmailSnapshot: customer.email ? String(customer.email).trim() : undefined,
+                            customerBillingAddressSnapshot: customer.billingAddress ? String(customer.billingAddress).trim() : undefined,
+                            subtotal,
+                            taxAmount,
+                            totalAmount,
+                            status: 'DRAFT',
+                            createdById: user.id,
+                            lines: {
+                                create: computedLines.map((l) => ({
+                                    accountId: l.accountId,
+                                    description: l.description,
+                                    quantity: l.quantity,
+                                    unitPrice: l.unitPrice,
+                                    lineTotal: l.lineTotal,
+                                })),
+                            },
+                        },
+                    });
+                });
+                createdCount += 1;
+            }
+            catch (e) {
+                for (const rr of rows) {
+                    failedRows.push({
+                        rowNumber: rr.rowNumber,
+                        reason: String(e?.message ?? 'Failed to create invoice'),
+                    });
+                }
+            }
+        }
+        return {
+            totalRows: preview.totalRows,
+            createdCount,
+            failedCount: failedRows.length,
+            failedRows,
+        };
+    }
+    async exportInvoice(req, id, opts) {
+        const tenant = this.ensureTenant(req);
+        const inv = await this.prisma.customerInvoice.findFirst({
+            where: { id, tenantId: tenant.id },
+            include: { lines: true, customer: true },
+        });
+        if (!inv)
+            throw new common_1.NotFoundException('Invoice not found');
+        if (inv.status !== 'POSTED') {
+            throw new common_1.BadRequestException('Invoice export is available for POSTED invoices only');
+        }
+        const tenantName = String(tenant.legalName ?? tenant.organisationName ?? '');
+        const invoiceNumber = String(inv.invoiceNumber ?? '').trim();
+        const currency = String(inv.currency ?? '').trim();
+        const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice ${invoiceNumber}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #0B0C1E; margin: 32px; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+      .brand h1 { margin: 0; font-size: 22px; }
+      .muted { color: #667085; font-size: 12px; }
+      .block { margin-top: 18px; }
+      .row { display: flex; gap: 16px; }
+      .card { border: 1px solid #E4E7EC; border-radius: 10px; padding: 14px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border-bottom: 1px solid #E4E7EC; padding: 10px 8px; font-size: 13px; }
+      th { text-align: left; background: #F9FAFB; }
+      td.num, th.num { text-align: right; }
+      .totals { width: 320px; margin-left: auto; }
+      .totals .line { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+      .totals .grand { font-weight: 700; border-top: 1px solid #E4E7EC; margin-top: 8px; padding-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="brand">
+        <h1>${tenantName || 'Invoice'}</h1>
+        <div class="muted">Prepared in accordance with IFRS</div>
+      </div>
+      <div class="card" style="min-width: 280px;">
+        <div><b>Invoice:</b> ${invoiceNumber}</div>
+        <div><b>Date:</b> ${String(inv.invoiceDate).slice(0, 10)}</div>
+        <div><b>Due:</b> ${String(inv.dueDate).slice(0, 10)}</div>
+        <div><b>Currency:</b> ${currency}</div>
+      </div>
+    </div>
+
+    <div class="row block">
+      <div class="card" style="flex: 1;">
+        <div style="font-weight: 700; margin-bottom: 6px;">Bill To</div>
+        <div>${String(inv.customerNameSnapshot || inv.customer?.name || '').trim()}</div>
+        ${inv.customerEmailSnapshot ? `<div class="muted">${String(inv.customerEmailSnapshot)}</div>` : ''}
+        ${inv.customerBillingAddressSnapshot ? `<div class="muted" style="margin-top: 6px; white-space: pre-wrap;">${String(inv.customerBillingAddressSnapshot)}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="block">
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="num">Qty</th>
+            <th class="num">Unit Price</th>
+            <th class="num">Line Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(inv.lines ?? [])
+            .map((l) => {
+            const qty = Number(l.quantity ?? 0);
+            const unitPrice = Number(l.unitPrice ?? 0);
+            const lineTotal = Number(l.lineTotal ?? 0);
+            return `<tr>
+                <td>${String(l.description ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+                <td class="num">${qty.toFixed(2)}</td>
+                <td class="num">${unitPrice.toFixed(2)}</td>
+                <td class="num">${lineTotal.toFixed(2)}</td>
+              </tr>`;
+        })
+            .join('')}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="line"><span>Subtotal</span><span>${Number(inv.subtotal ?? 0).toFixed(2)}</span></div>
+        <div class="line"><span>Tax</span><span>${Number(inv.taxAmount ?? 0).toFixed(2)}</span></div>
+        <div class="line grand"><span>Total</span><span>${Number(inv.totalAmount ?? 0).toFixed(2)}</span></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="card">
+        <div style="font-weight: 700;">Payment details</div>
+        <div class="muted">Please contact accounts for payment instructions.</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+        if (opts.format === 'pdf') {
+            let PDFDocument;
+            try {
+                PDFDocument = require('pdfkit');
+            }
+            catch {
+                throw new common_1.BadRequestException('PDF export not available (missing dependency pdfkit)');
+            }
+            const doc = new PDFDocument({ size: 'A4', margin: 36 });
+            const chunks = [];
+            doc.on('data', (d) => chunks.push(Buffer.from(d)));
+            const done = new Promise((resolve, reject) => {
+                doc.on('end', () => resolve(Buffer.concat(chunks)));
+                doc.on('error', reject);
+            });
+            doc.font('Helvetica-Bold').fontSize(16).text(tenantName || 'Invoice', { align: 'center' });
+            doc.moveDown(0.5);
+            doc.font('Helvetica').fontSize(10).fillColor('#444').text('Prepared in accordance with IFRS', { align: 'center' });
+            doc.fillColor('#000');
+            doc.moveDown(1);
+            doc.font('Helvetica-Bold').fontSize(11).text(`Invoice: ${invoiceNumber}`);
+            doc.font('Helvetica').fontSize(10).text(`Date: ${String(inv.invoiceDate).slice(0, 10)}`);
+            doc.text(`Due: ${String(inv.dueDate).slice(0, 10)}`);
+            doc.text(`Currency: ${currency}`);
+            doc.moveDown(1);
+            doc.font('Helvetica-Bold').text('Bill To');
+            doc.font('Helvetica').text(String(inv.customerNameSnapshot || inv.customer?.name || '').trim());
+            if (inv.customerEmailSnapshot)
+                doc.text(String(inv.customerEmailSnapshot));
+            if (inv.customerBillingAddressSnapshot)
+                doc.text(String(inv.customerBillingAddressSnapshot));
+            doc.moveDown(1);
+            doc.font('Helvetica-Bold').text('Lines');
+            doc.moveDown(0.3);
+            for (const l of inv.lines ?? []) {
+                const qty = Number(l.quantity ?? 0);
+                const unitPrice = Number(l.unitPrice ?? 0);
+                const lineTotal = Number(l.lineTotal ?? 0);
+                doc.font('Helvetica').fontSize(10).text(`${String(l.description ?? '')} | ${qty.toFixed(2)} x ${unitPrice.toFixed(2)} = ${lineTotal.toFixed(2)}`);
+            }
+            doc.moveDown(1);
+            doc.font('Helvetica-Bold').text(`Subtotal: ${Number(inv.subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+            doc.font('Helvetica-Bold').text(`Tax: ${Number(inv.taxAmount ?? 0).toFixed(2)}`, { align: 'right' });
+            doc.font('Helvetica-Bold').text(`Total: ${Number(inv.totalAmount ?? 0).toFixed(2)}`, { align: 'right' });
+            doc.moveDown(1);
+            doc.font('Helvetica').fontSize(9).fillColor('#444').text('Payment details: Please contact accounts for payment instructions.', { align: 'left' });
+            doc.fillColor('#000');
+            doc.end();
+            const pdf = await done;
+            return {
+                fileName: `Invoice-${invoiceNumber}.pdf`,
+                contentType: 'application/pdf',
+                body: pdf,
+            };
+        }
+        return {
+            fileName: `Invoice-${invoiceNumber}.html`,
+            contentType: 'text/html; charset=utf-8',
+            body: html,
+        };
+    }
+};
+exports.FinanceArInvoicesService = FinanceArInvoicesService;
+exports.FinanceArInvoicesService = FinanceArInvoicesService = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+], FinanceArInvoicesService);
+//# sourceMappingURL=invoices.service.js.map

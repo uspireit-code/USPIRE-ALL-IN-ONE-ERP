@@ -1,0 +1,178 @@
+import type { Request } from 'express';
+import { PrismaService } from '../../../prisma/prisma.service';
+import type { CreateCustomerInvoiceDto, ListInvoicesQueryDto } from './invoices.dto';
+export declare class FinanceArInvoicesService {
+    private readonly prisma;
+    private readonly INVOICE_NUMBER_SEQUENCE_NAME;
+    private readonly OPENING_PERIOD_NAME;
+    constructor(prisma: PrismaService);
+    private round2;
+    private round6;
+    private ensureTenant;
+    private ensureUser;
+    private normalizeHeaderKey;
+    private parseCsvRows;
+    private readXlsxRows;
+    private parseYmdToDateOrNull;
+    private toNum;
+    private assertOpenPeriodForInvoiceDate;
+    private nextInvoiceNumber;
+    private computeOutstandingBalance;
+    list(req: Request, q: ListInvoicesQueryDto): Promise<{
+        page: number;
+        pageSize: number;
+        total: number;
+        items: any[];
+    }>;
+    getById(req: Request, id: string): Promise<{
+        subtotal: number;
+        taxAmount: number;
+        totalAmount: number;
+        lines: any;
+        outstandingBalance: number;
+        customerId: string;
+        invoiceDate: Date;
+        dueDate: Date;
+        currency: string;
+        reference: string | null;
+        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
+        id: string;
+        tenantId: string;
+        invoiceNumber: string;
+        createdById: string;
+        postedById: string | null;
+        createdAt: Date;
+        postedAt: Date | null;
+    }>;
+    create(req: Request, dto: CreateCustomerInvoiceDto): Promise<{
+        subtotal: number;
+        taxAmount: number;
+        totalAmount: number;
+        lines: any;
+        outstandingBalance: number;
+        customerId: string;
+        invoiceDate: Date;
+        dueDate: Date;
+        currency: string;
+        reference: string | null;
+        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
+        id: string;
+        tenantId: string;
+        invoiceNumber: string;
+        createdById: string;
+        postedById: string | null;
+        createdAt: Date;
+        postedAt: Date | null;
+    }>;
+    post(req: Request, id: string, opts?: {
+        arControlAccountCode?: string;
+    }): Promise<{
+        invoice: {
+            subtotal: number;
+            taxAmount: number;
+            totalAmount: number;
+            lines: any;
+            outstandingBalance: number;
+            customerId: string;
+            invoiceDate: Date;
+            dueDate: Date;
+            currency: string;
+            reference: string | null;
+            status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
+            id: string;
+            tenantId: string;
+            invoiceNumber: string;
+            createdById: string;
+            postedById: string | null;
+            createdAt: Date;
+            postedAt: Date | null;
+        };
+        glJournal: {
+            description: string | null;
+            reference: string | null;
+            status: import("@prisma/client").$Enums.JournalStatus;
+            id: string;
+            tenantId: string;
+            createdById: string;
+            postedById: string | null;
+            createdAt: Date;
+            postedAt: Date | null;
+            journalNumber: number | null;
+            journalType: import("@prisma/client").$Enums.JournalType;
+            periodId: string | null;
+            journalDate: Date;
+            correctsJournalId: string | null;
+            riskScore: number;
+            riskFlags: import("@prisma/client/runtime/library").JsonValue;
+            riskComputedAt: Date | null;
+            budgetStatus: import("@prisma/client").$Enums.JournalBudgetStatus;
+            budgetFlags: import("@prisma/client/runtime/library").JsonValue | null;
+            budgetCheckedAt: Date | null;
+            budgetOverrideJustification: string | null;
+            reversalInitiatedById: string | null;
+            reversalInitiatedAt: Date | null;
+            reversalPreparedById: string | null;
+            submittedById: string | null;
+            submittedAt: Date | null;
+            reviewedById: string | null;
+            reviewedAt: Date | null;
+            rejectedById: string | null;
+            rejectedAt: Date | null;
+            rejectionReason: string | null;
+            approvedById: string | null;
+            approvedAt: Date | null;
+            returnedByPosterId: string | null;
+            returnedByPosterAt: Date | null;
+            returnReason: string | null;
+            reversalOfId: string | null;
+            reversalReason: string | null;
+        };
+    }>;
+    getImportCsvTemplate(req: Request): Promise<{
+        fileName: string;
+        body: string;
+    }>;
+    getImportXlsxTemplate(req: Request): Promise<{
+        fileName: string;
+        body: any;
+    }>;
+    private readImportRows;
+    previewImport(req: Request, file: any): Promise<{
+        totalRows: number;
+        validCount: number;
+        invalidCount: number;
+        rows: {
+            rowNumber: number;
+            invoiceRef: string;
+            customerCode: string;
+            invoiceDate: string;
+            dueDate: string;
+            revenueAccountCode: string;
+            description: string;
+            quantity: number;
+            unitPrice: number;
+            currency: string;
+            errors: string[];
+        }[];
+    }>;
+    import(req: Request, file: any): Promise<{
+        totalRows: number;
+        createdCount: number;
+        failedCount: number;
+        failedRows: {
+            rowNumber: any;
+            reason: any;
+        }[];
+    }>;
+    exportInvoice(req: Request, id: string, opts: {
+        format: 'html' | 'pdf';
+    }): Promise<{
+        fileName: string;
+        contentType: string;
+        body: Buffer<ArrayBufferLike>;
+    } | {
+        fileName: string;
+        contentType: string;
+        body: string;
+    }>;
+}

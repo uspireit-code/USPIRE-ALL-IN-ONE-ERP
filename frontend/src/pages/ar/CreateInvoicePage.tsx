@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { useBranding } from '../../branding/BrandingContext';
 import type { AccountLookup, Customer } from '../../services/ar';
 import { createInvoice, listEligibleAccounts, listCustomers } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
@@ -22,6 +23,7 @@ function round2(n: number) {
 
 export function CreateInvoicePage() {
   const { hasPermission } = useAuth();
+  const { effective } = useBranding();
   const navigate = useNavigate();
 
   const canCreate = hasPermission('AR_INVOICE_CREATE');
@@ -35,7 +37,9 @@ export function CreateInvoicePage() {
   const [customerId, setCustomerId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayIsoDate());
   const [dueDate, setDueDate] = useState(todayIsoDate());
-  const [currency, setCurrency] = useState('USD');
+  const tenantDefaultCurrency = String(effective?.defaultCurrency ?? '').trim();
+  const [currency, setCurrency] = useState(tenantDefaultCurrency || 'USD');
+  const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
   const [lines, setLines] = useState<Line[]>([
     { accountId: '', description: '', quantity: '1', unitPrice: '' },
@@ -64,6 +68,24 @@ export function CreateInvoicePage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!tenantDefaultCurrency) return;
+    setCurrency((prev) => prev || tenantDefaultCurrency);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantDefaultCurrency]);
+
+  const selectedCustomer = useMemo(() => {
+    return customers.find((c) => c.id === customerId) ?? null;
+  }, [customerId, customers]);
+
+  const normalizedCurrency = useMemo(() => String(currency ?? '').trim().toUpperCase(), [currency]);
+  const normalizedBase = useMemo(() => String(tenantDefaultCurrency ?? '').trim().toUpperCase(), [tenantDefaultCurrency]);
+  const isBaseCurrency = Boolean(normalizedBase && normalizedCurrency && normalizedCurrency === normalizedBase);
+
+  useEffect(() => {
+    if (isBaseCurrency) setExchangeRate('1');
+  }, [isBaseCurrency]);
 
   const computed = useMemo(() => {
     const lineTotals = lines.map((l) => {
@@ -103,6 +125,12 @@ export function CreateInvoicePage() {
       return;
     }
 
+    const ex = Number(exchangeRate);
+    if (!isBaseCurrency && !(ex > 0)) {
+      setError('Exchange rate is required and must be > 0 for non-base currency');
+      return;
+    }
+
     if (lines.length < 1) {
       setError('Invoice must have at least 1 line');
       return;
@@ -132,6 +160,7 @@ export function CreateInvoicePage() {
         invoiceDate,
         dueDate,
         currency: currency.trim(),
+        exchangeRate: isBaseCurrency ? 1 : Number(exchangeRate),
         reference: reference.trim() || undefined,
         lines: lines.map((l) => ({
           accountId: l.accountId,
@@ -193,11 +222,40 @@ export function CreateInvoicePage() {
             Currency
             <input value={currency} onChange={(e) => setCurrency(e.target.value)} required style={{ width: '100%' }} />
           </label>
+          <label style={{ flex: 1 }}>
+            Exchange Rate {normalizedBase ? `(base: ${normalizedBase})` : ''}
+            <input
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              required={!isBaseCurrency}
+              disabled={isBaseCurrency}
+              inputMode="decimal"
+              style={{ width: '100%' }}
+            />
+          </label>
           <label style={{ flex: 2 }}>
             Reference (optional)
             <input value={reference} onChange={(e) => setReference(e.target.value)} style={{ width: '100%' }} />
           </label>
         </div>
+
+        {selectedCustomer ? (
+          <div style={{ border: '1px solid rgba(11,12,30,0.10)', borderRadius: 12, padding: 12, background: 'rgba(11,12,30,0.02)' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Customer Snapshot (will be stored on invoice)</div>
+            <div style={{ fontSize: 13 }}>
+              <div>
+                <b>Name:</b> {selectedCustomer.name}
+              </div>
+              <div>
+                <b>Email:</b> {selectedCustomer.email ?? '-'}
+              </div>
+              <div>
+                <b>Billing Address:</b>
+              </div>
+              <div style={{ whiteSpace: 'pre-wrap', color: '#444', fontSize: 12 }}>{selectedCustomer.billingAddress ?? '-'}</div>
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
