@@ -22,6 +22,7 @@ export declare class FinanceArInvoicesController {
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        invoiceNote: string | null;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         id: string;
         tenantId: string;
@@ -59,6 +60,8 @@ export declare class FinanceArInvoicesController {
             quantity: number;
             unitPrice: number;
             currency: string;
+            discountPercent: any;
+            discountAmount: any;
             errors: string[];
             _isSample: boolean;
         }[];
@@ -77,6 +80,7 @@ export declare class FinanceArInvoicesController {
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        invoiceNote: string | null;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         id: string;
         tenantId: string;
@@ -103,6 +107,7 @@ export declare class FinanceArInvoicesController {
             currency: string;
             exchangeRate: import("@prisma/client/runtime/library").Decimal;
             reference: string | null;
+            invoiceNote: string | null;
             status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             id: string;
             tenantId: string;

@@ -8,6 +8,7 @@ export declare class FinanceArInvoicesService {
     constructor(prisma: PrismaService);
     private round2;
     private round6;
+    private formatMoney;
     private computeDiscount;
     private escapeHtml;
     private ensureTenant;
@@ -38,6 +39,7 @@ export declare class FinanceArInvoicesService {
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        invoiceNote: string | null;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         id: string;
         tenantId: string;
@@ -62,6 +64,7 @@ export declare class FinanceArInvoicesService {
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        invoiceNote: string | null;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         id: string;
         tenantId: string;
@@ -89,6 +92,7 @@ export declare class FinanceArInvoicesService {
             currency: string;
             exchangeRate: import("@prisma/client/runtime/library").Decimal;
             reference: string | null;
+            invoiceNote: string | null;
             status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             id: string;
             tenantId: string;
@@ -139,6 +143,8 @@ export declare class FinanceArInvoicesService {
             quantity: number;
             unitPrice: number;
             currency: string;
+            discountPercent: any;
+            discountAmount: any;
             errors: string[];
             _isSample: boolean;
         }[];

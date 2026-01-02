@@ -4,10 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type { CustomerInvoice } from '../../services/ar';
 import { downloadInvoiceExport, getInvoiceById, postInvoice } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
-
-function formatMoney(n: number) {
-  return n.toFixed(2);
-}
+import { formatMoney } from '../../money';
 
 export function InvoiceDetailsPage() {
   const { id } = useParams();
@@ -154,29 +151,29 @@ export function InvoiceDetailsPage() {
           {computed.hasDiscount ? (
             <>
               <div>
-                <b>Gross Subtotal:</b> {formatMoney(computed.grossSubtotal)}
+                <b>Gross Subtotal:</b> {formatMoney(computed.grossSubtotal, invoice.currency)}
               </div>
               <div>
-                <b>Less: Discount:</b> {formatMoney(computed.discountTotal)}
+                <b>Less: Discount:</b> {formatMoney(computed.discountTotal, invoice.currency)}
               </div>
               <div>
-                <b>Net Subtotal:</b> {formatMoney(invoice.subtotal)}
+                <b>Net Subtotal:</b> {formatMoney(invoice.subtotal, invoice.currency)}
               </div>
             </>
           ) : (
             <div>
-              <b>Subtotal:</b> {formatMoney(invoice.subtotal)}
+              <b>Subtotal:</b> {formatMoney(invoice.subtotal, invoice.currency)}
             </div>
           )}
         </div>
         <div>
-          <b>Tax:</b> {formatMoney(invoice.taxAmount)}
+          <b>Tax:</b> {formatMoney(invoice.taxAmount, invoice.currency)}
         </div>
         <div>
-          <b>Total:</b> {formatMoney(invoice.totalAmount)}
+          <b>Total:</b> {formatMoney(invoice.totalAmount, invoice.currency)}
         </div>
         <div>
-          <b>Outstanding Balance:</b> {formatMoney(Number(invoice.outstandingBalance ?? invoice.totalAmount))}
+          <b>Outstanding Balance:</b> {formatMoney(Number(invoice.outstandingBalance ?? invoice.totalAmount), invoice.currency)}
         </div>
       </div>
 
@@ -214,18 +211,18 @@ export function InvoiceDetailsPage() {
             {invoice.lines.map((l) => (
               <tr key={l.id}>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.description}</td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(l.quantity ?? 0).toFixed(2)}</td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.unitPrice ?? 0))}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.quantity ?? 0))}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.unitPrice ?? 0), invoice.currency)}</td>
                 {computed.hasDiscount ? (
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
                     {Number(l.discountTotal ?? 0) > 0
                       ? Number(l.discountPercent ?? 0) > 0
                         ? `${Number(l.discountPercent).toFixed(2)}%`
-                        : formatMoney(Number(l.discountTotal ?? 0))
+                        : formatMoney(Number(l.discountTotal ?? 0), invoice.currency)
                       : ''}
                   </td>
                 ) : null}
-                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.lineTotal ?? 0))}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.lineTotal ?? 0), invoice.currency)}</td>
               </tr>
             ))}
           </tbody>

@@ -383,6 +383,7 @@ model CustomerInvoice {
   currency      String
   exchangeRate  Decimal               @default(1.0) @db.Decimal(18, 6)
   reference     String?
+  invoiceNote   String?
   customerNameSnapshot String          @default("")
   customerEmailSnapshot String?
   customerBillingAddressSnapshot String?

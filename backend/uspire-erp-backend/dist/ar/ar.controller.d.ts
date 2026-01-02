@@ -21,6 +21,7 @@ export declare class ArController {
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        invoiceNote: string | null;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         id: string;
         tenantId: string;
@@ -38,6 +39,18 @@ export declare class ArController {
     }>;
     postInvoice(req: Request, id: string, dto: PostCustomerInvoiceDto): Promise<{
         invoice: {
+            lines: {
+                accountId: string;
+                description: string;
+                quantity: import("@prisma/client/runtime/library").Decimal;
+                unitPrice: import("@prisma/client/runtime/library").Decimal;
+                discountPercent: import("@prisma/client/runtime/library").Decimal | null;
+                discountAmount: import("@prisma/client/runtime/library").Decimal | null;
+                id: string;
+                customerInvoiceId: string;
+                discountTotal: import("@prisma/client/runtime/library").Decimal;
+                lineTotal: import("@prisma/client/runtime/library").Decimal;
+            }[];
             customer: {
                 status: import("@prisma/client").$Enums.CustomerStatus;
                 id: string;
@@ -52,18 +65,6 @@ export declare class ArController {
                 phone: string | null;
                 billingAddress: string | null;
             };
-            lines: {
-                accountId: string;
-                description: string;
-                quantity: import("@prisma/client/runtime/library").Decimal;
-                unitPrice: import("@prisma/client/runtime/library").Decimal;
-                discountPercent: import("@prisma/client/runtime/library").Decimal | null;
-                discountAmount: import("@prisma/client/runtime/library").Decimal | null;
-                id: string;
-                customerInvoiceId: string;
-                discountTotal: import("@prisma/client/runtime/library").Decimal;
-                lineTotal: import("@prisma/client/runtime/library").Decimal;
-            }[];
         } & {
             customerId: string;
             invoiceDate: Date;
@@ -71,6 +72,7 @@ export declare class ArController {
             currency: string;
             exchangeRate: import("@prisma/client/runtime/library").Decimal;
             reference: string | null;
+            invoiceNote: string | null;
             status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             id: string;
             tenantId: string;
@@ -142,6 +144,18 @@ export declare class ArController {
         };
     }>;
     listInvoices(req: Request): Promise<({
+        lines: {
+            accountId: string;
+            description: string;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
+            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
+            id: string;
+            customerInvoiceId: string;
+            discountTotal: import("@prisma/client/runtime/library").Decimal;
+            lineTotal: import("@prisma/client/runtime/library").Decimal;
+        }[];
         customer: {
             status: import("@prisma/client").$Enums.CustomerStatus;
             id: string;
@@ -156,18 +170,6 @@ export declare class ArController {
             phone: string | null;
             billingAddress: string | null;
         };
-        lines: {
-            accountId: string;
-            description: string;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
-            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
-            id: string;
-            customerInvoiceId: string;
-            discountTotal: import("@prisma/client/runtime/library").Decimal;
-            lineTotal: import("@prisma/client/runtime/library").Decimal;
-        }[];
     } & {
         customerId: string;
         invoiceDate: Date;
@@ -175,6 +177,7 @@ export declare class ArController {
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        invoiceNote: string | null;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         id: string;
         tenantId: string;

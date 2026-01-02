@@ -14,10 +14,7 @@ import {
   type InvoicesImportResponse,
 } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
-
-function formatMoney(n: number) {
-  return n.toFixed(2);
-}
+import { formatMoney } from '../../money';
 
 export function InvoicesListPage() {
   const { hasPermission } = useAuth();
@@ -286,7 +283,7 @@ export function InvoicesListPage() {
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                     <Link to={`/finance/ar/invoices/${inv.id}`}>{inv.invoiceNumber}</Link>
                   </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(inv.totalAmount)}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(inv.totalAmount, inv.currency)}</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.status}</td>
                 </tr>
               );
@@ -456,6 +453,8 @@ export function InvoicesListPage() {
                                   <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Currency</th>
                                   <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
                                   <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Discount %</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Discount Amt</th>
                                   <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
                                   <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Errors</th>
                                 </tr>
@@ -463,6 +462,8 @@ export function InvoicesListPage() {
                               <tbody>
                                 {g.rows.map((r) => {
                                   const invalid = (r.errors ?? []).length > 0;
+                                  const pct = Number((r as any).discountPercent ?? 0);
+                                  const amt = Number((r as any).discountAmount ?? 0);
                                   return (
                                     <tr key={r.rowNumber} style={{ background: invalid ? 'rgba(220,20,60,0.08)' : 'transparent' }}>
                                       <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.rowNumber}</td>
@@ -471,8 +472,10 @@ export function InvoicesListPage() {
                                       <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.dueDate}</td>
                                       <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.revenueAccountCode}</td>
                                       <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.currency}</td>
-                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.quantity ?? 0).toFixed(2)}</td>
-                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.unitPrice ?? 0).toFixed(2)}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(r.quantity ?? 0))}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(r.unitPrice ?? 0), r.currency)}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{pct > 0 ? `${pct.toFixed(2)}%` : ''}</td>
+                                      <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{amt > 0 ? formatMoney(amt, r.currency) : ''}</td>
                                       <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.description}</td>
                                       <td style={{ padding: 8, borderBottom: '1px solid #eee', color: invalid ? 'crimson' : '#444' }}>{(r.errors ?? []).join('; ')}</td>
                                     </tr>

@@ -28,7 +28,14 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
         return Math.round(Number(n ?? 0) * 100) / 100;
     }
     round6(n) {
-        return Math.round(Number(n ?? 0) * 1_000_000) / 1_000_000;
+        return Math.round(this.toNum(n) * 1_000_000) / 1_000_000;
+    }
+    formatMoney(amount, _currency) {
+        const n = this.round2(this.toNum(amount ?? 0));
+        return new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(n);
     }
     computeDiscount(params) {
         const gross = this.round2(this.toNum(params.gross ?? 0));
@@ -309,6 +316,9 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
                 ...l,
                 quantity: Number(l.quantity),
                 unitPrice: Number(l.unitPrice),
+                discountPercent: l.discountPercent === null || l.discountPercent === undefined ? l.discountPercent : Number(l.discountPercent),
+                discountAmount: l.discountAmount === null || l.discountAmount === undefined ? l.discountAmount : Number(l.discountAmount),
+                discountTotal: l.discountTotal === null || l.discountTotal === undefined ? l.discountTotal : Number(l.discountTotal),
                 lineTotal: Number(l.lineTotal),
             })),
             outstandingBalance: await this.computeOutstandingBalance({
@@ -416,6 +426,7 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
                     currency,
                     exchangeRate,
                     reference: dto.reference ? String(dto.reference).trim() : undefined,
+                    invoiceNote: dto.invoiceNote ? String(dto.invoiceNote).trim() : undefined,
                     customerNameSnapshot: String(customer.name ?? '').trim(),
                     customerEmailSnapshot: customer.email ? String(customer.email).trim() : undefined,
                     customerBillingAddressSnapshot: customer.billingAddress ? String(customer.billingAddress).trim() : undefined,
@@ -604,12 +615,14 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
             'description',
             'quantity',
             'unitPrice',
+            'discountPercent',
+            'discountAmount',
         ];
         const fileName = `invoice_import_template.csv`;
         const sampleRows = [
-            ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', '1', '1500'],
-            ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', '2', '750'],
-            ['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', '1', '99'],
+            ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', '1', '1500', '10', ''],
+            ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', '2', '750', '', '25.00'],
+            ['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', '1', '99', '', ''],
         ];
         const body = `${headers.join(',')}\n${sampleRows.map((r) => r.join(',')).join('\n')}\n`;
         return { fileName, body };
@@ -629,6 +642,8 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
             'description',
             'quantity',
             'unitPrice',
+            'discountPercent',
+            'discountAmount',
         ]);
         try {
             ws.getCell('A1').note = 'Optional. Use SAMPLE to include example rows (ignored during preview/import). Leave blank for real data.';
@@ -637,12 +652,14 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
             ws.getCell('D1').note = 'Required. Must be consistent for all rows within the same invoiceRef group.';
             ws.getCell('E1').note = 'Required. Must be consistent for all rows within the same invoiceRef group. Must be >= Invoice Date.';
             ws.getCell('F1').note = 'Required. Use a valid ISO code (e.g. USD). Must be consistent within invoiceRef group.';
+            ws.getCell('K1').note = 'Optional. Discount percent (0-100). Mutually exclusive with discountAmount.';
+            ws.getCell('L1').note = 'Optional. Discount amount (>= 0). Mutually exclusive with discountPercent.';
         }
         catch {
         }
-        ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', 1, 1500]);
-        ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', 2, 750]);
-        ws.addRow(['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', 1, 99]);
+        ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', 1, 1500, 10, null]);
+        ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', 2, 750, null, 25]);
+        ws.addRow(['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', 1, 99, null, null]);
         const fileName = `invoice_import_template.xlsx`;
         const body = await wb.xlsx.writeBuffer();
         return { fileName, body };
@@ -674,6 +691,8 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
             const quantity = this.toNum(raw.quantity ?? 1);
             const unitPrice = this.toNum(raw.unitprice ?? raw.unit_price ?? 0);
             const currency = String(raw.currency ?? '').trim();
+            const discountPercent = raw.discountpercent ?? raw.discount_percent ?? raw.discpercent ?? raw.disc_percent;
+            const discountAmount = raw.discountamount ?? raw.discount_amount ?? raw.discamount ?? raw.disc_amount;
             const errors = [];
             if (isSample) {
                 return {
@@ -687,6 +706,8 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
                     quantity,
                     unitPrice,
                     currency,
+                    discountPercent,
+                    discountAmount,
                     errors,
                     _isSample: true,
                 };
@@ -709,6 +730,19 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
                 errors.push('Quantity must be > 0');
             if (!(unitPrice > 0))
                 errors.push('Unit Price must be > 0');
+            if (errors.length === 0) {
+                try {
+                    const gross = this.round2(this.toNum(quantity) * this.toNum(unitPrice));
+                    this.computeDiscount({
+                        gross,
+                        discountPercent,
+                        discountAmount,
+                    });
+                }
+                catch (e) {
+                    errors.push(String(e?.message ?? 'Invalid discount'));
+                }
+            }
             const invDateObj = this.parseYmdToDateOrNull(invoiceDate);
             const dueDateObj = this.parseYmdToDateOrNull(dueDate);
             if (invDateObj && dueDateObj && dueDateObj < invDateObj) {
@@ -725,6 +759,8 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
                 quantity,
                 unitPrice,
                 currency,
+                discountPercent,
+                discountAmount,
                 errors,
                 _isSample: false,
             };
@@ -908,7 +944,11 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
                     if (!(unitPrice > 0))
                         throw new common_1.BadRequestException('Unit Price must be > 0');
                     const gross = this.round2(qty * unitPrice);
-                    const disc = this.computeDiscount({ gross });
+                    const disc = this.computeDiscount({
+                        gross,
+                        discountPercent: rr.discountPercent,
+                        discountAmount: rr.discountAmount,
+                    });
                     const lineTotal = this.round2(gross - disc.discountTotal);
                     return {
                         accountId,
@@ -990,6 +1030,7 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
         const tenantName = String(tenant.legalName ?? tenant.organisationName ?? '');
         const invoiceNumber = String(inv.invoiceNumber ?? '').trim();
         const currency = String(inv.currency ?? '').trim();
+        const invoiceNote = String(inv.invoiceNote ?? '').trim();
         const invLines = (inv.lines ?? []).map((l) => {
             const qty = Number(l.quantity ?? 0);
             const unitPrice = Number(l.unitPrice ?? 0);
@@ -1059,6 +1100,7 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
       <table>
         <thead>
           <tr>
+            <th class="num" style="width: 52px;">Line #</th>
             <th>Description</th>
             <th class="num">Qty</th>
             <th class="num">Unit Price</th>
@@ -1068,16 +1110,17 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
         </thead>
         <tbody>
           ${invLines
-            .map((l) => {
+            .map((l, idx) => {
             const discountText = l.discountTotal > 0
-                ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : `${l.discountTotal.toFixed(2)}`)
+                ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : `${this.formatMoney(l.discountTotal, currency)}`)
                 : '';
             return `<tr>
+                <td class="num">${idx + 1}</td>
                 <td>${this.escapeHtml(l.description)}</td>
-                <td class="num">${l.qty.toFixed(2)}</td>
-                <td class="num">${l.unitPrice.toFixed(2)}</td>
+                <td class="num">${this.formatMoney(l.qty, currency)}</td>
+                <td class="num">${this.formatMoney(l.unitPrice, currency)}</td>
                 ${hasDiscount ? `<td class="num">${this.escapeHtml(discountText)}</td>` : ''}
-                <td class="num">${l.lineTotal.toFixed(2)}</td>
+                <td class="num">${this.formatMoney(l.lineTotal, currency)}</td>
               </tr>`;
         })
             .join('')}
@@ -1085,20 +1128,28 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
       </table>
 
       <div class="totals">
-        ${hasDiscount ? `<div class="line"><span>Gross Subtotal</span><span>${grossSubtotal.toFixed(2)}</span></div>` : ''}
-        ${hasDiscount ? `<div class="line"><span>Less: Discount</span><span>${discountTotalSum.toFixed(2)}</span></div>` : ''}
-        <div class="line"><span>${hasDiscount ? 'Net Subtotal' : 'Subtotal'}</span><span>${Number(inv.subtotal ?? 0).toFixed(2)}</span></div>
-        <div class="line"><span>Tax</span><span>${Number(inv.taxAmount ?? 0).toFixed(2)}</span></div>
-        <div class="line grand"><span>Total</span><span>${Number(inv.totalAmount ?? 0).toFixed(2)}</span></div>
+        ${hasDiscount ? `<div class="line"><span>Gross Subtotal</span><span>${this.formatMoney(grossSubtotal, currency)}</span></div>` : ''}
+        ${hasDiscount ? `<div class="line"><span>Less: Discount</span><span>${this.formatMoney(discountTotalSum, currency)}</span></div>` : ''}
+        <div class="line"><span>${hasDiscount ? 'Net Subtotal' : 'Subtotal'}</span><span>${this.formatMoney(Number(inv.subtotal ?? 0), currency)}</span></div>
+        <div class="line"><span>Tax</span><span>${this.formatMoney(Number(inv.taxAmount ?? 0), currency)}</span></div>
+        <div class="line grand"><span>Total</span><span>${this.formatMoney(Number(inv.totalAmount ?? 0), currency)}</span></div>
       </div>
     </div>
 
     <div class="block">
       <div class="card">
-        <div style="font-weight: 700;">Payment details</div>
-        <div class="muted">Please contact accounts for payment instructions.</div>
+        <div style="font-weight: 700;">Bank Details</div>
+        <div class="muted" style="margin-top: 6px;">
+          Bank Name: FNB<br/>
+          Account Name: Uspire Professional Services Ltd<br/>
+          Account Number: 63144493680<br/>
+          Branch Name/Number: Commercial Suite / 260001<br/>
+          Swift Code: FIRNZMLX
+        </div>
       </div>
     </div>
+
+    ${invoiceNote ? `<div class="block"><div class="card"><div style="font-weight: 700;">Note</div><div style="margin-top: 6px; white-space: pre-wrap;">${this.escapeHtml(invoiceNote)}</div></div></div>` : ''}
   </body>
 </html>`;
         if (opts.format === 'pdf') {
@@ -1133,33 +1184,74 @@ let FinanceArInvoicesService = class FinanceArInvoicesService {
             if (inv.customerBillingAddressSnapshot)
                 doc.text(String(inv.customerBillingAddressSnapshot));
             doc.moveDown(1);
-            doc.font('Helvetica-Bold').text('Lines');
-            doc.moveDown(0.3);
-            for (const l of invLines) {
+            const startX = doc.page.margins.left;
+            const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+            const col = {
+                line: startX,
+                desc: startX + 40,
+                qty: startX + (hasDiscount ? 300 : 340),
+                unit: startX + (hasDiscount ? 370 : 420),
+                disc: startX + 450,
+                total: startX + (hasDiscount ? 520 : 520),
+            };
+            const descWidth = (hasDiscount ? 250 : 290);
+            const headerY = doc.y;
+            doc.font('Helvetica-Bold').fontSize(10);
+            doc.text('Line #', col.line, headerY, { width: 40, align: 'right' });
+            doc.text('Description', col.desc, headerY, { width: descWidth, align: 'left' });
+            doc.text('Quantity', col.qty, headerY, { width: 70, align: 'right' });
+            doc.text('Unit Price', col.unit, headerY, { width: 80, align: 'right' });
+            if (hasDiscount) {
+                doc.text('Discount', col.disc, headerY, { width: 70, align: 'right' });
+            }
+            doc.text('Line Total', col.total, headerY, { width: 80, align: 'right' });
+            doc.moveDown(0.5);
+            doc.moveTo(startX, doc.y).lineTo(startX + pageWidth, doc.y).strokeColor('#E4E7EC').stroke();
+            doc.strokeColor('#000');
+            doc.moveDown(0.4);
+            doc.font('Helvetica').fontSize(9);
+            invLines.forEach((l, idx) => {
+                const y0 = doc.y;
                 const discountText = hasDiscount
                     ? l.discountTotal > 0
-                        ? (l.discountPercent > 0 ? ` | Disc: ${l.discountPercent.toFixed(2)}%` : ` | Disc: ${l.discountTotal.toFixed(2)}`)
-                        : ' | Disc: '
+                        ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : this.formatMoney(l.discountTotal, currency))
+                        : ''
                     : '';
-                doc
-                    .font('Helvetica')
-                    .fontSize(10)
-                    .text(`${String(l.description ?? '')} | ${l.qty.toFixed(2)} x ${l.unitPrice.toFixed(2)}${discountText} = ${l.lineTotal.toFixed(2)}`);
-            }
-            doc.moveDown(1);
+                doc.text(String(idx + 1), col.line, y0, { width: 40, align: 'right' });
+                doc.text(String(l.description ?? ''), col.desc, y0, { width: descWidth, align: 'left' });
+                doc.text(this.formatMoney(l.qty, currency), col.qty, y0, { width: 70, align: 'right' });
+                doc.text(this.formatMoney(l.unitPrice, currency), col.unit, y0, { width: 80, align: 'right' });
+                if (hasDiscount) {
+                    doc.text(discountText, col.disc, y0, { width: 70, align: 'right' });
+                }
+                doc.text(this.formatMoney(l.lineTotal, currency), col.total, y0, { width: 80, align: 'right' });
+                doc.moveDown(0.9);
+            });
+            doc.moveDown(0.5);
             if (hasDiscount) {
-                doc.font('Helvetica-Bold').text(`Gross Subtotal: ${grossSubtotal.toFixed(2)}`, { align: 'right' });
-                doc.font('Helvetica-Bold').text(`Less: Discount: ${discountTotalSum.toFixed(2)}`, { align: 'right' });
-                doc.font('Helvetica-Bold').text(`Net Subtotal: ${Number(inv.subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+                doc.font('Helvetica-Bold').text(`Gross Subtotal: ${this.formatMoney(grossSubtotal, currency)}`, { align: 'right' });
+                doc.font('Helvetica-Bold').text(`Less: Discount: ${this.formatMoney(discountTotalSum, currency)}`, { align: 'right' });
+                doc.font('Helvetica-Bold').text(`Net Subtotal: ${this.formatMoney(Number(inv.subtotal ?? 0), currency)}`, { align: 'right' });
             }
             else {
-                doc.font('Helvetica-Bold').text(`Subtotal: ${Number(inv.subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+                doc.font('Helvetica-Bold').text(`Subtotal: ${this.formatMoney(Number(inv.subtotal ?? 0), currency)}`, { align: 'right' });
             }
-            doc.font('Helvetica-Bold').text(`Tax: ${Number(inv.taxAmount ?? 0).toFixed(2)}`, { align: 'right' });
-            doc.font('Helvetica-Bold').text(`Total: ${Number(inv.totalAmount ?? 0).toFixed(2)}`, { align: 'right' });
+            doc.font('Helvetica-Bold').text(`Tax: ${this.formatMoney(Number(inv.taxAmount ?? 0), currency)}`, { align: 'right' });
+            doc.font('Helvetica-Bold').text(`Total: ${this.formatMoney(Number(inv.totalAmount ?? 0), currency)}`, { align: 'right' });
             doc.moveDown(1);
-            doc.font('Helvetica').fontSize(9).fillColor('#444').text('Payment details: Please contact accounts for payment instructions.', { align: 'left' });
-            doc.fillColor('#000');
+            doc.font('Helvetica-Bold').fontSize(10).text('Bank Details');
+            doc.font('Helvetica').fontSize(9);
+            doc.text('Bank Name: FNB');
+            doc.text('Account Name: Uspire Professional Services Ltd');
+            doc.text('Account Number: 63144493680');
+            doc.text('Branch Name/Number: Commercial Suite / 260001');
+            doc.text('Swift Code: FIRNZMLX');
+            doc.moveDown(0.8);
+            if (invoiceNote) {
+                doc.font('Helvetica-Bold').fontSize(10).text('Note');
+                doc.font('Helvetica').fontSize(9).text(invoiceNote);
+                doc.moveDown(0.6);
+            }
             doc.end();
             const pdf = await done;
             return {

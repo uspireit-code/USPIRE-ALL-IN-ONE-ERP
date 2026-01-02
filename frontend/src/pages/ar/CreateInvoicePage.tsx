@@ -5,6 +5,7 @@ import { useBranding } from '../../branding/BrandingContext';
 import type { AccountLookup, Customer } from '../../services/ar';
 import { createInvoice, listEligibleAccounts, listCustomers } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
+import { formatMoney } from '../../money';
 
 type Line = {
   accountId: string;
@@ -54,6 +55,7 @@ export function CreateInvoicePage() {
   const [currency, setCurrency] = useState(tenantDefaultCurrency || 'USD');
   const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
+  const [invoiceNote, setInvoiceNote] = useState('');
   const [discountsEnabled, setDiscountsEnabled] = useState(false);
   const [lines, setLines] = useState<Line[]>([
     {
@@ -291,6 +293,7 @@ export function CreateInvoicePage() {
         currency: currency.trim(),
         exchangeRate: isBaseCurrency ? 1 : Number(exchangeRate),
         reference: reference.trim() || undefined,
+        invoiceNote: invoiceNote.trim() || undefined,
         lines: lines.map((l) => ({
           accountId: l.accountId,
           description: l.description,
@@ -442,9 +445,20 @@ export function CreateInvoicePage() {
           </label>
           <label style={{ flex: 2 }}>
             Reference (optional)
-            <input value={reference} onChange={(e) => setReference(e.target.value)} style={{ width: '100%' }} />
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. PO#123" style={{ width: '100%' }} />
           </label>
         </div>
+
+        <label>
+          Note (optional)
+          <textarea
+            value={invoiceNote}
+            onChange={(e) => setInvoiceNote(e.target.value)}
+            placeholder="Optional note to appear on the invoice PDF"
+            rows={3}
+            style={{ width: '100%', resize: 'vertical' }}
+          />
+        </label>
 
         {selectedCustomer ? (
           <div style={{ border: '1px solid rgba(11,12,30,0.10)', borderRadius: 12, padding: 12, background: 'rgba(11,12,30,0.02)' }}>
@@ -612,7 +626,7 @@ export function CreateInvoicePage() {
                       />
                     </td>
                   ) : null}
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{computed.lineTotals[idx]?.toFixed(2)}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(computed.lineTotals[idx] ?? 0), currency)}</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
                     <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1}>
                       Remove
@@ -627,23 +641,25 @@ export function CreateInvoicePage() {
             {computed.hasDiscount ? (
               <>
                 <div>
-                  Gross Subtotal: <b>{computed.grossSubtotal.toFixed(2)}</b>
+                  Gross Subtotal: <b>{formatMoney(computed.grossSubtotal, currency)}</b>
                 </div>
                 <div>
-                  Less: Discount: <b>{computed.discountTotal.toFixed(2)}</b>
+                  Less: Discount: <b>{formatMoney(computed.discountTotal, currency)}</b>
                 </div>
                 <div>
-                  Net Subtotal: <b>{computed.subtotal.toFixed(2)}</b>
+                  Net Subtotal: <b>{formatMoney(computed.subtotal, currency)}</b>
                 </div>
               </>
             ) : (
               <div>
-                Subtotal: <b>{computed.subtotal.toFixed(2)}</b>
+                Subtotal: <b>{formatMoney(computed.subtotal, currency)}</b>
               </div>
             )}
-            <div>Tax: <b>{computed.taxAmount.toFixed(2)}</b></div>
             <div>
-              Total: <b>{computed.totalAmount.toFixed(2)}</b>
+              Tax: <b>{formatMoney(computed.taxAmount, currency)}</b>
+            </div>
+            <div>
+              Total: <b>{formatMoney(computed.totalAmount, currency)}</b>
             </div>
           </div>
         </div>

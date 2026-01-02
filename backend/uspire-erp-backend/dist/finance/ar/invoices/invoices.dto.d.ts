@@ -13,6 +13,7 @@ export declare class CreateCustomerInvoiceDto {
     currency: string;
     exchangeRate?: number;
     reference?: string;
+    invoiceNote?: string;
     lines: CreateCustomerInvoiceLineDto[];
 }
 export declare class ListInvoicesQueryDto {

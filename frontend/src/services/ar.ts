@@ -47,6 +47,7 @@ export type CustomerInvoice = {
   currency: string;
   exchangeRate: number;
   reference?: string | null;
+  invoiceNote?: string | null;
   customerNameSnapshot?: string | null;
   customerEmailSnapshot?: string | null;
   customerBillingAddressSnapshot?: string | null;
@@ -80,6 +81,8 @@ export type InvoicesImportPreviewRow = {
   description: string;
   quantity: number;
   unitPrice: number;
+  discountPercent?: number | string | null;
+  discountAmount?: number | string | null;
   currency: string;
   errors: string[];
 };
@@ -318,6 +321,7 @@ export async function createInvoice(params: {
   currency: string;
   exchangeRate?: number;
   reference?: string;
+  invoiceNote?: string;
   lines: Array<{
     accountId: string;
     description: string;
@@ -336,6 +340,7 @@ export async function createInvoice(params: {
       currency: params.currency,
       exchangeRate: params.exchangeRate,
       reference: params.reference || undefined,
+      invoiceNote: params.invoiceNote || undefined,
       lines: params.lines,
     }),
   });

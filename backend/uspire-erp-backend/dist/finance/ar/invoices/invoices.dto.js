@@ -58,6 +58,7 @@ class CreateCustomerInvoiceDto {
     currency;
     exchangeRate;
     reference;
+    invoiceNote;
     lines;
 }
 exports.CreateCustomerInvoiceDto = CreateCustomerInvoiceDto;
@@ -88,6 +89,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateCustomerInvoiceDto.prototype, "reference", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateCustomerInvoiceDto.prototype, "invoiceNote", void 0);
 __decorate([
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ArrayMinSize)(1),

@@ -59,6 +59,10 @@ export class CreateCustomerInvoiceDto {
   @IsString()
   reference?: string;
 
+  @IsOptional()
+  @IsString()
+  invoiceNote?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

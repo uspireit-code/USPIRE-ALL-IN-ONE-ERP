@@ -112,13 +112,13 @@ export declare class ForecastsService {
             versionNumber: number;
         };
         lines: {
+            accountId: string;
+            id: string;
             account: {
                 id: string;
                 name: string;
                 code: string;
             };
-            accountId: string;
-            id: string;
             amount: import("@prisma/client/runtime/library").Decimal;
             month: number;
         }[];

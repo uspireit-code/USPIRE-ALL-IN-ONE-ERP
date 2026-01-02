@@ -78,6 +78,13 @@ export declare class ApController {
             taxRateId: string;
             taxableAmount: import("@prisma/client/runtime/library").Decimal;
         })[];
+        lines: {
+            accountId: string;
+            description: string;
+            id: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            supplierInvoiceId: string;
+        }[];
         supplier: {
             id: string;
             tenantId: string;
@@ -86,13 +93,6 @@ export declare class ApController {
             isActive: boolean;
             taxNumber: string | null;
         };
-        lines: {
-            accountId: string;
-            description: string;
-            id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            supplierInvoiceId: string;
-        }[];
         invoiceDate: Date;
         dueDate: Date;
         status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
@@ -109,6 +109,13 @@ export declare class ApController {
         supplierId: string;
     }>;
     submitInvoice(req: Request, id: string): Promise<{
+        lines: {
+            accountId: string;
+            description: string;
+            id: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            supplierInvoiceId: string;
+        }[];
         supplier: {
             id: string;
             tenantId: string;
@@ -117,13 +124,6 @@ export declare class ApController {
             isActive: boolean;
             taxNumber: string | null;
         };
-        lines: {
-            accountId: string;
-            description: string;
-            id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            supplierInvoiceId: string;
-        }[];
     } & {
         invoiceDate: Date;
         dueDate: Date;
@@ -141,6 +141,13 @@ export declare class ApController {
         supplierId: string;
     }>;
     approveInvoice(req: Request, id: string): Promise<{
+        lines: {
+            accountId: string;
+            description: string;
+            id: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            supplierInvoiceId: string;
+        }[];
         supplier: {
             id: string;
             tenantId: string;
@@ -149,13 +156,6 @@ export declare class ApController {
             isActive: boolean;
             taxNumber: string | null;
         };
-        lines: {
-            accountId: string;
-            description: string;
-            id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            supplierInvoiceId: string;
-        }[];
     } & {
         invoiceDate: Date;
         dueDate: Date;
@@ -174,6 +174,13 @@ export declare class ApController {
     }>;
     postInvoice(req: Request, id: string, dto: PostInvoiceDto): Promise<{
         invoice: {
+            lines: {
+                accountId: string;
+                description: string;
+                id: string;
+                amount: import("@prisma/client/runtime/library").Decimal;
+                supplierInvoiceId: string;
+            }[];
             supplier: {
                 id: string;
                 tenantId: string;
@@ -182,13 +189,6 @@ export declare class ApController {
                 isActive: boolean;
                 taxNumber: string | null;
             };
-            lines: {
-                accountId: string;
-                description: string;
-                id: string;
-                amount: import("@prisma/client/runtime/library").Decimal;
-                supplierInvoiceId: string;
-            }[];
         } & {
             invoiceDate: Date;
             dueDate: Date;
@@ -261,6 +261,13 @@ export declare class ApController {
         };
     }>;
     listInvoices(req: Request): Promise<({
+        lines: {
+            accountId: string;
+            description: string;
+            id: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            supplierInvoiceId: string;
+        }[];
         supplier: {
             id: string;
             tenantId: string;
@@ -269,13 +276,6 @@ export declare class ApController {
             isActive: boolean;
             taxNumber: string | null;
         };
-        lines: {
-            accountId: string;
-            description: string;
-            id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            supplierInvoiceId: string;
-        }[];
     } & {
         invoiceDate: Date;
         dueDate: Date;

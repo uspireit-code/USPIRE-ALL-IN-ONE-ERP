@@ -198,13 +198,13 @@ export declare class BudgetsController {
             revisionNo: number;
         };
         lines: {
+            accountId: string;
+            id: string;
             account: {
                 id: string;
                 name: string;
                 code: string;
             };
-            accountId: string;
-            id: string;
             periodId: string;
             period: {
                 id: string;
