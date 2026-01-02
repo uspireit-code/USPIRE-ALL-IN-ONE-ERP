@@ -20,6 +20,8 @@ export function EditCustomerPage() {
   const [phone, setPhone] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
 
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string }>({});
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,17 +81,14 @@ export function EditCustomerPage() {
 
     setError(null);
 
-    const emailTrimmed = email.trim();
-    if (emailTrimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
-      setError('Invalid email format');
-      return;
-    }
-
+    const nextErrors: { name?: string; email?: string } = {};
     const nameTrimmed = name.trim();
-    if (!nameTrimmed) {
-      setError('Customer Name is required');
-      return;
-    }
+    const emailTrimmed = email.trim();
+    if (!nameTrimmed) nextErrors.name = 'Customer Name is required';
+    if (!emailTrimmed) nextErrors.email = 'Email is required';
+    if (emailTrimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) nextErrors.email = 'Invalid email format';
+    setFieldErrors(nextErrors);
+    if (nextErrors.name || nextErrors.email) return;
 
     setSaving(true);
     try {
@@ -97,7 +96,7 @@ export function EditCustomerPage() {
         name: nameTrimmed,
         status,
         contactPerson: contactPerson.trim() || undefined,
-        email: emailTrimmed || undefined,
+        email: emailTrimmed,
         phone: phone.trim() || undefined,
         billingAddress: billingAddress.trim() || undefined,
       });
@@ -128,6 +127,7 @@ export function EditCustomerPage() {
           Customer Name
           <input value={name} onChange={(e) => setName(e.target.value)} required style={{ width: '100%' }} />
         </label>
+        {fieldErrors.name ? <div style={{ color: 'crimson', fontSize: 13 }}>{fieldErrors.name}</div> : null}
 
         <label>
           Status
@@ -146,6 +146,7 @@ export function EditCustomerPage() {
           Email
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={{ width: '100%' }} />
         </label>
+        {fieldErrors.email ? <div style={{ color: 'crimson', fontSize: 13 }}>{fieldErrors.email}</div> : null}
 
         <label>
           Phone

@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, apiFetchRaw } from './api';
 
 export type Customer = {
   id: string;
@@ -125,7 +125,7 @@ export async function createCustomer(params: {
   status: 'ACTIVE' | 'INACTIVE';
   customerCode?: string;
   contactPerson?: string;
-  email?: string;
+  email: string;
   phone?: string;
   billingAddress?: string;
   taxNumber?: string;
@@ -137,7 +137,7 @@ export async function createCustomer(params: {
       status: params.status,
       customerCode: params.customerCode || undefined,
       contactPerson: params.contactPerson || undefined,
-      email: params.email || undefined,
+      email: params.email,
       phone: params.phone || undefined,
       billingAddress: params.billingAddress || undefined,
       taxNumber: params.taxNumber || undefined,
@@ -155,7 +155,7 @@ export async function updateCustomer(
     name: string;
     status: 'ACTIVE' | 'INACTIVE';
     contactPerson?: string;
-    email?: string;
+    email: string;
     phone?: string;
     billingAddress?: string;
   },
@@ -166,11 +166,72 @@ export async function updateCustomer(
       name: params.name,
       status: params.status,
       contactPerson: params.contactPerson || undefined,
-      email: params.email || undefined,
+      email: params.email,
       phone: params.phone || undefined,
       billingAddress: params.billingAddress || undefined,
     }),
   });
+}
+
+export type CustomersImportPreviewRow = {
+  rowNumber: number;
+  customerCode?: string;
+  name: string;
+  email: string;
+  contactPerson?: string;
+  phone?: string;
+  billingAddress?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
+  errors: string[];
+};
+
+export type CustomersImportPreviewResponse = {
+  totalRows: number;
+  validCount: number;
+  invalidCount: number;
+  rows: CustomersImportPreviewRow[];
+};
+
+export type CustomersImportResponse = {
+  totalRows: number;
+  importedCount: number;
+  failedCount: number;
+  failedRows: Array<{ rowNumber: number; reason: string }>;
+};
+
+export async function previewCustomersImport(file: File) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  return apiFetch<CustomersImportPreviewResponse>('/finance/ar/customers/import/preview', {
+    method: 'POST',
+    body: fd,
+  });
+}
+
+export async function importCustomers(file: File) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  return apiFetch<CustomersImportResponse>('/finance/ar/customers/import', {
+    method: 'POST',
+    body: fd,
+  });
+}
+
+async function downloadBlob(path: string) {
+  const res = await apiFetchRaw(path, { method: 'GET' });
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="([^"]+)"/.exec(contentDisposition);
+  const fileName = match?.[1] || 'download';
+  return { blob, fileName };
+}
+
+export async function downloadCustomersImportCsvTemplate() {
+  return downloadBlob('/finance/ar/customers/import/template.csv');
+}
+
+export async function downloadCustomersImportXlsxTemplate() {
+  return downloadBlob('/finance/ar/customers/import/template.xlsx');
 }
 
 export async function listEligibleAccounts() {
