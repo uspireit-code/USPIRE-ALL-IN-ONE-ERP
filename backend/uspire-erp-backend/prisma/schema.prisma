@@ -369,6 +369,7 @@ model CustomerInvoice {
   invoiceNumber String
   invoiceDate   DateTime
   dueDate       DateTime
+  currency      String                @default("USD")
   totalAmount   Decimal               @db.Decimal(18, 2)
   status        CustomerInvoiceStatus @default(DRAFT)
   createdById   String
@@ -596,18 +597,22 @@ model CustomerReceipt {
   status           ReceiptStatus        @default(DRAFT)
   createdById      String
   createdAt        DateTime             @default(now())
+  postedByUserId   String?
   postedById       String?
   postedAt         DateTime?
   voidedById       String?
   voidedAt         DateTime?
   voidReason       String?
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy User     @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  postedBy  User?    @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
-  voidedBy  User?    @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
-  lines     CustomerReceiptLine[]
+  glJournalId String?
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy   User         @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy    User?        @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  voidedBy    User?        @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  glJournal   JournalEntry? @relation("CustomerReceiptGlJournal", fields: [glJournalId], references: [id], onDelete: Restrict)
+  lines       CustomerReceiptLine[]
 
   @@unique([tenantId, receiptNumber])
   @@index([tenantId])
@@ -617,15 +622,19 @@ model CustomerReceipt {
 
 model CustomerReceiptLine {
   id            String  @id @default(uuid())
+  tenantId      String
   receiptId     String
   invoiceId     String
   appliedAmount Decimal @db.Decimal(18, 2)
+  createdAt     DateTime @default(now())
 
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   receipt CustomerReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
   invoice CustomerInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 
   @@index([receiptId])
   @@index([invoiceId])
+  @@index([tenantId])
   @@unique([receiptId, invoiceId])
 }
 
@@ -851,6 +860,7 @@ enum AuditEntityType {
   ACCOUNTING_PERIOD_CHECKLIST_ITEM
   SUPPLIER_INVOICE
   CUSTOMER_INVOICE
+  CUSTOMER_RECEIPT
   FIXED_ASSET
   FIXED_ASSET_DEPRECIATION_RUN
   BANK_RECONCILIATION_MATCH
@@ -896,6 +906,9 @@ model Tenant {
   faviconUrl              String?
   accentColor             String?
   secondaryAccentColor    String?
+
+  arControlAccountId          String?
+  defaultBankClearingAccountId String?
   coaFrozen               Boolean  @default(false)
   coaLockedAt             DateTime?
   status    TenantStatus @default(ACTIVE)
@@ -915,6 +928,7 @@ model Tenant {
   customers           Customer[]
   customerInvoices    CustomerInvoice[]
   customerReceipts    CustomerReceipt[]
+  customerReceiptLines CustomerReceiptLine[]
   bankAccounts        BankAccount[]
   payments            Payment[]
   bankStatements      BankStatement[]
@@ -960,6 +974,9 @@ model Tenant {
   departments   Department[]
   projects      Project[]
   funds         Fund[]
+
+  arControlAccount           Account? @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
+  defaultBankClearingAccount Account? @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
 
   @@unique([name])
   @@index([status])
@@ -1288,6 +1305,9 @@ model Account {
 
   recurringTemplateLines RecurringJournalTemplateLine[]
 
+  tenantsAsArControlAccount            Tenant[] @relation("TenantArControlAccount")
+  tenantsAsDefaultBankClearingAccount  Tenant[] @relation("TenantDefaultBankClearingAccount")
+
   @@unique([tenantId, code])
   @@index([tenantId])
   @@index([tenantId, parentAccountId])
@@ -1371,6 +1391,8 @@ model JournalEntry {
   fixedAssetCapitalizations  FixedAsset[]                @relation("FixedAssetCapitalizationJournal")
   fixedAssetDisposals        FixedAsset[]                @relation("FixedAssetDisposalJournal")
   fixedAssetDepreciationRuns FixedAssetDepreciationRun[] @relation("FixedAssetDepreciationRunJournal")
+
+  customerReceiptsGl CustomerReceipt[] @relation("CustomerReceiptGlJournal")
 
   recurringGenerations RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
 

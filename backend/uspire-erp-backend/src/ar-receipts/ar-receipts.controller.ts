@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { ArReceiptsService } from './ar-receipts.service';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
+import { SetReceiptAllocationsDto } from './dto/set-receipt-allocations.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { VoidReceiptDto } from './dto/void-receipt.dto';
 
@@ -23,6 +24,22 @@ export class ArReceiptsController {
   @Permissions('AR_RECEIPTS_VIEW')
   async getById(@Param('id') id: string, @Req() req: Request) {
     return this.receipts.getReceiptById(req, id);
+  }
+
+  @Get(':id/allocations')
+  @Permissions('AR_RECEIPTS_VIEW')
+  async listAllocations(@Param('id') id: string, @Req() req: Request) {
+    return this.receipts.listAllocations(req, id);
+  }
+
+  @Put(':id/allocations')
+  @Permissions('AR_RECEIPTS_CREATE')
+  async setAllocations(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body() dto: SetReceiptAllocationsDto,
+  ) {
+    return this.receipts.setAllocations(req, id, dto);
   }
 
   @Post()

@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import { ArReceiptsService } from './ar-receipts.service';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
+import { SetReceiptAllocationsDto } from './dto/set-receipt-allocations.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { VoidReceiptDto } from './dto/void-receipt.dto';
 export declare class ArReceiptsController {
@@ -18,10 +19,20 @@ export declare class ArReceiptsController {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
+        lines: any;
+    }>;
+    listAllocations(id: string, req: Request): Promise<{
+        receiptId: string;
+        lines: any;
+    }>;
+    setAllocations(id: string, req: Request, dto: SetReceiptAllocationsDto): Promise<{
+        receiptId: string;
         lines: any;
     }>;
     create(req: Request, dto: CreateReceiptDto): Promise<{
@@ -35,8 +46,10 @@ export declare class ArReceiptsController {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -52,8 +65,10 @@ export declare class ArReceiptsController {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -69,8 +84,10 @@ export declare class ArReceiptsController {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -86,8 +103,10 @@ export declare class ArReceiptsController {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;

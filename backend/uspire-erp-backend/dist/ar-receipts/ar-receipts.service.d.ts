@@ -1,10 +1,12 @@
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
+import { SetReceiptAllocationsDto } from './dto/set-receipt-allocations.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 export declare class ArReceiptsService {
     private readonly prisma;
     private readonly RECEIPT_NUMBER_SEQUENCE_NAME;
+    private readonly OPENING_PERIOD_NAME;
     constructor(prisma: PrismaService);
     private round2;
     private normalizeMoney;
@@ -13,6 +15,14 @@ export declare class ArReceiptsService {
     private assertEditable;
     private nextReceiptNumber;
     private validateLines;
+    listAllocations(req: Request, receiptId: string): Promise<{
+        receiptId: string;
+        lines: any;
+    }>;
+    setAllocations(req: Request, receiptId: string, dto: SetReceiptAllocationsDto): Promise<{
+        receiptId: string;
+        lines: any;
+    }>;
     listReceipts(req: Request): Promise<any>;
     getReceiptById(req: Request, id: string): Promise<{
         id: any;
@@ -25,8 +35,10 @@ export declare class ArReceiptsService {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -42,8 +54,10 @@ export declare class ArReceiptsService {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -59,8 +73,10 @@ export declare class ArReceiptsService {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -76,8 +92,10 @@ export declare class ArReceiptsService {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
@@ -93,8 +111,10 @@ export declare class ArReceiptsService {
         paymentMethod: any;
         paymentReference: any;
         status: any;
+        glJournalId: any;
         createdAt: any;
         postedAt: any;
+        postedById: any;
         voidedAt: any;
         voidReason: any;
         lines: any;
