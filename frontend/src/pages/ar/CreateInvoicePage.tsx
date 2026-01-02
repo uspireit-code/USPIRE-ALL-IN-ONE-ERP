@@ -13,6 +13,8 @@ type Line = {
   description: string;
   quantity: string;
   unitPrice: string;
+  discountPercent: string;
+  discountAmount: string;
 };
 
 function todayIsoDate() {
@@ -52,8 +54,18 @@ export function CreateInvoicePage() {
   const [currency, setCurrency] = useState(tenantDefaultCurrency || 'USD');
   const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
+  const [discountsEnabled, setDiscountsEnabled] = useState(false);
   const [lines, setLines] = useState<Line[]>([
-    { accountId: '', accountSearch: '', accountPickerOpen: false, description: '', quantity: '1', unitPrice: '' },
+    {
+      accountId: '',
+      accountSearch: '',
+      accountPickerOpen: false,
+      description: '',
+      quantity: '1',
+      unitPrice: '',
+      discountPercent: '',
+      discountAmount: '',
+    },
   ]);
 
   useEffect(() => {
@@ -155,16 +167,32 @@ export function CreateInvoicePage() {
   }, [isLineValid, lines]);
 
   const computed = useMemo(() => {
-    const lineTotals = lines.map((l) => {
+    const grossTotals = lines.map((l) => {
       const qty = Number(l.quantity) || 0;
       const unitPrice = Number(l.unitPrice) || 0;
       return round2(qty * unitPrice);
     });
+
+    const discountTotals = lines.map((l, idx) => {
+      const gross = grossTotals[idx] || 0;
+      const pct = Number(l.discountPercent) || 0;
+      const amt = Number(l.discountAmount) || 0;
+      if (pct > 0) return round2(gross * (pct / 100));
+      if (amt > 0) return round2(amt);
+      return 0;
+    });
+
+    const lineTotals = grossTotals.map((g, idx) => round2(g - (discountTotals[idx] || 0)));
+    const grossSubtotal = round2(grossTotals.reduce((s, v) => s + v, 0));
+    const discountTotal = round2(discountTotals.reduce((s, v) => s + v, 0));
     const subtotal = round2(lineTotals.reduce((s, v) => s + v, 0));
     const taxAmount = 0;
     const totalAmount = round2(subtotal + taxAmount);
-    return { lineTotals, subtotal, taxAmount, totalAmount };
+    const hasDiscount = discountTotal > 0;
+    return { grossTotals, discountTotals, lineTotals, grossSubtotal, discountTotal, subtotal, taxAmount, totalAmount, hasDiscount };
   }, [lines]);
+
+  const showDiscountUi = discountsEnabled || computed.hasDiscount;
 
   function updateLine(idx: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
@@ -176,7 +204,16 @@ export function CreateInvoicePage() {
       if (!last || !isLineValid(last)) return prev;
       return [
         ...prev,
-        { accountId: '', accountSearch: '', accountPickerOpen: false, description: '', quantity: '1', unitPrice: '' },
+        {
+          accountId: '',
+          accountSearch: '',
+          accountPickerOpen: false,
+          description: '',
+          quantity: '1',
+          unitPrice: '',
+          discountPercent: '',
+          discountAmount: '',
+        },
       ];
     });
   }
@@ -219,6 +256,32 @@ export function CreateInvoicePage() {
       return;
     }
 
+    for (const l of lines) {
+      const pct = Number(l.discountPercent) || 0;
+      const amt = Number(l.discountAmount) || 0;
+      if (pct > 0 && amt > 0) {
+        setError('Discount percent and discount amount are mutually exclusive per line');
+        return;
+      }
+      if (pct < 0 || pct > 100) {
+        setError('Discount percent must be between 0 and 100');
+        return;
+      }
+      if (amt < 0) {
+        setError('Discount amount must be >= 0');
+        return;
+      }
+
+      const qty = Number(l.quantity) || 0;
+      const unitPrice = Number(l.unitPrice) || 0;
+      const gross = round2(qty * unitPrice);
+      const discountTotal = pct > 0 ? round2(gross * (pct / 100)) : amt > 0 ? round2(amt) : 0;
+      if (discountTotal > gross) {
+        setError('Discount cannot exceed gross line amount');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const created = await createInvoice({
@@ -233,6 +296,8 @@ export function CreateInvoicePage() {
           description: l.description,
           quantity: Number(l.quantity) || 1,
           unitPrice: Number(l.unitPrice) || 0,
+          discountPercent: Number(l.discountPercent) > 0 ? Number(l.discountPercent) : undefined,
+          discountAmount: Number(l.discountAmount) > 0 ? Number(l.discountAmount) : undefined,
         })),
       });
 
@@ -327,6 +392,15 @@ export function CreateInvoicePage() {
           </div>
         </label>
 
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={showDiscountUi}
+            onChange={(e) => setDiscountsEnabled(e.target.checked)}
+          />
+          Add discount fields
+        </label>
+
         <label>
           Invoice Number
           <input value="(auto-generated)" readOnly style={{ width: '100%' }} />
@@ -405,6 +479,8 @@ export function CreateInvoicePage() {
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
+                {showDiscountUi ? <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Disc %</th> : null}
+                {showDiscountUi ? <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Disc Amt</th> : null}
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Line Total</th>
                 <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
               </tr>
@@ -508,6 +584,34 @@ export function CreateInvoicePage() {
                       style={{ width: 120, textAlign: 'right' }}
                     />
                   </td>
+                  {showDiscountUi ? (
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      <input
+                        value={l.discountPercent}
+                        onChange={(e) => {
+                          updateLine(idx, { discountPercent: e.target.value, discountAmount: '' });
+                        }}
+                        inputMode="decimal"
+                        style={{ width: 90, textAlign: 'right' }}
+                        placeholder="%"
+                        disabled={Boolean(Number(l.discountAmount) > 0)}
+                      />
+                    </td>
+                  ) : null}
+                  {showDiscountUi ? (
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      <input
+                        value={l.discountAmount}
+                        onChange={(e) => {
+                          updateLine(idx, { discountAmount: e.target.value, discountPercent: '' });
+                        }}
+                        inputMode="decimal"
+                        style={{ width: 110, textAlign: 'right' }}
+                        placeholder="0.00"
+                        disabled={Boolean(Number(l.discountPercent) > 0)}
+                      />
+                    </td>
+                  ) : null}
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{computed.lineTotals[idx]?.toFixed(2)}</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
                     <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1}>
@@ -520,9 +624,23 @@ export function CreateInvoicePage() {
           </table>
 
           <div style={{ marginTop: 8, textAlign: 'right' }}>
-            <div>
-              Subtotal: <b>{computed.subtotal.toFixed(2)}</b>
-            </div>
+            {computed.hasDiscount ? (
+              <>
+                <div>
+                  Gross Subtotal: <b>{computed.grossSubtotal.toFixed(2)}</b>
+                </div>
+                <div>
+                  Less: Discount: <b>{computed.discountTotal.toFixed(2)}</b>
+                </div>
+                <div>
+                  Net Subtotal: <b>{computed.subtotal.toFixed(2)}</b>
+                </div>
+              </>
+            ) : (
+              <div>
+                Subtotal: <b>{computed.subtotal.toFixed(2)}</b>
+              </div>
+            )}
             <div>Tax: <b>{computed.taxAmount.toFixed(2)}</b></div>
             <div>
               Total: <b>{computed.totalAmount.toFixed(2)}</b>

@@ -1,6 +1,6 @@
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { CreateCustomerInvoiceDto, ListInvoicesQueryDto } from './invoices.dto';
+import type { CreateCustomerInvoiceDto, BulkPostInvoicesDto, ListInvoicesQueryDto } from './invoices.dto';
 export declare class FinanceArInvoicesService {
     private readonly prisma;
     private readonly INVOICE_NUMBER_SEQUENCE_NAME;
@@ -8,6 +8,8 @@ export declare class FinanceArInvoicesService {
     constructor(prisma: PrismaService);
     private round2;
     private round6;
+    private computeDiscount;
+    private escapeHtml;
     private ensureTenant;
     private ensureUser;
     private normalizeHeaderKey;
@@ -30,19 +32,19 @@ export declare class FinanceArInvoicesService {
         totalAmount: number;
         lines: any;
         outstandingBalance: number;
-        id: string;
-        tenantId: string;
         customerId: string;
-        invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
+        id: string;
+        tenantId: string;
+        invoiceNumber: string;
         customerNameSnapshot: string;
         customerEmailSnapshot: string | null;
         customerBillingAddressSnapshot: string | null;
-        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdById: string;
         postedById: string | null;
         createdAt: Date;
@@ -54,19 +56,19 @@ export declare class FinanceArInvoicesService {
         totalAmount: number;
         lines: any;
         outstandingBalance: number;
-        id: string;
-        tenantId: string;
         customerId: string;
-        invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
+        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
+        id: string;
+        tenantId: string;
+        invoiceNumber: string;
         customerNameSnapshot: string;
         customerEmailSnapshot: string | null;
         customerBillingAddressSnapshot: string | null;
-        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdById: string;
         postedById: string | null;
         createdAt: Date;
@@ -81,64 +83,34 @@ export declare class FinanceArInvoicesService {
             totalAmount: number;
             lines: any;
             outstandingBalance: number;
-            id: string;
-            tenantId: string;
             customerId: string;
-            invoiceNumber: string;
             invoiceDate: Date;
             dueDate: Date;
             currency: string;
             exchangeRate: import("@prisma/client/runtime/library").Decimal;
             reference: string | null;
+            status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
+            id: string;
+            tenantId: string;
+            invoiceNumber: string;
             customerNameSnapshot: string;
             customerEmailSnapshot: string | null;
             customerBillingAddressSnapshot: string | null;
-            status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             createdById: string;
             postedById: string | null;
             createdAt: Date;
             postedAt: Date | null;
         };
-        glJournal: {
-            id: string;
-            tenantId: string;
-            reference: string | null;
-            status: import("@prisma/client").$Enums.JournalStatus;
-            createdById: string;
-            postedById: string | null;
-            createdAt: Date;
-            postedAt: Date | null;
-            description: string | null;
-            journalNumber: number | null;
-            journalType: import("@prisma/client").$Enums.JournalType;
-            periodId: string | null;
-            journalDate: Date;
-            correctsJournalId: string | null;
-            riskScore: number;
-            riskFlags: import("@prisma/client/runtime/library").JsonValue;
-            riskComputedAt: Date | null;
-            budgetStatus: import("@prisma/client").$Enums.JournalBudgetStatus;
-            budgetFlags: import("@prisma/client/runtime/library").JsonValue | null;
-            budgetCheckedAt: Date | null;
-            budgetOverrideJustification: string | null;
-            reversalInitiatedById: string | null;
-            reversalInitiatedAt: Date | null;
-            reversalPreparedById: string | null;
-            submittedById: string | null;
-            submittedAt: Date | null;
-            reviewedById: string | null;
-            reviewedAt: Date | null;
-            rejectedById: string | null;
-            rejectedAt: Date | null;
-            rejectionReason: string | null;
-            approvedById: string | null;
-            approvedAt: Date | null;
-            returnedByPosterId: string | null;
-            returnedByPosterAt: Date | null;
-            returnReason: string | null;
-            reversalOfId: string | null;
-            reversalReason: string | null;
-        };
+        glJournal: any;
+    }>;
+    bulkPost(req: Request, dto: BulkPostInvoicesDto): Promise<{
+        postedCount: number;
+        failedCount: number;
+        postedInvoiceIds: string[];
+        failed: {
+            invoiceId: string;
+            reason: string;
+        }[];
     }>;
     getImportCsvTemplate(req: Request): Promise<{
         fileName: string;
@@ -149,7 +121,10 @@ export declare class FinanceArInvoicesService {
         body: any;
     }>;
     private readImportRows;
-    previewImport(req: Request, file: any): Promise<{
+    previewImport(req: Request, file: any, opts?: {
+        importId?: string;
+    }): Promise<{
+        importId: string;
         totalRows: number;
         validCount: number;
         invalidCount: number;
@@ -168,7 +143,7 @@ export declare class FinanceArInvoicesService {
             _isSample: boolean;
         }[];
     }>;
-    import(req: Request, file: any): Promise<{
+    import(req: Request, file: any, importIdRaw: string): Promise<{
         totalRows: number;
         createdCount: number;
         failedCount: number;

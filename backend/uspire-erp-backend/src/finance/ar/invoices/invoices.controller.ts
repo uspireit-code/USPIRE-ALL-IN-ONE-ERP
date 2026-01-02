@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  BadRequestException,
   Param,
   Post,
   Query,
@@ -20,6 +21,7 @@ import { PermissionsGuard } from '../../../rbac/permissions.guard';
 import {
   CreateCustomerInvoiceDto,
   ListInvoicesQueryDto,
+  BulkPostInvoicesDto,
   PostInvoiceDto,
 } from './invoices.dto';
 import { FinanceArInvoicesService } from './invoices.service';
@@ -50,7 +52,9 @@ export class FinanceArInvoicesController {
     }),
   )
   async import(@Req() req: Request, @UploadedFile() file: any) {
-    return this.invoices.import(req, file);
+    const importId = String((req as any)?.body?.importId ?? '').trim();
+    if (!importId) throw new BadRequestException('importId is required');
+    return this.invoices.import(req, file, importId);
   }
 
   @Post('import/preview')
@@ -115,5 +119,11 @@ export class FinanceArInvoicesController {
     return this.invoices.post(req, id, {
       arControlAccountCode: dto.arControlAccountCode,
     });
+  }
+
+  @Post('post/bulk')
+  @Permissions('AR_INVOICE_POST')
+  async bulkPost(@Req() req: Request, @Body() dto: BulkPostInvoicesDto) {
+    return this.invoices.bulkPost(req, dto);
   }
 }

@@ -32,6 +32,9 @@ export type CustomerInvoiceLine = {
   description: string;
   quantity: number;
   unitPrice: number;
+  discountPercent?: number | null;
+  discountAmount?: number | null;
+  discountTotal?: number | null;
   lineTotal: number;
 };
 
@@ -82,6 +85,7 @@ export type InvoicesImportPreviewRow = {
 };
 
 export type InvoicesImportPreviewResponse = {
+  importId: string;
   totalRows: number;
   validCount: number;
   invalidCount: number;
@@ -319,6 +323,8 @@ export async function createInvoice(params: {
     description: string;
     quantity?: number;
     unitPrice: number;
+    discountPercent?: number;
+    discountAmount?: number;
   }>;
 }) {
   return apiFetch<CustomerInvoice>('/finance/ar/invoices', {
@@ -357,12 +363,28 @@ export async function previewInvoicesImport(file: File) {
   });
 }
 
-export async function importInvoices(file: File) {
+export async function importInvoices(file: File, params: { importId: string }) {
   const fd = new FormData();
   fd.append('file', file, file.name);
+  fd.append('importId', params.importId);
   return apiFetch<InvoicesImportResponse>('/finance/ar/invoices/import', {
     method: 'POST',
     body: fd,
+  });
+}
+
+export async function bulkPostInvoices(params: { invoiceIds: string[]; arControlAccountCode?: string }) {
+  return apiFetch<{
+    postedCount: number;
+    failedCount: number;
+    postedInvoiceIds: string[];
+    failed: Array<{ invoiceId: string; reason: string }>;
+  }>('/finance/ar/invoices/post/bulk', {
+    method: 'POST',
+    body: JSON.stringify({
+      invoiceIds: params.invoiceIds,
+      arControlAccountCode: params.arControlAccountCode || undefined,
+    }),
   });
 }
 

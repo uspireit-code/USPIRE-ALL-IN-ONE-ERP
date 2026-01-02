@@ -4,11 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type {
   CreateCustomerInvoiceDto,
+  BulkPostInvoicesDto,
   ListInvoicesQueryDto,
 } from './invoices.dto';
 
@@ -25,6 +27,57 @@ export class FinanceArInvoicesService {
 
   private round6(n: number) {
     return Math.round(Number(n ?? 0) * 1_000_000) / 1_000_000;
+  }
+
+  private computeDiscount(params: {
+    gross: number;
+    discountPercent?: any;
+    discountAmount?: any;
+  }): {
+    discountPercent: number | null;
+    discountAmount: number | null;
+    discountTotal: number;
+  } {
+    const gross = this.round2(this.toNum(params.gross ?? 0));
+    const discountPercent = this.round6(this.toNum(params.discountPercent ?? 0));
+    const discountAmount = this.round2(this.toNum(params.discountAmount ?? 0));
+
+    const hasPercent = discountPercent > 0;
+    const hasAmount = discountAmount > 0;
+    if (hasPercent && hasAmount) {
+      throw new BadRequestException('Invoice line discountPercent and discountAmount are mutually exclusive');
+    }
+    if (discountPercent < 0 || discountPercent > 100) {
+      throw new BadRequestException('Invoice line discountPercent must be between 0 and 100');
+    }
+    if (discountAmount < 0) {
+      throw new BadRequestException('Invoice line discountAmount must be >= 0');
+    }
+
+    const computedDiscountTotal = hasPercent
+      ? this.round2(gross * (discountPercent / 100))
+      : hasAmount
+        ? this.round2(discountAmount)
+        : 0;
+
+    if (computedDiscountTotal > gross) {
+      throw new BadRequestException('Invoice line discount cannot exceed gross amount');
+    }
+
+    return {
+      discountPercent: hasPercent ? discountPercent : null,
+      discountAmount: hasAmount ? discountAmount : null,
+      discountTotal: computedDiscountTotal,
+    };
+  }
+
+  private escapeHtml(v: any) {
+    return String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private ensureTenant(req: Request) {
@@ -378,17 +431,27 @@ export class FinanceArInvoicesService {
         throw new BadRequestException(`Invoice line account must be INCOME: ${l.accountId}`);
       }
 
-      const lineTotal = this.round2(qty * unitPrice);
+      const gross = this.round2(qty * unitPrice);
+      const disc = this.computeDiscount({
+        gross,
+        discountPercent: (l as any).discountPercent,
+        discountAmount: (l as any).discountAmount,
+      });
+      const lineTotal = this.round2(gross - disc.discountTotal);
       return {
         accountId: l.accountId,
         description,
         quantity: qty,
         unitPrice,
+        discountPercent: disc.discountPercent,
+        discountAmount: disc.discountAmount,
+        discountTotal: disc.discountTotal,
         lineTotal,
       };
     });
 
     const subtotal = this.round2(computedLines.reduce((s, l) => s + l.lineTotal, 0));
+    const discountTotal = this.round2(computedLines.reduce((s, l) => s + this.toNum((l as any).discountTotal ?? 0), 0));
     const taxAmount = 0;
     const totalAmount = this.round2(subtotal + taxAmount);
 
@@ -418,6 +481,9 @@ export class FinanceArInvoicesService {
               description: l.description,
               quantity: l.quantity,
               unitPrice: l.unitPrice,
+              discountPercent: (l as any).discountPercent ?? undefined,
+              discountAmount: (l as any).discountAmount ?? undefined,
+              discountTotal: (l as any).discountTotal ?? 0,
               lineTotal: l.lineTotal,
             })),
           },
@@ -476,52 +542,122 @@ export class FinanceArInvoicesService {
       throw new BadRequestException('Invoice totals failed validation before posting');
     }
 
-    const journal = await this.prisma.journalEntry.create({
-      data: {
-        tenantId: tenant.id,
-        journalDate: (inv as any).invoiceDate,
-        reference: `AR-INVOICE:${(inv as any).id}`,
-        description: `AR invoice posting: ${(inv as any).invoiceNumber}`,
-        createdById: (inv as any).createdById,
-        lines: {
-          create: [
-            {
-              accountId: arAccount.id,
-              debit: (inv as any).totalAmount,
-              credit: 0,
-            },
-            ...lines.map((l: any) => ({
-              accountId: l.accountId,
-              debit: 0,
-              credit: l.lineTotal,
-            })),
-          ],
+    let postedJournal: any = null;
+    try {
+      const journal = await this.prisma.journalEntry.create({
+        data: {
+          tenantId: tenant.id,
+          journalDate: (inv as any).invoiceDate,
+          reference: `AR-INVOICE:${(inv as any).id}`,
+          description: `AR invoice posting: ${(inv as any).invoiceNumber}`,
+          createdById: (inv as any).createdById,
+          lines: {
+            create: [
+              {
+                accountId: arAccount.id,
+                debit: (inv as any).totalAmount,
+                credit: 0,
+              },
+              ...lines.map((l: any) => ({
+                accountId: l.accountId,
+                debit: 0,
+                credit: l.lineTotal,
+              })),
+            ],
+          },
+        } as any,
+        include: { lines: true } as any,
+      } as any);
+
+      postedJournal = await this.prisma.journalEntry.update({
+        where: { id: (journal as any).id },
+        data: {
+          status: 'POSTED',
+          postedById: user.id,
+          postedAt: new Date(),
         },
-      } as any,
-      include: { lines: true } as any,
-    } as any);
+        include: { lines: true } as any,
+      } as any);
 
-    const postedJournal = await this.prisma.journalEntry.update({
-      where: { id: (journal as any).id },
-      data: {
-        status: 'POSTED',
-        postedById: user.id,
-        postedAt: new Date(),
-      },
-      include: { lines: true } as any,
-    } as any);
+      const updated = await this.prisma.customerInvoice.update({
+        where: { id: (inv as any).id },
+        data: {
+          status: 'POSTED',
+          postedById: user.id,
+          postedAt: new Date(),
+        },
+        include: { customer: true, lines: true } as any,
+      } as any);
 
-    const updated = await this.prisma.customerInvoice.update({
-      where: { id: (inv as any).id },
-      data: {
-        status: 'POSTED',
-        postedById: user.id,
-        postedAt: new Date(),
-      },
-      include: { customer: true, lines: true } as any,
-    } as any);
+      await this.prisma.auditEvent
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventType: 'AR_POST',
+            entityType: 'CUSTOMER_INVOICE',
+            entityId: String((inv as any).id),
+            action: 'AR_INVOICE_POST',
+            outcome: 'SUCCESS',
+            reason: JSON.stringify({ invoiceNumber: (inv as any).invoiceNumber }),
+            userId: user.id,
+            permissionUsed: 'AR_INVOICE_POST',
+          } as any,
+        } as any)
+        .catch(() => undefined);
 
-    return { invoice: await this.getById(req, (updated as any).id), glJournal: postedJournal };
+      return { invoice: await this.getById(req, (updated as any).id), glJournal: postedJournal };
+    } catch (e: any) {
+      await this.prisma.auditEvent
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventType: 'AR_POST',
+            entityType: 'CUSTOMER_INVOICE',
+            entityId: String((inv as any).id),
+            action: 'AR_INVOICE_POST',
+            outcome: 'FAILED',
+            reason: String(e?.message ?? 'Failed to post invoice'),
+            userId: user.id,
+            permissionUsed: 'AR_INVOICE_POST',
+          } as any,
+        } as any)
+        .catch(() => undefined);
+      throw e;
+    }
+  }
+
+  async bulkPost(req: Request, dto: BulkPostInvoicesDto) {
+    this.ensureTenant(req);
+    this.ensureUser(req);
+
+    const ids = Array.from(
+      new Set((dto.invoiceIds ?? []).map((x) => String(x ?? '').trim()).filter(Boolean)),
+    );
+    if (ids.length < 1) throw new BadRequestException('invoiceIds is required');
+
+    const postedInvoiceIds: string[] = [];
+    const failed: Array<{ invoiceId: string; reason: string }> = [];
+
+    for (const invoiceId of ids) {
+      try {
+        await this.post(req, invoiceId, {
+          arControlAccountCode: dto.arControlAccountCode,
+        });
+        postedInvoiceIds.push(invoiceId);
+      } catch (e: any) {
+        failed.push({
+          invoiceId,
+          reason: String(e?.message ?? 'Failed to post invoice'),
+        });
+      }
+    }
+
+    return {
+      postedCount: postedInvoiceIds.length,
+      failedCount: failed.length,
+      postedInvoiceIds,
+      failed,
+    };
   }
 
   async getImportCsvTemplate(req: Request) {
@@ -599,8 +735,10 @@ export class FinanceArInvoicesService {
     return this.parseCsvRows(buf).map((r) => ({ rowNumber: r.rowNumber, row: r.row }));
   }
 
-  async previewImport(req: Request, file: any) {
+  async previewImport(req: Request, file: any, opts?: { importId?: string }) {
     const tenant = this.ensureTenant(req);
+
+    const importId = String(opts?.importId ?? '').trim() || randomUUID();
 
     const rows = await this.readImportRows(file);
 
@@ -746,6 +884,7 @@ export class FinanceArInvoicesService {
     const invalidCount = parsed.length - validCount;
 
     return {
+      importId,
       totalRows: parsed.length,
       validCount,
       invalidCount,
@@ -753,11 +892,30 @@ export class FinanceArInvoicesService {
     };
   }
 
-  async import(req: Request, file: any) {
+  async import(req: Request, file: any, importIdRaw: string) {
     const tenant = this.ensureTenant(req);
     const user = this.ensureUser(req);
 
-    const preview = await this.previewImport(req, file);
+    const importId = String(importIdRaw ?? '').trim();
+    if (!importId) throw new BadRequestException('importId is required');
+
+    try {
+      await (this.prisma as any).customerInvoiceImportLog.create({
+        data: {
+          tenantId: tenant.id,
+          importId,
+          processedById: user.id,
+        } as any,
+      } as any);
+    } catch (e: any) {
+      const code = String(e?.code ?? '');
+      if (code === 'P2002') {
+        throw new BadRequestException('This import has already been processed.');
+      }
+      throw e;
+    }
+
+    const preview = await this.previewImport(req, file, { importId });
     const validRows = preview.rows.filter((r: any) => (r.errors ?? []).length === 0);
     const failedRows = preview.rows
       .filter((r: any) => (r.errors ?? []).length > 0)
@@ -838,12 +996,17 @@ export class FinanceArInvoicesService {
           const unitPrice = this.toNum(rr.unitPrice ?? 0);
           if (!(qty > 0)) throw new BadRequestException('Quantity must be > 0');
           if (!(unitPrice > 0)) throw new BadRequestException('Unit Price must be > 0');
-          const lineTotal = this.round2(qty * unitPrice);
+          const gross = this.round2(qty * unitPrice);
+          const disc = this.computeDiscount({ gross });
+          const lineTotal = this.round2(gross - disc.discountTotal);
           return {
             accountId,
             description: String(rr.description ?? '').trim(),
             quantity: qty,
             unitPrice,
+            discountPercent: disc.discountPercent,
+            discountAmount: disc.discountAmount,
+            discountTotal: disc.discountTotal,
             lineTotal,
           };
         });
@@ -877,6 +1040,9 @@ export class FinanceArInvoicesService {
                   description: l.description,
                   quantity: l.quantity,
                   unitPrice: l.unitPrice,
+                  discountPercent: (l as any).discountPercent ?? undefined,
+                  discountAmount: (l as any).discountAmount ?? undefined,
+                  discountTotal: (l as any).discountTotal ?? 0,
                   lineTotal: l.lineTotal,
                 })),
               },
@@ -919,6 +1085,27 @@ export class FinanceArInvoicesService {
     const tenantName = String((tenant as any).legalName ?? (tenant as any).organisationName ?? '');
     const invoiceNumber = String((inv as any).invoiceNumber ?? '').trim();
     const currency = String((inv as any).currency ?? '').trim();
+
+    const invLines = ((inv as any).lines ?? []).map((l: any) => {
+      const qty = Number(l.quantity ?? 0);
+      const unitPrice = Number(l.unitPrice ?? 0);
+      const discountTotal = Number(l.discountTotal ?? 0);
+      const lineTotal = Number(l.lineTotal ?? 0);
+      const discountPercent = Number(l.discountPercent ?? 0);
+      const discountAmount = Number(l.discountAmount ?? 0);
+      return {
+        description: String(l.description ?? ''),
+        qty,
+        unitPrice,
+        discountPercent,
+        discountAmount,
+        discountTotal,
+        lineTotal,
+      };
+    });
+    const hasDiscount = invLines.some((l) => (l.discountTotal ?? 0) > 0);
+    const discountTotalSum = this.round2(invLines.reduce((s, l) => s + (Number(l.discountTotal ?? 0) || 0), 0));
+    const grossSubtotal = this.round2(invLines.reduce((s, l) => s + this.round2(Number(l.qty ?? 0) * Number(l.unitPrice ?? 0)), 0));
 
     const html = `<!doctype html>
 <html>
@@ -972,20 +1159,22 @@ export class FinanceArInvoicesService {
             <th>Description</th>
             <th class="num">Qty</th>
             <th class="num">Unit Price</th>
+            ${hasDiscount ? '<th class="num">Discount</th>' : ''}
             <th class="num">Line Total</th>
           </tr>
         </thead>
         <tbody>
-          ${((inv as any).lines ?? [])
+          ${invLines
             .map((l: any) => {
-              const qty = Number(l.quantity ?? 0);
-              const unitPrice = Number(l.unitPrice ?? 0);
-              const lineTotal = Number(l.lineTotal ?? 0);
+              const discountText = l.discountTotal > 0
+                ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : `${l.discountTotal.toFixed(2)}`)
+                : '';
               return `<tr>
-                <td>${String(l.description ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-                <td class="num">${qty.toFixed(2)}</td>
-                <td class="num">${unitPrice.toFixed(2)}</td>
-                <td class="num">${lineTotal.toFixed(2)}</td>
+                <td>${this.escapeHtml(l.description)}</td>
+                <td class="num">${l.qty.toFixed(2)}</td>
+                <td class="num">${l.unitPrice.toFixed(2)}</td>
+                ${hasDiscount ? `<td class="num">${this.escapeHtml(discountText)}</td>` : ''}
+                <td class="num">${l.lineTotal.toFixed(2)}</td>
               </tr>`;
             })
             .join('')}
@@ -993,7 +1182,9 @@ export class FinanceArInvoicesService {
       </table>
 
       <div class="totals">
-        <div class="line"><span>Subtotal</span><span>${Number((inv as any).subtotal ?? 0).toFixed(2)}</span></div>
+        ${hasDiscount ? `<div class="line"><span>Gross Subtotal</span><span>${grossSubtotal.toFixed(2)}</span></div>` : ''}
+        ${hasDiscount ? `<div class="line"><span>Less: Discount</span><span>${discountTotalSum.toFixed(2)}</span></div>` : ''}
+        <div class="line"><span>${hasDiscount ? 'Net Subtotal' : 'Subtotal'}</span><span>${Number((inv as any).subtotal ?? 0).toFixed(2)}</span></div>
         <div class="line"><span>Tax</span><span>${Number((inv as any).taxAmount ?? 0).toFixed(2)}</span></div>
         <div class="line grand"><span>Total</span><span>${Number((inv as any).totalAmount ?? 0).toFixed(2)}</span></div>
       </div>
@@ -1044,15 +1235,26 @@ export class FinanceArInvoicesService {
 
       doc.font('Helvetica-Bold').text('Lines');
       doc.moveDown(0.3);
-      for (const l of (inv as any).lines ?? []) {
-        const qty = Number(l.quantity ?? 0);
-        const unitPrice = Number(l.unitPrice ?? 0);
-        const lineTotal = Number(l.lineTotal ?? 0);
-        doc.font('Helvetica').fontSize(10).text(`${String(l.description ?? '')} | ${qty.toFixed(2)} x ${unitPrice.toFixed(2)} = ${lineTotal.toFixed(2)}`);
+      for (const l of invLines) {
+        const discountText = hasDiscount
+          ? l.discountTotal > 0
+            ? (l.discountPercent > 0 ? ` | Disc: ${l.discountPercent.toFixed(2)}%` : ` | Disc: ${l.discountTotal.toFixed(2)}`)
+            : ' | Disc: '
+          : '';
+        doc
+          .font('Helvetica')
+          .fontSize(10)
+          .text(`${String(l.description ?? '')} | ${l.qty.toFixed(2)} x ${l.unitPrice.toFixed(2)}${discountText} = ${l.lineTotal.toFixed(2)}`);
       }
       doc.moveDown(1);
 
-      doc.font('Helvetica-Bold').text(`Subtotal: ${Number((inv as any).subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+      if (hasDiscount) {
+        doc.font('Helvetica-Bold').text(`Gross Subtotal: ${grossSubtotal.toFixed(2)}`, { align: 'right' });
+        doc.font('Helvetica-Bold').text(`Less: Discount: ${discountTotalSum.toFixed(2)}`, { align: 'right' });
+        doc.font('Helvetica-Bold').text(`Net Subtotal: ${Number((inv as any).subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+      } else {
+        doc.font('Helvetica-Bold').text(`Subtotal: ${Number((inv as any).subtotal ?? 0).toFixed(2)}`, { align: 'right' });
+      }
       doc.font('Helvetica-Bold').text(`Tax: ${Number((inv as any).taxAmount ?? 0).toFixed(2)}`, { align: 'right' });
       doc.font('Helvetica-Bold').text(`Total: ${Number((inv as any).totalAmount ?? 0).toFixed(2)}`, { align: 'right' });
       doc.moveDown(1);

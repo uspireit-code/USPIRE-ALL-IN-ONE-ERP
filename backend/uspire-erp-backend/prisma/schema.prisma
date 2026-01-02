@@ -592,6 +592,9 @@ model CustomerInvoiceLine {
   description       String
   quantity          Decimal @db.Decimal(18, 6)
   unitPrice         Decimal @db.Decimal(18, 6)
+  discountPercent   Decimal? @db.Decimal(18, 6)
+  discountAmount    Decimal? @db.Decimal(18, 2)
+  discountTotal     Decimal  @default(0) @db.Decimal(18, 2)
   lineTotal         Decimal @db.Decimal(18, 2)
 
   customerInvoice CustomerInvoice @relation(fields: [customerInvoiceId], references: [id], onDelete: Cascade)
@@ -599,6 +602,22 @@ model CustomerInvoiceLine {
 
   @@index([customerInvoiceId])
   @@index([accountId])
+}
+
+model CustomerInvoiceImportLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  importId    String
+  processedAt DateTime @default(now())
+  processedById String?
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  processedBy User?  @relation("CustomerInvoiceImportProcessedBy", fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, importId])
+  @@index([tenantId])
+  @@index([tenantId, processedAt])
+  @@index([processedById])
 }
 
 model CustomerReceipt {
@@ -946,6 +965,7 @@ model Tenant {
   customerInvoices    CustomerInvoice[]
   customerReceipts    CustomerReceipt[]
   customerReceiptLines CustomerReceiptLine[]
+  customerInvoiceImportLogs CustomerInvoiceImportLog[]
   bankAccounts        BankAccount[]
   payments            Payment[]
   bankStatements      BankStatement[]
@@ -1151,6 +1171,7 @@ model User {
   supplierInvoicesPosted           SupplierInvoice[]           @relation("SupplierInvoicePostedBy")
   customerInvoicesCreated          CustomerInvoice[]           @relation("CustomerInvoiceCreatedBy")
   customerInvoicesPosted           CustomerInvoice[]           @relation("CustomerInvoicePostedBy")
+  customerInvoiceImportsProcessed  CustomerInvoiceImportLog[]  @relation("CustomerInvoiceImportProcessedBy")
   customerReceiptsCreated          CustomerReceipt[]           @relation("CustomerReceiptCreatedBy")
   customerReceiptsPosted           CustomerReceipt[]           @relation("CustomerReceiptPostedBy")
   customerReceiptsVoided           CustomerReceipt[]           @relation("CustomerReceiptVoidedBy")

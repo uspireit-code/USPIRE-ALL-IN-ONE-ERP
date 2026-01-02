@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { CustomerInvoice } from '../../services/ar';
 import {
+  bulkPostInvoices,
   downloadInvoicesImportCsvTemplate,
   downloadInvoicesImportXlsxTemplate,
   importInvoices,
@@ -22,14 +23,26 @@ export function InvoicesListPage() {
   const { hasPermission } = useAuth();
   const canCreateInvoice = hasPermission('AR_INVOICE_CREATE');
   const canImportInvoices = hasPermission('AR_INVOICE_CREATE');
+  const canPostInvoices = hasPermission('AR_INVOICE_POST');
 
   const [rows, setRows] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+  const [bulkPostBusy, setBulkPostBusy] = useState(false);
+  const [bulkPostError, setBulkPostError] = useState<string | null>(null);
+  const [bulkPostResult, setBulkPostResult] = useState<{
+    postedCount: number;
+    failedCount: number;
+    postedInvoiceIds: string[];
+    failed: Array<{ invoiceId: string; reason: string }>;
+  } | null>(null);
+
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [importSubmitting, setImportSubmitting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [preview, setPreview] = useState<InvoicesImportPreviewResponse | null>(null);
   const [importResult, setImportResult] = useState<InvoicesImportResponse | null>(null);
@@ -47,6 +60,9 @@ export function InvoicesListPage() {
       .then((res) => {
         if (!mounted) return;
         setRows(res.items ?? []);
+        setSelectedIds({});
+        setBulkPostResult(null);
+        setBulkPostError(null);
       })
       .catch((err: any) => {
         setError(getApiErrorMessage(err, 'Failed to load invoices'));
@@ -84,6 +100,7 @@ export function InvoicesListPage() {
     setImportResult(null);
     setImportError(null);
     setImportBusy(false);
+    setImportSubmitting(false);
     if (importFileInputRef.current) importFileInputRef.current.value = '';
   };
 
@@ -170,16 +187,24 @@ export function InvoicesListPage() {
 
   const onImport = async () => {
     if (!importFile) return;
-    setImportBusy(true);
+    if (!preview?.importId) {
+      setImportError('Please preview the file first.');
+      return;
+    }
+    setImportSubmitting(true);
     setImportError(null);
     try {
-      const res = await importInvoices(importFile);
+      const res = await importInvoices(importFile, { importId: preview.importId });
       setImportResult(res);
       load();
+
+      // Close + reset on success to prevent duplicate submission
+      resetImportState();
+      setImportOpen(false);
     } catch (e: any) {
       setImportError(getApiErrorMessage(e, 'Import failed'));
     } finally {
-      setImportBusy(false);
+      setImportSubmitting(false);
     }
   };
 
@@ -187,31 +212,111 @@ export function InvoicesListPage() {
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 
+    const draftRows = rows.filter((r) => r.status === 'DRAFT');
+    const selectedDraftIds = draftRows.filter((r) => selectedIds[r.id]).map((r) => r.id);
+    const selectedCount = selectedDraftIds.length;
+
     return (
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Customer</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice #</th>
-            <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Total</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((inv) => (
-            <tr key={inv.id}>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.customer?.name ?? '-'}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                <Link to={`/finance/ar/invoices/${inv.id}`}>{inv.invoiceNumber}</Link>
-              </td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(inv.totalAmount)}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.status}</td>
+      <div>
+        {canPostInvoices ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              disabled={bulkPostBusy || selectedCount === 0}
+              onClick={async () => {
+                if (selectedCount === 0) return;
+                const ok = window.confirm(`You are about to post ${selectedCount} invoice(s). This action cannot be undone.`);
+                if (!ok) return;
+
+                setBulkPostBusy(true);
+                setBulkPostError(null);
+                setBulkPostResult(null);
+                try {
+                  const res = await bulkPostInvoices({ invoiceIds: selectedDraftIds });
+                  setBulkPostResult(res);
+                  load();
+                } catch (e: any) {
+                  setBulkPostError(getApiErrorMessage(e, 'Bulk post failed'));
+                } finally {
+                  setBulkPostBusy(false);
+                }
+              }}
+            >
+              {bulkPostBusy ? 'Posting…' : `Post Selected (${selectedCount})`}
+            </button>
+
+            {bulkPostError ? <div style={{ color: 'crimson' }}>{bulkPostError}</div> : null}
+            {bulkPostResult ? (
+              <div style={{ fontSize: 13, color: '#444' }}>
+                Bulk Post Result: {bulkPostResult.postedCount} posted, {bulkPostResult.failedCount} failed
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              {canPostInvoices ? <th style={{ width: 36, borderBottom: '1px solid #ddd', padding: 8 }} /> : null}
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Customer</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice #</th>
+              <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Total</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((inv) => {
+              const canSelect = canPostInvoices && inv.status === 'DRAFT';
+              return (
+                <tr key={inv.id}>
+                  {canPostInvoices ? (
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      <input
+                        type="checkbox"
+                        disabled={!canSelect || bulkPostBusy}
+                        checked={Boolean(selectedIds[inv.id])}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedIds((prev) => ({ ...prev, [inv.id]: checked }));
+                        }}
+                      />
+                    </td>
+                  ) : null}
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.customer?.name ?? '-'}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                    <Link to={`/finance/ar/invoices/${inv.id}`}>{inv.invoiceNumber}</Link>
+                  </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(inv.totalAmount)}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.status}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {bulkPostResult?.failed?.length ? (
+          <div style={{ marginTop: 10, overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkPostResult.failed.map((f) => (
+                  <tr key={f.invoiceId}>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{f.invoiceId}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', color: 'crimson' }}>{f.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
     );
-  }, [error, loading, rows]);
+  }, [bulkPostBusy, bulkPostError, bulkPostResult, canPostInvoices, error, loading, rows, selectedIds]);
 
   return (
     <div>
@@ -309,8 +414,12 @@ export function InvoicesListPage() {
                 <button type="button" disabled={!importFile || importBusy} onClick={onPreview}>
                   {importBusy ? 'Working...' : 'Preview'}
                 </button>
-                <button type="button" disabled={!importFile || importBusy || (preview ? preview.validCount === 0 : true)} onClick={onImport}>
-                  {importBusy ? 'Working...' : 'Confirm Import'}
+                <button
+                  type="button"
+                  disabled={!importFile || importBusy || importSubmitting || (preview ? preview.validCount === 0 : true)}
+                  onClick={onImport}
+                >
+                  {importSubmitting ? 'Submitting…' : importBusy ? 'Working...' : 'Confirm Import'}
                 </button>
                 <button type="button" disabled={importBusy} onClick={resetImportState}>
                   Reset

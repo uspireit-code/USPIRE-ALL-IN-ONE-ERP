@@ -6,6 +6,7 @@ import {
   IsString,
   IsUUID,
   Min,
+  Max,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -23,6 +24,17 @@ export class CreateCustomerInvoiceLineDto {
 
   @Min(0)
   unitPrice!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  @Max(100)
+  discountPercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  discountAmount?: number;
 }
 
 export class CreateCustomerInvoiceDto {
@@ -79,6 +91,22 @@ export class ListInvoicesQueryDto {
 }
 
 export class PostInvoiceDto {
+  @IsOptional()
+  @IsString()
+  arControlAccountCode?: string;
+}
+
+export class ConfirmInvoicesImportDto {
+  @IsString()
+  importId!: string;
+}
+
+export class BulkPostInvoicesDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  invoiceIds!: string[];
+
   @IsOptional()
   @IsString()
   arControlAccountCode?: string;
