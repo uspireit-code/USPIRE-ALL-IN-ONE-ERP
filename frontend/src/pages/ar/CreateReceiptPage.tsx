@@ -44,11 +44,11 @@ export function CreateReceiptPage() {
     setLoadingLookups(true);
     setError(null);
 
-    Promise.all([listCustomers({ status: 'ACTIVE' }), listInvoices()])
+    Promise.all([listCustomers({ status: 'ACTIVE' }), listInvoices({ status: 'POSTED' })])
       .then(([custs, invs]) => {
         if (!mounted) return;
         setCustomers(custs.items ?? []);
-        setInvoices(invs);
+        setInvoices(invs.items ?? []);
       })
       .catch((err: any) => {
         setError(getApiErrorMessage(err, 'Failed to load lookups'));

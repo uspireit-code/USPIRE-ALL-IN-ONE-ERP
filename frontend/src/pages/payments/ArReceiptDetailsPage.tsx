@@ -38,7 +38,7 @@ export function ArReceiptDetailsPage() {
           return;
         }
 
-        const byId = new Map<string, CustomerInvoice>(invoices.map((i) => [i.id, i] as const));
+        const byId = new Map<string, CustomerInvoice>((invoices.items ?? []).map((i) => [i.id, i] as const));
         const first = p.allocations[0];
         const inv = first ? byId.get(first.sourceId) : undefined;
         setCustomerName(inv?.customer?.name ?? null);

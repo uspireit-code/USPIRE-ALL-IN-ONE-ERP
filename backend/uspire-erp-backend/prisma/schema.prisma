@@ -143,8 +143,6 @@ enum SupplierInvoiceStatus {
 
 enum CustomerInvoiceStatus {
   DRAFT
-  SUBMITTED
-  APPROVED
   POSTED
 }
 
@@ -382,20 +380,20 @@ model CustomerInvoice {
   invoiceNumber String
   invoiceDate   DateTime
   dueDate       DateTime
-  currency      String                @default("USD")
+  currency      String
+  reference     String?
+  subtotal      Decimal               @db.Decimal(18, 2)
+  taxAmount     Decimal               @db.Decimal(18, 2)
   totalAmount   Decimal               @db.Decimal(18, 2)
   status        CustomerInvoiceStatus @default(DRAFT)
   createdById   String
-  approvedById  String?
   postedById    String?
   createdAt     DateTime              @default(now())
-  approvedAt    DateTime?
   postedAt      DateTime?
 
   tenant     Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   customer   Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy  User                  @relation("CustomerInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  approvedBy User?                 @relation("CustomerInvoiceApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   postedBy   User?                 @relation("CustomerInvoicePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
   lines      CustomerInvoiceLine[]
   receiptLines CustomerReceiptLine[]
@@ -588,7 +586,9 @@ model CustomerInvoiceLine {
   customerInvoiceId String
   accountId         String
   description       String
-  amount            Decimal @db.Decimal(18, 2)
+  quantity          Decimal @db.Decimal(18, 6)
+  unitPrice         Decimal @db.Decimal(18, 6)
+  lineTotal         Decimal @db.Decimal(18, 2)
 
   customerInvoice CustomerInvoice @relation(fields: [customerInvoiceId], references: [id], onDelete: Cascade)
   account         Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
@@ -1146,7 +1146,6 @@ model User {
   supplierInvoicesApproved         SupplierInvoice[]           @relation("SupplierInvoiceApprovedBy")
   supplierInvoicesPosted           SupplierInvoice[]           @relation("SupplierInvoicePostedBy")
   customerInvoicesCreated          CustomerInvoice[]           @relation("CustomerInvoiceCreatedBy")
-  customerInvoicesApproved         CustomerInvoice[]           @relation("CustomerInvoiceApprovedBy")
   customerInvoicesPosted           CustomerInvoice[]           @relation("CustomerInvoicePostedBy")
   customerReceiptsCreated          CustomerReceipt[]           @relation("CustomerReceiptCreatedBy")
   customerReceiptsPosted           CustomerReceipt[]           @relation("CustomerReceiptPostedBy")

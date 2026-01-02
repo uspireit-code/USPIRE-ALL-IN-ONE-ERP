@@ -48,18 +48,6 @@ export class ArController {
     return this.ar.createInvoice(req, dto);
   }
 
-  @Post('invoices/:id/submit')
-  @Permissions('AR_INVOICE_SUBMIT')
-  async submitInvoice(@Req() req: Request, @Param('id') id: string) {
-    return this.ar.submitInvoice(req, id);
-  }
-
-  @Post('invoices/:id/approve')
-  @Permissions('AR_INVOICE_APPROVE')
-  async approveInvoice(@Req() req: Request, @Param('id') id: string) {
-    return this.ar.approveInvoice(req, id);
-  }
-
   @Post('invoices/:id/post')
   @Permissions('AR_INVOICE_POST')
   async postInvoice(

@@ -84,30 +84,8 @@ export class ArService {
       );
     }
 
-    const netAmount = this.round2(
-      dto.lines.reduce((s, l) => s + (l.amount ?? 0), 0),
-    );
+    const netAmount = this.round2(dto.lines.reduce((s, l) => s + (l.amount ?? 0), 0));
     this.assertInvoiceLines(dto.lines, netAmount);
-
-    const taxLines = dto.taxLines ?? [];
-    const validatedTax = await this.validateTaxLines({
-      tenantId: tenant.id,
-      sourceType: 'CUSTOMER_INVOICE',
-      expectedRateType: 'OUTPUT',
-      netAmount,
-      taxLines,
-    });
-
-    const expectedGross = this.round2(netAmount + validatedTax.totalTax);
-    if (this.round2(dto.totalAmount) !== expectedGross) {
-      throw new BadRequestException({
-        error: 'Invoice totalAmount must equal net + VAT',
-        netAmount,
-        totalTax: validatedTax.totalTax,
-        expectedGross,
-        totalAmount: this.round2(dto.totalAmount),
-      });
-    }
 
     const accounts = await this.prisma.account.findMany({
       where: {
@@ -134,6 +112,11 @@ export class ArService {
       }
     }
 
+    const currency = 'USD';
+    const subtotal = this.round2(netAmount);
+    const taxAmount = 0;
+    const totalAmount = this.round2(subtotal + taxAmount);
+
     const invoice = await this.prisma.customerInvoice.create({
       data: {
         tenantId: tenant.id,
@@ -141,127 +124,26 @@ export class ArService {
         invoiceNumber: dto.invoiceNumber,
         invoiceDate: new Date(dto.invoiceDate),
         dueDate: new Date(dto.dueDate),
-        totalAmount: dto.totalAmount,
+        currency,
+        subtotal,
+        taxAmount,
+        totalAmount,
         createdById: user.id,
+        status: 'DRAFT',
         lines: {
           create: dto.lines.map((l) => ({
             accountId: l.accountId,
             description: l.description,
-            amount: l.amount,
+            quantity: 1,
+            unitPrice: l.amount,
+            lineTotal: l.amount,
           })),
         },
-      },
-      include: { lines: true, customer: true },
-    });
+      } as any,
+      include: { lines: true, customer: true } as any,
+    } as any);
 
-    if (validatedTax.rows.length > 0) {
-      await this.prisma.invoiceTaxLine.createMany({
-        data: validatedTax.rows.map((t) => ({
-          tenantId: tenant.id,
-          sourceType: 'CUSTOMER_INVOICE',
-          sourceId: invoice.id,
-          taxRateId: t.taxRateId,
-          taxableAmount: t.taxableAmount,
-          taxAmount: t.taxAmount,
-        })),
-      });
-    }
-
-    const createdTaxLines = await this.prisma.invoiceTaxLine.findMany({
-      where: {
-        tenantId: tenant.id,
-        sourceType: 'CUSTOMER_INVOICE',
-        sourceId: invoice.id,
-      },
-      include: { taxRate: { include: { glAccount: true } } },
-    });
-
-    return { ...invoice, taxLines: createdTaxLines };
-  }
-
-  async submitInvoice(req: Request, id: string) {
-    const tenant = req.tenant;
-    const user = req.user;
-
-    if (!tenant || !user) {
-      throw new BadRequestException('Missing tenant or user context');
-    }
-
-    const inv = await this.prisma.customerInvoice.findFirst({
-      where: { id, tenantId: tenant.id },
-      select: { id: true, status: true, createdById: true },
-    });
-
-    if (!inv) {
-      throw new NotFoundException('Invoice not found');
-    }
-
-    if (inv.status !== 'DRAFT') {
-      throw new BadRequestException('Only DRAFT invoices can be submitted');
-    }
-
-    if (inv.createdById !== user.id) {
-      throw new ForbiddenException('Only the creator can submit this invoice');
-    }
-
-    await this.assertTaxIntegrityBeforeSubmit({
-      tenantId: tenant.id,
-      invoiceId: inv.id,
-    });
-
-    return this.prisma.customerInvoice.update({
-      where: { id: inv.id },
-      data: { status: 'SUBMITTED' },
-      include: { lines: true, customer: true },
-    });
-  }
-
-  async approveInvoice(req: Request, id: string) {
-    const tenant = req.tenant;
-    const user = req.user;
-
-    if (!tenant || !user) {
-      throw new BadRequestException('Missing tenant or user context');
-    }
-
-    const inv = await this.prisma.customerInvoice.findFirst({
-      where: { id, tenantId: tenant.id },
-      select: { id: true, status: true, createdById: true },
-    });
-
-    if (!inv) {
-      throw new NotFoundException('Invoice not found');
-    }
-
-    if (inv.status !== 'SUBMITTED') {
-      throw new BadRequestException('Only SUBMITTED invoices can be approved');
-    }
-
-    if (inv.createdById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'AR_INVOICE_APPROVE',
-          conflictingPermission: 'AR_INVOICE_CREATE',
-        },
-      });
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Creator cannot approve own customer invoice',
-      });
-    }
-
-    return this.prisma.customerInvoice.update({
-      where: { id: inv.id },
-      data: {
-        status: 'APPROVED',
-        approvedById: user.id,
-        approvedAt: new Date(),
-      },
-      include: { lines: true, customer: true },
-    });
+    return invoice;
   }
 
   async postInvoice(
@@ -289,106 +171,11 @@ export class ArService {
       throw new BadRequestException('Invoice is already posted');
     }
 
-    if (inv.status !== 'APPROVED') {
-      throw new BadRequestException('Only APPROVED invoices can be posted');
+    if (inv.status !== 'DRAFT') {
+      throw new BadRequestException('Only DRAFT invoices can be posted');
     }
 
-    if (!inv.approvedById) {
-      throw new BadRequestException(
-        'Invoice must have an approver before posting',
-      );
-    }
-
-    if (inv.approvedById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'AR_INVOICE_POST',
-          conflictingPermission: 'AR_INVOICE_APPROVE',
-        },
-      });
-
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'AR_POST',
-            entityType: 'CUSTOMER_INVOICE',
-            entityId: inv.id,
-            action: 'AR_INVOICE_POST',
-            outcome: 'BLOCKED',
-            reason: 'Approver cannot post the same customer invoice',
-            userId: user.id,
-            permissionUsed: 'AR_INVOICE_POST',
-          },
-        })
-        .catch(() => undefined);
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Approver cannot post the same customer invoice',
-      });
-    }
-
-    const netAmount = this.round2(
-      inv.lines.reduce((s, l) => s + Number(l.amount), 0),
-    );
-    this.assertInvoiceLines(
-      inv.lines.map((l) => ({
-        accountId: l.accountId,
-        description: l.description,
-        amount: Number(l.amount),
-      })),
-      netAmount,
-    );
-
-    const taxLines = await this.prisma.invoiceTaxLine.findMany({
-      where: {
-        tenantId: tenant.id,
-        sourceType: 'CUSTOMER_INVOICE',
-        sourceId: inv.id,
-      },
-      include: {
-        taxRate: {
-          select: {
-            id: true,
-            type: true,
-            isActive: true,
-            rate: true,
-            glAccountId: true,
-          },
-        },
-      },
-    });
-
-    const totalTax = this.round2(
-      taxLines.reduce((s, t) => s + Number(t.taxAmount), 0),
-    );
-    const expectedGross = this.round2(netAmount + totalTax);
-    if (this.round2(Number(inv.totalAmount)) !== expectedGross) {
-      throw new BadRequestException({
-        error: 'Invoice totalAmount must equal net + VAT before posting',
-        netAmount,
-        totalTax,
-        expectedGross,
-        totalAmount: this.round2(Number(inv.totalAmount)),
-      });
-    }
-
-    for (const t of taxLines) {
-      if (!t.taxRate.isActive || t.taxRate.type !== 'OUTPUT') {
-        throw new BadRequestException(
-          'Invoice has invalid or inactive OUTPUT VAT rate',
-        );
-      }
-      const expected = this.round2(
-        Number(t.taxableAmount) * Number(t.taxRate.rate),
-      );
-      if (this.round2(Number(t.taxAmount)) !== expected) {
-        throw new BadRequestException('Invoice VAT line failed validation');
-      }
-    }
+    const netAmount = this.round2(inv.lines.reduce((s, l: any) => s + Number(l.lineTotal), 0));
 
     const period = await this.prisma.accountingPeriod.findFirst({
       where: {
@@ -501,15 +288,6 @@ export class ArService {
       );
     }
 
-    const taxByAccountId = new Map<string, number>();
-    for (const t of taxLines) {
-      const prev = taxByAccountId.get(t.taxRate.glAccountId) ?? 0;
-      taxByAccountId.set(
-        t.taxRate.glAccountId,
-        this.round2(prev + Number(t.taxAmount)),
-      );
-    }
-
     const journal = await this.prisma.journalEntry.create({
       data: {
         tenantId: tenant.id,
@@ -524,18 +302,11 @@ export class ArService {
               debit: inv.totalAmount,
               credit: 0,
             },
-            ...inv.lines.map((l) => ({
+            ...inv.lines.map((l: any) => ({
               accountId: l.accountId,
               debit: 0,
-              credit: l.amount,
+              credit: l.lineTotal,
             })),
-            ...[...taxByAccountId.entries()]
-              .filter(([, amt]) => amt !== 0)
-              .map(([accountId, amt]) => ({
-                accountId,
-                debit: 0,
-                credit: amt,
-              })),
           ],
         },
       },
@@ -578,156 +349,6 @@ export class ArService {
       .catch(() => undefined);
 
     return { invoice: updatedInvoice, glJournal: postedJournal };
-  }
-
-  private async validateTaxLines(params: {
-    tenantId: string;
-    sourceType: 'SUPPLIER_INVOICE' | 'CUSTOMER_INVOICE';
-    expectedRateType: 'INPUT' | 'OUTPUT';
-    netAmount: number;
-    taxLines: Array<{
-      taxRateId: string;
-      taxableAmount: number;
-      taxAmount: number;
-    }>;
-  }) {
-    if (!params.taxLines || params.taxLines.length === 0) {
-      return {
-        totalTax: 0,
-        rows: [] as Array<{
-          taxRateId: string;
-          taxableAmount: number;
-          taxAmount: number;
-        }>,
-      };
-    }
-
-    const ids = [...new Set(params.taxLines.map((t) => t.taxRateId))];
-    const rates = await this.prisma.taxRate.findMany({
-      where: {
-        tenantId: params.tenantId,
-        id: { in: ids },
-        isActive: true,
-        type: params.expectedRateType,
-      },
-      select: {
-        id: true,
-        rate: true,
-        type: true,
-        glAccountId: true,
-        isActive: true,
-      },
-    });
-
-    const rateById = new Map(rates.map((r) => [r.id, r] as const));
-    for (const id of ids) {
-      if (!rateById.get(id)) {
-        throw new BadRequestException(
-          `TaxRate not found/active or wrong type: ${id}`,
-        );
-      }
-    }
-
-    const rows = params.taxLines.map((t) => ({
-      taxRateId: t.taxRateId,
-      taxableAmount: this.round2(t.taxableAmount ?? 0),
-      taxAmount: this.round2(t.taxAmount ?? 0),
-    }));
-
-    const totalTaxable = this.round2(
-      rows.reduce((s, r) => s + r.taxableAmount, 0),
-    );
-    if (totalTaxable !== this.round2(params.netAmount)) {
-      throw new BadRequestException({
-        error: 'Taxable amounts must sum to invoice net amount',
-        netAmount: this.round2(params.netAmount),
-        totalTaxable,
-      });
-    }
-
-    for (const r of rows) {
-      const rate = rateById.get(r.taxRateId);
-      const expected = this.round2(r.taxableAmount * Number(rate?.rate ?? 0));
-      if (r.taxAmount !== expected) {
-        throw new BadRequestException({
-          error:
-            'Tax line failed validation: taxableAmount × rate must equal taxAmount',
-          taxRateId: r.taxRateId,
-          taxableAmount: r.taxableAmount,
-          rate: Number(rate?.rate ?? 0),
-          expectedTaxAmount: expected,
-          taxAmount: r.taxAmount,
-        });
-      }
-    }
-
-    const totalTax = this.round2(rows.reduce((s, r) => s + r.taxAmount, 0));
-    return { totalTax, rows };
-  }
-
-  private async assertTaxIntegrityBeforeSubmit(params: {
-    tenantId: string;
-    invoiceId: string;
-  }) {
-    const inv = await this.prisma.customerInvoice.findFirst({
-      where: { id: params.invoiceId, tenantId: params.tenantId },
-      include: { lines: true },
-    });
-
-    if (!inv) {
-      throw new BadRequestException('Invoice not found');
-    }
-
-    const netAmount = this.round2(
-      inv.lines.reduce((s, l) => s + Number(l.amount), 0),
-    );
-    const taxLines = await this.prisma.invoiceTaxLine.findMany({
-      where: {
-        tenantId: params.tenantId,
-        sourceType: 'CUSTOMER_INVOICE',
-        sourceId: inv.id,
-      },
-      include: {
-        taxRate: {
-          select: { id: true, type: true, isActive: true, rate: true },
-        },
-      },
-    });
-
-    if (taxLines.length === 0) {
-      return;
-    }
-
-    const totalTaxable = this.round2(
-      taxLines.reduce((s, t) => s + Number(t.taxableAmount), 0),
-    );
-    if (totalTaxable !== this.round2(netAmount)) {
-      throw new BadRequestException(
-        'Invoice tax taxableAmount does not equal net amount',
-      );
-    }
-
-    for (const t of taxLines) {
-      if (!t.taxRate.isActive || t.taxRate.type !== 'OUTPUT') {
-        throw new BadRequestException(
-          'Invoice has invalid or inactive OUTPUT VAT rate',
-        );
-      }
-      const expected = this.round2(
-        Number(t.taxableAmount) * Number(t.taxRate.rate),
-      );
-      if (this.round2(Number(t.taxAmount)) !== expected) {
-        throw new BadRequestException('Invoice VAT line failed validation');
-      }
-    }
-
-    const totalTax = this.round2(
-      taxLines.reduce((s, t) => s + Number(t.taxAmount), 0),
-    );
-    const expectedGross = this.round2(netAmount + totalTax);
-    if (this.round2(Number(inv.totalAmount)) !== expectedGross) {
-      throw new BadRequestException('Invoice totalAmount must equal net + VAT');
-    }
   }
 
   async listInvoices(req: Request) {

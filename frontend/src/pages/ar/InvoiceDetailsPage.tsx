@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { CustomerInvoice } from '../../services/ar';
-import { approveInvoice, listInvoices, postInvoice, submitInvoice } from '../../services/ar';
+import { getInvoiceById, postInvoice } from '../../services/ar';
+import { getApiErrorMessage } from '../../services/api';
 
 function formatMoney(n: number) {
   return n.toFixed(2);
@@ -12,8 +13,6 @@ export function InvoiceDetailsPage() {
   const { id } = useParams();
   const { hasPermission } = useAuth();
 
-  const canSubmit = hasPermission('AR_INVOICE_SUBMIT');
-  const canApprove = hasPermission('AR_INVOICE_APPROVE');
   const canPost = hasPermission('AR_INVOICE_POST');
 
   const [invoice, setInvoice] = useState<CustomerInvoice | null>(null);
@@ -27,16 +26,21 @@ export function InvoiceDetailsPage() {
     setLoading(true);
     setError(null);
 
-    listInvoices()
-      .then((rows) => {
+    if (!id) {
+      setError('Invoice not found');
+      setLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    getInvoiceById(id)
+      .then((inv) => {
         if (!mounted) return;
-        const found = rows.find((r) => r.id === id) ?? null;
-        setInvoice(found);
-        if (!found) setError('Invoice not found');
+        setInvoice(inv);
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load invoice';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        setError(getApiErrorMessage(err, 'Failed to load invoice'));
       })
       .finally(() => {
         if (!mounted) return;
@@ -51,36 +55,25 @@ export function InvoiceDetailsPage() {
   const allowed = useMemo(() => {
     const status = invoice?.status;
     return {
-      submit: Boolean(invoice) && status === 'DRAFT' && canSubmit,
-      approve: Boolean(invoice) && status === 'SUBMITTED' && canApprove,
-      post: Boolean(invoice) && status === 'APPROVED' && canPost,
+      post: Boolean(invoice) && status === 'DRAFT' && canPost,
     };
-  }, [canApprove, canPost, canSubmit, invoice]);
+  }, [canPost, invoice]);
 
-  async function runAction(kind: 'submit' | 'approve' | 'post') {
+  async function runAction() {
     if (!invoice) return;
 
     setActionError(null);
     setActing(true);
     try {
-      if (kind === 'submit') {
-        const updated = await submitInvoice(invoice.id);
-        setInvoice(updated);
-      } else if (kind === 'approve') {
-        const updated = await approveInvoice(invoice.id);
-        setInvoice(updated);
+      const result = await postInvoice(invoice.id);
+      if (result?.invoice) {
+        setInvoice(result.invoice);
       } else {
-        const result = await postInvoice(invoice.id);
-        if (result?.invoice) {
-          setInvoice(result.invoice);
-        } else {
-          const refreshed = await listInvoices();
-          setInvoice(refreshed.find((r) => r.id === invoice.id) ?? invoice);
-        }
+        const refreshed = await getInvoiceById(invoice.id);
+        setInvoice(refreshed);
       }
     } catch (err: any) {
-      const msg = err?.body?.message ?? err?.body?.error ?? 'Action failed';
-      setActionError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      setActionError(getApiErrorMessage(err, 'Action failed'));
     } finally {
       setActing(false);
     }
@@ -94,7 +87,7 @@ export function InvoiceDetailsPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Invoice {invoice.invoiceNumber}</h2>
-        <Link to="/ar/invoices">Back to list</Link>
+        <Link to="/finance/ar/invoices">Back to list</Link>
       </div>
 
       <div style={{ marginTop: 12 }}>
@@ -108,21 +101,32 @@ export function InvoiceDetailsPage() {
           <b>Due Date:</b> {invoice.dueDate?.slice(0, 10)}
         </div>
         <div>
+          <b>Currency:</b> {invoice.currency}
+        </div>
+        {invoice.reference ? (
+          <div>
+            <b>Reference:</b> {invoice.reference}
+          </div>
+        ) : null}
+        <div>
           <b>Status:</b> {invoice.status}
+        </div>
+        <div>
+          <b>Subtotal:</b> {formatMoney(invoice.subtotal)}
+        </div>
+        <div>
+          <b>Tax:</b> {formatMoney(invoice.taxAmount)}
         </div>
         <div>
           <b>Total:</b> {formatMoney(invoice.totalAmount)}
         </div>
+        <div>
+          <b>Outstanding Balance:</b> {formatMoney(Number(invoice.outstandingBalance ?? invoice.totalAmount))}
+        </div>
       </div>
 
       <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-        <button onClick={() => runAction('submit')} disabled={!allowed.submit || acting}>
-          Submit
-        </button>
-        <button onClick={() => runAction('approve')} disabled={!allowed.approve || acting}>
-          Approve
-        </button>
-        <button onClick={() => runAction('post')} disabled={!allowed.post || acting}>
+        <button onClick={() => runAction()} disabled={!allowed.post || acting}>
           Post
         </button>
       </div>
@@ -135,14 +139,18 @@ export function InvoiceDetailsPage() {
           <thead>
             <tr>
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
-              <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Amount</th>
+              <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
+              <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
+              <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Line Total</th>
             </tr>
           </thead>
           <tbody>
             {invoice.lines.map((l) => (
               <tr key={l.id}>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.description}</td>
-                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.amount))}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(l.quantity ?? 0).toFixed(2)}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.unitPrice ?? 0))}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.lineTotal ?? 0))}</td>
               </tr>
             ))}
           </tbody>

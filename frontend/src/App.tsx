@@ -267,6 +267,8 @@ export default function App() {
               <Route path="finance/ar/customers/:id" element={<CustomerDetailsPage />} />
               <Route path="finance/ar/customers/:id/edit" element={<EditCustomerPage />} />
               <Route path="finance/ar/invoices" element={<ArInvoicesListPage />} />
+              <Route path="finance/ar/invoices/new" element={<CreateArInvoicePage />} />
+              <Route path="finance/ar/invoices/:id" element={<ArInvoiceDetailsPage />} />
               <Route path="finance/ar/receipts" element={<ReceiptsPage />} />
               <Route path="finance/ar/receipts/new" element={<CreateReceiptPage />} />
               <Route path="finance/ar/receipts/:id" element={<ReceiptDetailsPage />} />

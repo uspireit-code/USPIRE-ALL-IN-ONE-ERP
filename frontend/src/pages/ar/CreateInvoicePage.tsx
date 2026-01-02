@@ -8,7 +8,8 @@ import { getApiErrorMessage } from '../../services/api';
 type Line = {
   accountId: string;
   description: string;
-  amount: string;
+  quantity: string;
+  unitPrice: string;
 };
 
 function todayIsoDate() {
@@ -32,10 +33,13 @@ export function CreateInvoicePage() {
   const [saving, setSaving] = useState(false);
 
   const [customerId, setCustomerId] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayIsoDate());
   const [dueDate, setDueDate] = useState(todayIsoDate());
-  const [lines, setLines] = useState<Line[]>([{ accountId: '', description: '', amount: '' }]);
+  const [currency, setCurrency] = useState('USD');
+  const [reference, setReference] = useState('');
+  const [lines, setLines] = useState<Line[]>([
+    { accountId: '', description: '', quantity: '1', unitPrice: '' },
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -45,7 +49,7 @@ export function CreateInvoicePage() {
     Promise.all([listCustomers(), listEligibleAccounts()])
       .then(([custs, accs]) => {
         if (!mounted) return;
-        setCustomers(custs.items ?? []);
+        setCustomers((custs.items ?? []).filter((c) => c.status === 'ACTIVE'));
         setAccounts(accs);
       })
       .catch((err: any) => {
@@ -61,9 +65,16 @@ export function CreateInvoicePage() {
     };
   }, []);
 
-  const totalAmount = useMemo(() => {
-    const sum = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
-    return round2(sum);
+  const computed = useMemo(() => {
+    const lineTotals = lines.map((l) => {
+      const qty = Number(l.quantity) || 0;
+      const unitPrice = Number(l.unitPrice) || 0;
+      return round2(qty * unitPrice);
+    });
+    const subtotal = round2(lineTotals.reduce((s, v) => s + v, 0));
+    const taxAmount = 0;
+    const totalAmount = round2(subtotal + taxAmount);
+    return { lineTotals, subtotal, taxAmount, totalAmount };
   }, [lines]);
 
   function updateLine(idx: number, patch: Partial<Line>) {
@@ -71,7 +82,7 @@ export function CreateInvoicePage() {
   }
 
   function addLine() {
-    setLines((prev) => [...prev, { accountId: '', description: '', amount: '' }]);
+    setLines((prev) => [...prev, { accountId: '', description: '', quantity: '1', unitPrice: '' }]);
   }
 
   function removeLine(idx: number) {
@@ -87,7 +98,7 @@ export function CreateInvoicePage() {
 
     setError(null);
 
-    if (!customerId || !invoiceNumber || !invoiceDate || !dueDate) {
+    if (!customerId || !invoiceDate || !dueDate || !currency) {
       setError('Missing required fields');
       return;
     }
@@ -98,8 +109,18 @@ export function CreateInvoicePage() {
     }
 
     for (const l of lines) {
-      if (!l.accountId || !l.description || !(Number(l.amount) > 0)) {
-        setError('Each line requires account, description, and amount > 0');
+      const qty = Number(l.quantity);
+      const unitPrice = Number(l.unitPrice);
+      if (!l.accountId || !l.description) {
+        setError('Each line requires account and description');
+        return;
+      }
+      if (!(qty > 0)) {
+        setError('Each line requires quantity > 0');
+        return;
+      }
+      if (!(unitPrice >= 0)) {
+        setError('Each line requires unit price >= 0');
         return;
       }
     }
@@ -108,14 +129,19 @@ export function CreateInvoicePage() {
     try {
       const created = await createInvoice({
         customerId,
-        invoiceNumber,
         invoiceDate,
         dueDate,
-        totalAmount,
-        lines: lines.map((l) => ({ accountId: l.accountId, description: l.description, amount: Number(l.amount) })),
+        currency: currency.trim(),
+        reference: reference.trim() || undefined,
+        lines: lines.map((l) => ({
+          accountId: l.accountId,
+          description: l.description,
+          quantity: Number(l.quantity) || 1,
+          unitPrice: Number(l.unitPrice) || 0,
+        })),
       });
 
-      navigate(`/ar/invoices/${created.id}`, { replace: true });
+      navigate(`/finance/ar/invoices/${created.id}`, { replace: true });
     } catch (err: any) {
       const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to create invoice';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -148,7 +174,7 @@ export function CreateInvoicePage() {
 
         <label>
           Invoice Number
-          <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} required style={{ width: '100%' }} />
+          <input value="(auto-generated)" readOnly style={{ width: '100%' }} />
         </label>
 
         <div style={{ display: 'flex', gap: 12 }}>
@@ -159,6 +185,17 @@ export function CreateInvoicePage() {
           <label style={{ flex: 1 }}>
             Due Date
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required style={{ width: '100%' }} />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <label style={{ flex: 1 }}>
+            Currency
+            <input value={currency} onChange={(e) => setCurrency(e.target.value)} required style={{ width: '100%' }} />
+          </label>
+          <label style={{ flex: 2 }}>
+            Reference (optional)
+            <input value={reference} onChange={(e) => setReference(e.target.value)} style={{ width: '100%' }} />
           </label>
         </div>
 
@@ -175,7 +212,9 @@ export function CreateInvoicePage() {
               <tr>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Account</th>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
-                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Amount</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Line Total</th>
                 <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
               </tr>
             </thead>
@@ -196,8 +235,24 @@ export function CreateInvoicePage() {
                     <input value={l.description} onChange={(e) => updateLine(idx, { description: e.target.value })} required style={{ width: '100%' }} />
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                    <input value={l.amount} onChange={(e) => updateLine(idx, { amount: e.target.value })} required inputMode="decimal" style={{ width: 120, textAlign: 'right' }} />
+                    <input
+                      value={l.quantity}
+                      onChange={(e) => updateLine(idx, { quantity: e.target.value })}
+                      required
+                      inputMode="decimal"
+                      style={{ width: 90, textAlign: 'right' }}
+                    />
                   </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                    <input
+                      value={l.unitPrice}
+                      onChange={(e) => updateLine(idx, { unitPrice: e.target.value })}
+                      required
+                      inputMode="decimal"
+                      style={{ width: 120, textAlign: 'right' }}
+                    />
+                  </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{computed.lineTotals[idx]?.toFixed(2)}</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
                     <button type="button" onClick={() => removeLine(idx)} disabled={lines.length <= 1}>
                       Remove
@@ -210,7 +265,11 @@ export function CreateInvoicePage() {
 
           <div style={{ marginTop: 8, textAlign: 'right' }}>
             <div>
-              Total Amount: <b>{totalAmount.toFixed(2)}</b>
+              Subtotal: <b>{computed.subtotal.toFixed(2)}</b>
+            </div>
+            <div>Tax: <b>{computed.taxAmount.toFixed(2)}</b></div>
+            <div>
+              Total: <b>{computed.totalAmount.toFixed(2)}</b>
             </div>
           </div>
         </div>
@@ -219,7 +278,7 @@ export function CreateInvoicePage() {
           <button type="submit" disabled={!canCreate || saving || loadingLookups}>
             {saving ? 'Creating...' : 'Create (DRAFT)'}
           </button>
-          <button type="button" onClick={() => navigate('/ar/invoices')}>
+          <button type="button" onClick={() => navigate('/finance/ar/invoices')}>
             Cancel
           </button>
         </div>

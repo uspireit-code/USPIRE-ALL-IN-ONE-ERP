@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { CustomerInvoice } from '../../services/ar';
-import { listInvoices } from '../../services/ar';
+import {
+  downloadInvoicesImportCsvTemplate,
+  downloadInvoicesImportXlsxTemplate,
+  importInvoices,
+  listInvoices,
+  previewInvoicesImport,
+  type InvoicesImportPreviewResponse,
+  type InvoicesImportResponse,
+} from '../../services/ar';
+import { getApiErrorMessage } from '../../services/api';
 
 function formatMoney(n: number) {
   return n.toFixed(2);
@@ -11,24 +20,35 @@ function formatMoney(n: number) {
 export function InvoicesListPage() {
   const { hasPermission } = useAuth();
   const canCreateInvoice = hasPermission('AR_INVOICE_CREATE');
+  const canImportInvoices = hasPermission('AR_INVOICE_CREATE');
 
   const [rows, setRows] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<InvoicesImportPreviewResponse | null>(null);
+  const [importResult, setImportResult] = useState<InvoicesImportResponse | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const acceptExt = ['.csv', '.xlsx'];
+  const maxBytes = 10 * 1024 * 1024;
+
+  const load = () => {
     let mounted = true;
     setLoading(true);
     setError(null);
 
     listInvoices()
-      .then((data) => {
+      .then((res) => {
         if (!mounted) return;
-        setRows(data);
+        setRows(res.items ?? []);
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load invoices';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        setError(getApiErrorMessage(err, 'Failed to load invoices'));
       })
       .finally(() => {
         if (!mounted) return;
@@ -38,7 +58,117 @@ export function InvoicesListPage() {
     return () => {
       mounted = false;
     };
+  };
+
+  useEffect(() => {
+    return load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const resetImportState = () => {
+    setImportFile(null);
+    setPreview(null);
+    setImportResult(null);
+    setImportError(null);
+    setImportBusy(false);
+    if (importFileInputRef.current) importFileInputRef.current.value = '';
+  };
+
+  const triggerDownload = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const onOpenImport = () => {
+    if (!canImportInvoices) return;
+    resetImportState();
+    setImportOpen(true);
+  };
+
+  const onCloseImport = () => setImportOpen(false);
+
+  const selectImportFile = (f: File | null) => {
+    setImportError(null);
+    setImportResult(null);
+    setPreview(null);
+
+    if (!f) {
+      setImportFile(null);
+      return;
+    }
+
+    const name = f.name || '';
+    const lower = name.toLowerCase();
+    const okExt = acceptExt.some((ext) => lower.endsWith(ext));
+    if (!okExt) {
+      setImportFile(null);
+      setImportError('Unsupported file type. Please upload a .csv or .xlsx file.');
+      return;
+    }
+    if (f.size > maxBytes) {
+      setImportFile(null);
+      setImportError('File is too large. Please upload a file smaller than 10 MB.');
+      return;
+    }
+
+    setImportFile(f);
+  };
+
+  const onDownloadCsv = async () => {
+    setImportError(null);
+    try {
+      const out = await downloadInvoicesImportCsvTemplate();
+      triggerDownload(out.blob, out.fileName);
+    } catch (e: any) {
+      setImportError(getApiErrorMessage(e, 'Failed to download CSV template'));
+    }
+  };
+
+  const onDownloadXlsx = async () => {
+    setImportError(null);
+    try {
+      const out = await downloadInvoicesImportXlsxTemplate();
+      triggerDownload(out.blob, out.fileName);
+    } catch (e: any) {
+      setImportError(getApiErrorMessage(e, 'Failed to download XLSX template'));
+    }
+  };
+
+  const onPreview = async () => {
+    if (!importFile) return;
+    setImportBusy(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const res = await previewInvoicesImport(importFile);
+      setPreview(res);
+    } catch (e: any) {
+      setImportError(getApiErrorMessage(e, 'Preview failed'));
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const onImport = async () => {
+    if (!importFile) return;
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const res = await importInvoices(importFile);
+      setImportResult(res);
+      load();
+    } catch (e: any) {
+      setImportError(getApiErrorMessage(e, 'Import failed'));
+    } finally {
+      setImportBusy(false);
+    }
+  };
 
   const content = useMemo(() => {
     if (loading) return <div>Loading...</div>;
@@ -59,7 +189,7 @@ export function InvoicesListPage() {
             <tr key={inv.id}>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.customer?.name ?? '-'}</td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                <Link to={`/ar/invoices/${inv.id}`}>{inv.invoiceNumber}</Link>
+                <Link to={`/finance/ar/invoices/${inv.id}`}>{inv.invoiceNumber}</Link>
               </td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(inv.totalAmount)}</td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.status}</td>
@@ -74,10 +204,180 @@ export function InvoicesListPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Customer Invoices</h2>
-        {canCreateInvoice ? <Link to="/ar/invoices/new">Create Invoice</Link> : null}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {canImportInvoices ? (
+            <button type="button" onClick={onOpenImport}>
+              Import Invoices
+            </button>
+          ) : null}
+          {canCreateInvoice ? <Link to="/finance/ar/invoices/new">Create Invoice</Link> : null}
+        </div>
       </div>
 
       {content}
+
+      {importOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(11,12,30,0.38)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 60,
+          }}
+          onMouseDown={(e) => {
+            if (e.currentTarget === e.target) onCloseImport();
+          }}
+        >
+          <div
+            style={{
+              width: 1060,
+              maxWidth: '96vw',
+              maxHeight: '85vh',
+              background: '#fff',
+              borderRadius: 16,
+              border: '1px solid rgba(11,12,30,0.08)',
+              boxShadow: '0 10px 30px rgba(11,12,30,0.20)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div
+              style={{
+                padding: 16,
+                borderBottom: '1px solid rgba(11,12,30,0.08)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>Import Invoices (Draft Only)</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(11,12,30,0.62)' }}>
+                  Upload a CSV/XLSX template. Valid rows will create DRAFT invoices; invalid rows will be rejected with reasons.
+                </div>
+              </div>
+              <button type="button" onClick={onCloseImport}>
+                Close
+              </button>
+            </div>
+
+            <div style={{ padding: 16, overflowY: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button type="button" disabled={importBusy} onClick={onDownloadCsv}>
+                  Download CSV Template
+                </button>
+                <button type="button" disabled={importBusy} onClick={onDownloadXlsx}>
+                  Download XLSX Template
+                </button>
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept={acceptExt.join(',')}
+                  onChange={(e) => selectImportFile(e.target.files?.[0] ?? null)}
+                  disabled={importBusy}
+                />
+                {importFile ? <div style={{ marginTop: 6, fontSize: 12, color: '#444' }}>{importFile.name}</div> : null}
+              </div>
+
+              <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button type="button" disabled={!importFile || importBusy} onClick={onPreview}>
+                  {importBusy ? 'Working...' : 'Preview'}
+                </button>
+                <button type="button" disabled={!importFile || importBusy || (preview ? preview.validCount === 0 : true)} onClick={onImport}>
+                  {importBusy ? 'Working...' : 'Confirm Import'}
+                </button>
+                <button type="button" disabled={importBusy} onClick={resetImportState}>
+                  Reset
+                </button>
+              </div>
+
+              {importError ? <div style={{ marginTop: 12, color: 'crimson' }}>{importError}</div> : null}
+
+              {preview ? (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, color: '#444' }}>
+                    Preview: {preview.totalRows} rows ({preview.validCount} valid, {preview.invalidCount} invalid)
+                  </div>
+                  <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Row</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Customer Code</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice Date</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Due Date</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Revenue Acct</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Currency</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Errors</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.rows.map((r) => {
+                          const invalid = (r.errors ?? []).length > 0;
+                          return (
+                            <tr key={r.rowNumber} style={{ background: invalid ? 'rgba(220,20,60,0.08)' : 'transparent' }}>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.rowNumber}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.customerCode}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.invoiceDate}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.dueDate}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.revenueAccountCode}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{r.currency}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.quantity ?? 0).toFixed(2)}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{Number(r.unitPrice ?? 0).toFixed(2)}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee', color: invalid ? 'crimson' : '#444' }}>
+                                {(r.errors ?? []).join('; ')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+
+              {importResult ? (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, color: '#444' }}>
+                    Import Result: {importResult.createdCount} created, {importResult.failedCount} failed (total {importResult.totalRows})
+                  </div>
+                  {importResult.failedRows.length > 0 ? (
+                    <div style={{ marginTop: 10, overflowX: 'auto' }}>
+                      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Row</th>
+                            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResult.failedRows.map((fr) => (
+                            <tr key={fr.rowNumber}>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{fr.rowNumber}</td>
+                              <td style={{ padding: 8, borderBottom: '1px solid #eee', color: 'crimson' }}>{fr.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -49,7 +49,7 @@ export function CreateArReceiptPage() {
       .then(([banks, invs]) => {
         if (!mounted) return;
         setBankAccounts(banks);
-        const posted = invs.filter((i) => i.status === 'POSTED');
+        const posted = (invs.items ?? []).filter((i) => i.status === 'POSTED');
         setInvoices(posted);
         setAllocations(
           posted.map((i) => ({

@@ -28,7 +28,7 @@ export function ArReceiptsListPage() {
       .then(([payments, arInvoices]) => {
         if (!mounted) return;
 
-        const invoiceById = new Map<string, CustomerInvoice>(arInvoices.map((i) => [i.id, i] as const));
+        const invoiceById = new Map<string, CustomerInvoice>((arInvoices.items ?? []).map((i) => [i.id, i] as const));
 
         const filtered = payments
           .filter((p) => p.type === 'CUSTOMER_RECEIPT')

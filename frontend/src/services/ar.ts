@@ -30,7 +30,9 @@ export type CustomerInvoiceLine = {
   id: string;
   accountId: string;
   description: string;
-  amount: number;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
 };
 
 export type CustomerInvoice = {
@@ -39,16 +41,54 @@ export type CustomerInvoice = {
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
+  currency: string;
+  reference?: string | null;
+  subtotal: number;
+  taxAmount: number;
   totalAmount: number;
-  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED';
+  outstandingBalance?: number;
+  status: 'DRAFT' | 'POSTED';
   createdAt: string;
   createdById: string;
-  approvedById?: string | null;
-  approvedAt?: string | null;
   postedById?: string | null;
   postedAt?: string | null;
   customer: Customer;
   lines: CustomerInvoiceLine[];
+};
+
+export type InvoicesListResponse = {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: CustomerInvoice[];
+};
+
+export type InvoicesImportPreviewRow = {
+  rowNumber: number;
+  customerCode: string;
+  invoiceDate: string;
+  dueDate: string;
+  revenueAccountCode: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  currency: string;
+  reference?: string;
+  errors: string[];
+};
+
+export type InvoicesImportPreviewResponse = {
+  totalRows: number;
+  validCount: number;
+  invalidCount: number;
+  rows: InvoicesImportPreviewRow[];
+};
+
+export type InvoicesImportResponse = {
+  totalRows: number;
+  createdCount: number;
+  failedCount: number;
+  failedRows: Array<{ rowNumber: number; reason: string }>;
 };
 
 export type ReceiptStatus = 'DRAFT' | 'POSTED' | 'VOIDED';
@@ -238,44 +278,88 @@ export async function listEligibleAccounts() {
   return apiFetch<AccountLookup[]>('/ar/accounts', { method: 'GET' });
 }
 
-export async function listInvoices() {
-  return apiFetch<CustomerInvoice[]>('/ar/invoices', { method: 'GET' });
+export async function listInvoices(params?: {
+  page?: number;
+  pageSize?: number;
+  status?: 'DRAFT' | 'POSTED';
+  customerId?: string;
+  search?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+  if (params?.status) q.set('status', String(params.status));
+  if (params?.customerId) q.set('customerId', String(params.customerId));
+  if (params?.search) q.set('search', String(params.search));
+
+  const qs = q.toString();
+  return apiFetch<InvoicesListResponse>(
+    `/finance/ar/invoices${qs ? `?${qs}` : ''}`,
+    { method: 'GET' },
+  );
+}
+
+export async function getInvoiceById(id: string) {
+  return apiFetch<CustomerInvoice>(`/finance/ar/invoices/${id}`, { method: 'GET' });
 }
 
 export async function createInvoice(params: {
   customerId: string;
-  invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
-  totalAmount: number;
-  lines: Array<{ accountId: string; description: string; amount: number }>;
+  currency: string;
+  reference?: string;
+  lines: Array<{
+    accountId: string;
+    description: string;
+    quantity?: number;
+    unitPrice: number;
+  }>;
 }) {
-  return apiFetch<CustomerInvoice>('/ar/invoices', {
+  return apiFetch<CustomerInvoice>('/finance/ar/invoices', {
     method: 'POST',
     body: JSON.stringify({
       customerId: params.customerId,
-      invoiceNumber: params.invoiceNumber,
       invoiceDate: params.invoiceDate,
       dueDate: params.dueDate,
-      totalAmount: params.totalAmount,
+      currency: params.currency,
+      reference: params.reference || undefined,
       lines: params.lines,
     }),
   });
 }
 
-export async function submitInvoice(id: string) {
-  return apiFetch<CustomerInvoice>(`/ar/invoices/${id}/submit`, { method: 'POST' });
-}
-
-export async function approveInvoice(id: string) {
-  return apiFetch<CustomerInvoice>(`/ar/invoices/${id}/approve`, { method: 'POST' });
-}
-
 export async function postInvoice(id: string, params?: { arControlAccountCode?: string }) {
-  return apiFetch<any>(`/ar/invoices/${id}/post`, {
+  return apiFetch<any>(`/finance/ar/invoices/${id}/post`, {
     method: 'POST',
     body: JSON.stringify({ arControlAccountCode: params?.arControlAccountCode || undefined }),
   });
+}
+
+export async function previewInvoicesImport(file: File) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  return apiFetch<InvoicesImportPreviewResponse>('/finance/ar/invoices/import/preview', {
+    method: 'POST',
+    body: fd,
+  });
+}
+
+export async function importInvoices(file: File) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  return apiFetch<InvoicesImportResponse>('/finance/ar/invoices/import', {
+    method: 'POST',
+    body: fd,
+  });
+}
+
+export async function downloadInvoicesImportCsvTemplate() {
+  return downloadBlob('/finance/ar/invoices/import/template.csv');
+}
+
+export async function downloadInvoicesImportXlsxTemplate() {
+  return downloadBlob('/finance/ar/invoices/import/template.xlsx');
 }
 
 export async function listReceipts() {
