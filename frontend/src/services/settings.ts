@@ -33,6 +33,7 @@ export type TenantSystemConfig = {
   secondaryColor: string | null;
   accentColor: string | null;
   secondaryAccentColor: string | null;
+  arControlAccountId?: string | null;
   defaultBankClearingAccountId?: string | null;
   unappliedReceiptsAccountId?: string | null;
   updatedAt: string;

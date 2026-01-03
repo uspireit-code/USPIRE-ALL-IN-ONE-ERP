@@ -61,6 +61,11 @@ export function SettingsSystemPage() {
   const [defaultBankClearingAccountId, setDefaultBankClearingAccountId] = useState<string>('');
   const [bankClearingSearch, setBankClearingSearch] = useState('');
   const [bankClearingPickerOpen, setBankClearingPickerOpen] = useState(false);
+
+  const [arControlAccountId, setArControlAccountId] = useState<string>('');
+  const [arControlSearch, setArControlSearch] = useState('');
+  const [arControlPickerOpen, setArControlPickerOpen] = useState(false);
+
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<GlAccountLookup[]>([]);
@@ -106,6 +111,10 @@ export function SettingsSystemPage() {
       setDefaultBankClearingAccountId(s.defaultBankClearingAccountId ?? '');
       setBankClearingSearch('');
       setBankClearingPickerOpen(false);
+
+      setArControlAccountId(s.arControlAccountId ?? '');
+      setArControlSearch('');
+      setArControlPickerOpen(false);
 
       setPendingFaviconFile(null);
       setFaviconPreviewUrl((prev) => {
@@ -159,9 +168,11 @@ export function SettingsSystemPage() {
     ? accountById.get(defaultBankClearingAccountId)
     : undefined;
 
+  const selectedArControlAccount = arControlAccountId ? accountById.get(arControlAccountId) : undefined;
+
   const bankClearingCandidates = useMemo(() => {
     const q = bankClearingSearch.trim().toLowerCase();
-    const base = (accounts ?? []).filter((a) => a.isActive);
+    const base = (accounts ?? []).filter((a) => a.isActive && a.type === 'ASSET');
     if (!q) return base.slice(0, 12);
     const filtered = base.filter((a) => {
       const code = String(a.code ?? '').toLowerCase();
@@ -170,6 +181,18 @@ export function SettingsSystemPage() {
     });
     return filtered.slice(0, 12);
   }, [accounts, bankClearingSearch]);
+
+  const arControlCandidates = useMemo(() => {
+    const q = arControlSearch.trim().toLowerCase();
+    const base = (accounts ?? []).filter((a) => a.isActive && a.type === 'ASSET');
+    if (!q) return base.slice(0, 12);
+    const filtered = base.filter((a) => {
+      const code = String(a.code ?? '').toLowerCase();
+      const name = String(a.name ?? '').toLowerCase();
+      return code.includes(q) || name.includes(q);
+    });
+    return filtered.slice(0, 12);
+  }, [accounts, arControlSearch]);
 
   useEffect(() => {
     setPreviewOverrides({
@@ -204,10 +227,11 @@ export function SettingsSystemPage() {
       (system.accentColor ?? '') !== accentColor.trim() ||
       (system.secondaryColor ?? '') !== secondaryColor.trim() ||
       (system.secondaryAccentColor ?? '') !== secondaryAccentColor.trim() ||
+      (system.arControlAccountId ?? '') !== arControlAccountId.trim() ||
       (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
       Boolean(pendingFaviconFile)
     );
-  }, [accentColor, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, secondaryAccentColor, secondaryColor, system, timezone]);
+  }, [accentColor, arControlAccountId, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, secondaryAccentColor, secondaryColor, system, timezone]);
 
   async function onPickFavicon() {
     faviconInputRef.current?.click();
@@ -267,6 +291,7 @@ export function SettingsSystemPage() {
         secondaryColor: secondaryColor.trim() ? secondaryColor.trim() : null,
         accentColor: accentColor.trim() ? accentColor.trim() : null,
         secondaryAccentColor: secondaryAccentColor.trim() ? secondaryAccentColor.trim() : null,
+        arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
         defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
       });
 
@@ -553,6 +578,96 @@ export function SettingsSystemPage() {
                           setDefaultBankClearingAccountId(a.id);
                           setBankClearingSearch(`${a.code} – ${a.name}`);
                           setBankClearingPickerOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          background: 'transparent',
+                          border: 0,
+                          borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary }}>{a.code}</div>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{a.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Field>
+
+            <Field
+              label="Accounts Receivable (AR) Control Account"
+              hint="Required to post customer receipts. Search by account code or name. Asset accounts only."
+            >
+              <div
+                style={{ position: 'relative' }}
+                onFocus={() => setArControlPickerOpen(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setArControlPickerOpen(false), 150);
+                }}
+              >
+                <Input
+                  value={arControlSearch}
+                  disabled={loading || saving || !system || accountsLoading}
+                  onChange={(e) => {
+                    setArControlSearch(e.target.value);
+                    setArControlPickerOpen(true);
+                  }}
+                  placeholder={selectedArControlAccount ? `${selectedArControlAccount.code} – ${selectedArControlAccount.name}` : 'Search account…'}
+                />
+
+                {accountsError ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.status.errorBorder }}>
+                    {accountsError}
+                  </div>
+                ) : null}
+
+                {selectedArControlAccount ? (
+                  <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+                      Selected: <b>{selectedArControlAccount.code}</b> — {selectedArControlAccount.name}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      disabled={loading || saving || !system}
+                      onClick={() => {
+                        setArControlAccountId('');
+                        setArControlSearch('');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                ) : null}
+
+                {arControlPickerOpen && !accountsLoading && arControlCandidates.length > 0 ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      left: 0,
+                      right: 0,
+                      marginTop: 6,
+                      border: `1px solid ${tokens.colors.border.default}`,
+                      borderRadius: 10,
+                      background: '#fff',
+                      boxShadow: '0 10px 24px rgba(11,12,30,0.12)',
+                      overflow: 'hidden',
+                      maxHeight: 280,
+                    }}
+                  >
+                    {arControlCandidates.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setArControlAccountId(a.id);
+                          setArControlSearch(`${a.code} – ${a.name}`);
+                          setArControlPickerOpen(false);
                         }}
                         style={{
                           width: '100%',
