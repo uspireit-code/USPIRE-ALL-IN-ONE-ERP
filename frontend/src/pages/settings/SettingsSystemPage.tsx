@@ -11,6 +11,7 @@ import { roleDisplayMap } from '../../roleDisplayMap';
 import { useBrandColors, useBranding } from '../../branding/BrandingContext';
 import { useAuth } from '../../auth/AuthContext';
 import { setupTaxControlAccounts, type SetupTaxControlAccountsResponse } from '../../services/coa';
+import { listGlAccounts, type GlAccountLookup } from '../../services/gl';
 
 function Field(props: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -57,6 +58,13 @@ export function SettingsSystemPage() {
   const [secondaryColor, setSecondaryColor] = useState('');
   const [secondaryAccentColor, setSecondaryAccentColor] = useState('');
 
+  const [defaultBankClearingAccountId, setDefaultBankClearingAccountId] = useState<string>('');
+  const [bankClearingSearch, setBankClearingSearch] = useState('');
+  const [bankClearingPickerOpen, setBankClearingPickerOpen] = useState(false);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<GlAccountLookup[]>([]);
+
   const [pendingFaviconFile, setPendingFaviconFile] = useState<File | null>(null);
   const [faviconPreviewUrl, setFaviconPreviewUrl] = useState<string | null>(null);
   const faviconInputRef = useRef<HTMLInputElement | null>(null);
@@ -95,6 +103,10 @@ export function SettingsSystemPage() {
       setSecondaryColor(s.secondaryColor ?? '');
       setSecondaryAccentColor(s.secondaryAccentColor ?? '');
 
+      setDefaultBankClearingAccountId(s.defaultBankClearingAccountId ?? '');
+      setBankClearingSearch('');
+      setBankClearingPickerOpen(false);
+
       setPendingFaviconFile(null);
       setFaviconPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -118,6 +130,46 @@ export function SettingsSystemPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadAccounts() {
+      setAccountsError(null);
+      setAccountsLoading(true);
+      try {
+        const rows = await listGlAccounts();
+        if (!mounted) return;
+        setAccounts(rows ?? []);
+      } catch (e) {
+        if (!mounted) return;
+        setAccountsError(getApiErrorMessage(e, 'Failed to load GL accounts'));
+      } finally {
+        if (!mounted) return;
+        setAccountsLoading(false);
+      }
+    }
+    void loadAccounts();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a] as const)), [accounts]);
+  const selectedBankClearingAccount = defaultBankClearingAccountId
+    ? accountById.get(defaultBankClearingAccountId)
+    : undefined;
+
+  const bankClearingCandidates = useMemo(() => {
+    const q = bankClearingSearch.trim().toLowerCase();
+    const base = (accounts ?? []).filter((a) => a.isActive);
+    if (!q) return base.slice(0, 12);
+    const filtered = base.filter((a) => {
+      const code = String(a.code ?? '').toLowerCase();
+      const name = String(a.name ?? '').toLowerCase();
+      return code.includes(q) || name.includes(q);
+    });
+    return filtered.slice(0, 12);
+  }, [accounts, bankClearingSearch]);
 
   useEffect(() => {
     setPreviewOverrides({
@@ -152,9 +204,10 @@ export function SettingsSystemPage() {
       (system.accentColor ?? '') !== accentColor.trim() ||
       (system.secondaryColor ?? '') !== secondaryColor.trim() ||
       (system.secondaryAccentColor ?? '') !== secondaryAccentColor.trim() ||
+      (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
       Boolean(pendingFaviconFile)
     );
-  }, [accentColor, country, dateFormat, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, secondaryAccentColor, secondaryColor, system, timezone]);
+  }, [accentColor, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, secondaryAccentColor, secondaryColor, system, timezone]);
 
   async function onPickFavicon() {
     faviconInputRef.current?.click();
@@ -214,6 +267,7 @@ export function SettingsSystemPage() {
         secondaryColor: secondaryColor.trim() ? secondaryColor.trim() : null,
         accentColor: accentColor.trim() ? accentColor.trim() : null,
         secondaryAccentColor: secondaryAccentColor.trim() ? secondaryAccentColor.trim() : null,
+        defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
       });
 
       setSystem(updated);
@@ -422,6 +476,102 @@ export function SettingsSystemPage() {
                 <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.muted }}>Only affects demo UX features (if present). No accounting data is changed.</div>
               </div>
             </label>
+
+            <div style={{ height: 1, background: tokens.colors.border.subtle }} />
+
+            <Field
+              label="Default Bank Clearing Account"
+              hint="Optional here, but required to post customer receipts. Search by account code or name."
+            >
+              <div
+                style={{ position: 'relative' }}
+                onFocus={() => setBankClearingPickerOpen(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setBankClearingPickerOpen(false), 150);
+                }}
+              >
+                <Input
+                  value={bankClearingSearch}
+                  disabled={loading || saving || !system || accountsLoading}
+                  onChange={(e) => {
+                    setBankClearingSearch(e.target.value);
+                    setBankClearingPickerOpen(true);
+                  }}
+                  placeholder={
+                    selectedBankClearingAccount
+                      ? `${selectedBankClearingAccount.code} – ${selectedBankClearingAccount.name}`
+                      : 'Search account…'
+                  }
+                />
+
+                {accountsError ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.status.errorBorder }}>
+                    {accountsError}
+                  </div>
+                ) : null}
+
+                {selectedBankClearingAccount ? (
+                  <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+                      Selected: <b>{selectedBankClearingAccount.code}</b> — {selectedBankClearingAccount.name}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      disabled={loading || saving || !system}
+                      onClick={() => {
+                        setDefaultBankClearingAccountId('');
+                        setBankClearingSearch('');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                ) : null}
+
+                {bankClearingPickerOpen && !accountsLoading && bankClearingCandidates.length > 0 ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      left: 0,
+                      right: 0,
+                      marginTop: 6,
+                      border: `1px solid ${tokens.colors.border.default}`,
+                      borderRadius: 10,
+                      background: '#fff',
+                      boxShadow: '0 10px 24px rgba(11,12,30,0.12)',
+                      overflow: 'hidden',
+                      maxHeight: 280,
+                    }}
+                  >
+                    {bankClearingCandidates.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setDefaultBankClearingAccountId(a.id);
+                          setBankClearingSearch(`${a.code} – ${a.name}`);
+                          setBankClearingPickerOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          background: 'transparent',
+                          border: 0,
+                          borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary }}>{a.code}</div>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{a.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Field>
           </div>
         </Card>
 

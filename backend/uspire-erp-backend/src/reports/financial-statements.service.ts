@@ -611,7 +611,9 @@ export class FinancialStatementsService {
   }) {
     if (a.type !== 'EQUITY') return false;
     const n = `${a.code} ${a.name}`.toLowerCase();
-    return n.includes('dividend') || n.includes('drawing') || n.includes('drawings');
+    return (
+      n.includes('dividend') || n.includes('drawing') || n.includes('drawings')
+    );
   }
 
   private classifyRetainedEarningsEquityAccount(a: {
@@ -1276,7 +1278,10 @@ export class FinancialStatementsService {
     };
   }
 
-  async computeSOCE(req: Request, params: { from: string; to: string }): Promise<Soce> {
+  async computeSOCE(
+    req: Request,
+    params: { from: string; to: string },
+  ): Promise<Soce> {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');
 
@@ -1329,7 +1334,11 @@ export class FinancialStatementsService {
       };
     }
 
-    await this.assertPeriodCoverage({ tenantId: tenant.id, from: norm.from, to: norm.to });
+    await this.assertPeriodCoverage({
+      tenantId: tenant.id,
+      from: norm.from,
+      to: norm.to,
+    });
 
     const from = norm.from;
     const to = norm.to;
@@ -1341,13 +1350,16 @@ export class FinancialStatementsService {
     });
 
     const openingShareCapital = this.round2(
-      bsOpening.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')?.balance ?? 0,
+      bsOpening.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')
+        ?.balance ?? 0,
     );
     const openingRetainedEarnings = this.round2(
-      bsOpening.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')?.balance ?? 0,
+      bsOpening.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')
+        ?.balance ?? 0,
     );
     const openingOtherReserves = this.round2(
-      bsOpening.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')?.balance ?? 0,
+      bsOpening.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')
+        ?.balance ?? 0,
     );
     const openingEquityTotal = this.round2(
       openingShareCapital + openingRetainedEarnings + openingOtherReserves,
@@ -1411,23 +1423,30 @@ export class FinancialStatementsService {
     });
 
     const closingShareCapital = this.round2(
-      bsClosing.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')?.balance ?? 0,
+      bsClosing.equity.rows.find((r) => r.accountCode === 'SHARE_CAPITAL')
+        ?.balance ?? 0,
     );
     const closingRetainedEarnings = this.round2(
-      bsClosing.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')?.balance ?? 0,
+      bsClosing.equity.rows.find((r) => r.accountCode === 'RETAINED_EARNINGS')
+        ?.balance ?? 0,
     );
     const closingOtherReserves = this.round2(
-      bsClosing.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')?.balance ?? 0,
+      bsClosing.equity.rows.find((r) => r.accountCode === 'OTHER_RESERVES')
+        ?.balance ?? 0,
     );
     const closingEquityTotal = this.round2(
       closingShareCapital + closingRetainedEarnings + closingOtherReserves,
     );
 
-    const deltaShareCapital = this.round2(closingShareCapital - openingShareCapital);
+    const deltaShareCapital = this.round2(
+      closingShareCapital - openingShareCapital,
+    );
     const deltaRetainedEarnings = this.round2(
       closingRetainedEarnings - openingRetainedEarnings,
     );
-    const deltaOtherReserves = this.round2(closingOtherReserves - openingOtherReserves);
+    const deltaOtherReserves = this.round2(
+      closingOtherReserves - openingOtherReserves,
+    );
     const deltaTotal = this.round2(closingEquityTotal - openingEquityTotal);
 
     const shareCapitalOtherMovements = this.round2(
@@ -1438,7 +1457,10 @@ export class FinancialStatementsService {
     );
     const otherReservesOtherMovements = this.round2(deltaOtherReserves);
     const totalOtherMovements = this.round2(
-      deltaTotal - this.round2(netProfit) - ownerContributions - dividendsOrDrawings,
+      deltaTotal -
+        this.round2(netProfit) -
+        ownerContributions -
+        dividendsOrDrawings,
     );
 
     const mk = (params: {
@@ -1454,7 +1476,10 @@ export class FinancialStatementsService {
       const profitOrLoss = this.round2(params.profitOrLoss ?? 0);
       const otherMovements = this.round2(params.otherMovements);
       const movements = this.round2(
-        ownerContributions + dividendsOrDrawings + profitOrLoss + otherMovements,
+        ownerContributions +
+          dividendsOrDrawings +
+          profitOrLoss +
+          otherMovements,
       );
       return {
         opening: this.round2(params.opening),

@@ -50,14 +50,22 @@ export class ArReceiptsService {
     try {
       PDFDocument = require('pdfkit');
     } catch {
-      throw new BadRequestException('PDF export not available (missing dependency pdfkit)');
+      throw new BadRequestException(
+        'PDF export not available (missing dependency pdfkit)',
+      );
     }
     return PDFDocument;
   }
 
   private parseReference(dto: { paymentReference?: any; reference?: any }) {
-    const a = dto.paymentReference === undefined ? undefined : String(dto.paymentReference ?? '').trim();
-    const b = dto.reference === undefined ? undefined : String(dto.reference ?? '').trim();
+    const a =
+      dto.paymentReference === undefined
+        ? undefined
+        : String(dto.paymentReference ?? '').trim();
+    const b =
+      dto.reference === undefined
+        ? undefined
+        : String(dto.reference ?? '').trim();
 
     if (a && b && a !== b) {
       throw new BadRequestException(
@@ -96,19 +104,24 @@ export class ArReceiptsService {
       throw new BadRequestException('Tenant defaultCurrency is not configured');
     }
 
-    const nextExchangeRate = params.exchangeRate === null || params.exchangeRate === undefined
-      ? null
-      : Number(params.exchangeRate);
+    const nextExchangeRate =
+      params.exchangeRate === null || params.exchangeRate === undefined
+        ? null
+        : Number(params.exchangeRate);
 
     if (receiptCurrency === baseCurrency) {
       if (nextExchangeRate !== null && !(Number(nextExchangeRate) === 1)) {
-        throw new BadRequestException('exchangeRate must be 1 when receipt currency equals base currency');
+        throw new BadRequestException(
+          'exchangeRate must be 1 when receipt currency equals base currency',
+        );
       }
       return { amount, receiptCurrency, exchangeRate: 1, baseCurrency };
     }
 
     if (nextExchangeRate === null || !(Number(nextExchangeRate) > 0)) {
-      throw new BadRequestException('exchangeRate is required and must be > 0 when currency differs from base currency');
+      throw new BadRequestException(
+        'exchangeRate is required and must be > 0 when currency differs from base currency',
+      );
     }
 
     return {
@@ -184,7 +197,9 @@ export class ArReceiptsService {
         throw new BadRequestException('Receipt line missing invoiceId');
       }
       if (this.normalizeMoney(l.appliedAmount) < 0) {
-        throw new BadRequestException('Receipt line appliedAmount must be >= 0');
+        throw new BadRequestException(
+          'Receipt line appliedAmount must be >= 0',
+        );
       }
     }
 
@@ -243,7 +258,9 @@ export class ArReceiptsService {
         }
       }
 
-      const existingApplied = await (this.prisma as any).customerReceiptLine.groupBy({
+      const existingApplied = await (
+        this.prisma as any
+      ).customerReceiptLine.groupBy({
         by: ['invoiceId'],
         where: {
           tenantId: params.tenantId,
@@ -321,14 +338,18 @@ export class ArReceiptsService {
           ? new Date(l.invoice.invoiceDate).toISOString().slice(0, 10)
           : null,
         invoiceTotalAmount: l.invoice ? Number(l.invoice.totalAmount) : null,
-        currency: (l.invoice as any)?.currency ?? null,
+        currency: l.invoice?.currency ?? null,
         appliedAmount: Number(l.appliedAmount),
         createdAt: l.createdAt ? new Date(l.createdAt).toISOString() : null,
       })),
     };
   }
 
-  async setAllocations(req: Request, receiptId: string, dto: SetReceiptAllocationsDto) {
+  async setAllocations(
+    req: Request,
+    receiptId: string,
+    dto: SetReceiptAllocationsDto,
+  ) {
     const tenant = this.ensureTenant(req);
 
     await this.assertEditable(receiptId, tenant.id);
@@ -391,7 +412,7 @@ export class ArReceiptsService {
       customerId: r.customerId,
       customerName: r.customer?.name ?? '',
       currency: r.currency,
-      exchangeRate: Number((r as any).exchangeRate ?? 1),
+      exchangeRate: Number(r.exchangeRate ?? 1),
       totalAmount: Number(r.totalAmount),
       paymentMethod: r.paymentMethod,
       paymentReference: r.paymentReference,
@@ -420,7 +441,7 @@ export class ArReceiptsService {
       customerId: r.customerId,
       customerName: r.customer?.name ?? '',
       currency: r.currency,
-      exchangeRate: Number((r as any).exchangeRate ?? 1),
+      exchangeRate: Number(r.exchangeRate ?? 1),
       totalAmount: Number(r.totalAmount),
       paymentMethod: r.paymentMethod,
       paymentReference: r.paymentReference,
@@ -441,7 +462,11 @@ export class ArReceiptsService {
     };
   }
 
-  async listCustomerOutstandingInvoices(req: Request, customerId: string, currency?: string) {
+  async listCustomerOutstandingInvoices(
+    req: Request,
+    customerId: string,
+    currency?: string,
+  ) {
     const tenant = this.ensureTenant(req);
 
     const customer = await (this.prisma as any).customer.findFirst({
@@ -478,7 +503,9 @@ export class ArReceiptsService {
     }
 
     const invoiceIds = invoices.map((i: any) => i.id);
-    const existingApplied = await (this.prisma as any).customerReceiptLine.groupBy({
+    const existingApplied = await (
+      this.prisma as any
+    ).customerReceiptLine.groupBy({
       by: ['invoiceId'],
       where: {
         tenantId: tenant.id,
@@ -497,14 +524,20 @@ export class ArReceiptsService {
     const rows = (invoices ?? [])
       .map((inv: any) => {
         const total = this.normalizeMoney(Number(inv.totalAmount ?? 0));
-        const applied = this.normalizeMoney(Number(appliedByInvoiceId.get(inv.id) ?? 0));
+        const applied = this.normalizeMoney(
+          Number(appliedByInvoiceId.get(inv.id) ?? 0),
+        );
         const outstanding = this.normalizeMoney(total - applied);
         return {
           invoiceId: inv.id,
           invoiceNumber: inv.invoiceNumber ?? '',
-          invoiceDate: inv.invoiceDate ? new Date(inv.invoiceDate).toISOString().slice(0, 10) : null,
-          dueDate: inv.dueDate ? new Date(inv.dueDate).toISOString().slice(0, 10) : null,
-          currency: (inv as any).currency ?? null,
+          invoiceDate: inv.invoiceDate
+            ? new Date(inv.invoiceDate).toISOString().slice(0, 10)
+            : null,
+          dueDate: inv.dueDate
+            ? new Date(inv.dueDate).toISOString().slice(0, 10)
+            : null,
+          currency: inv.currency ?? null,
           totalAmount: total,
           outstandingAmount: outstanding,
         };
@@ -514,13 +547,22 @@ export class ArReceiptsService {
     return { customerId, currency: currency ?? null, invoices: rows };
   }
 
-  async exportReceipt(req: Request, id: string, opts: { format: 'html' | 'pdf' }) {
+  async exportReceipt(
+    req: Request,
+    id: string,
+    opts: { format: 'html' | 'pdf' },
+  ) {
     const tenant = this.ensureTenant(req);
 
     const [t, r] = await Promise.all([
       this.prisma.tenant.findUnique({
         where: { id: tenant.id },
-        select: { id: true, legalName: true, organisationName: true, defaultCurrency: true },
+        select: {
+          id: true,
+          legalName: true,
+          organisationName: true,
+          defaultCurrency: true,
+        },
       }),
       (this.prisma as any).customerReceipt.findFirst({
         where: { id, tenantId: tenant.id },
@@ -530,28 +572,32 @@ export class ArReceiptsService {
 
     if (!t) throw new NotFoundException('Tenant not found');
     if (!r) throw new NotFoundException('Receipt not found');
-    if (String((r as any).status ?? '') !== 'POSTED') {
-      throw new BadRequestException('Receipt export is available for POSTED receipts only');
+    if (String(r.status ?? '') !== 'POSTED') {
+      throw new BadRequestException(
+        'Receipt export is available for POSTED receipts only',
+      );
     }
 
-    const tenantName = String((t as any).legalName ?? (t as any).organisationName ?? '').trim();
+    const tenantName = String(
+      (t as any).legalName ?? (t as any).organisationName ?? '',
+    ).trim();
     const baseCurrency = String((t as any).defaultCurrency ?? '').trim();
-    const receiptNumber = String((r as any).receiptNumber ?? '').trim();
-    const receiptDate = (r as any).receiptDate
-      ? new Date((r as any).receiptDate).toISOString().slice(0, 10)
+    const receiptNumber = String(r.receiptNumber ?? '').trim();
+    const receiptDate = r.receiptDate
+      ? new Date(r.receiptDate).toISOString().slice(0, 10)
       : '';
-    const currency = String((r as any).currency ?? '').trim();
-    const exchangeRate = Number((r as any).exchangeRate ?? 1);
-    const receiptAmount = this.normalizeMoney(Number((r as any).totalAmount ?? 0));
-    const paymentMethod = String((r as any).paymentMethod ?? '').trim();
-    const reference = String((r as any).paymentReference ?? '').trim();
+    const currency = String(r.currency ?? '').trim();
+    const exchangeRate = Number(r.exchangeRate ?? 1);
+    const receiptAmount = this.normalizeMoney(Number(r.totalAmount ?? 0));
+    const paymentMethod = String(r.paymentMethod ?? '').trim();
+    const reference = String(r.paymentReference ?? '').trim();
 
-    const customerName = String((r as any).customer?.name ?? '').trim();
-    const customerEmail = String((r as any).customer?.email ?? '').trim();
-    const customerPhone = String((r as any).customer?.phone ?? '').trim();
-    const customerAddress = String((r as any).customer?.billingAddress ?? '').trim();
+    const customerName = String(r.customer?.name ?? '').trim();
+    const customerEmail = String(r.customer?.email ?? '').trim();
+    const customerPhone = String(r.customer?.phone ?? '').trim();
+    const customerAddress = String(r.customer?.billingAddress ?? '').trim();
 
-    const linesRaw = ((r as any).lines ?? []) as any[];
+    const linesRaw = (r.lines ?? []) as any[];
     const receiptLines = linesRaw
       .map((l: any) => ({
         invoiceId: l.invoiceId,
@@ -562,7 +608,9 @@ export class ArReceiptsService {
         dueDate: l.invoice?.dueDate
           ? new Date(l.invoice.dueDate).toISOString().slice(0, 10)
           : null,
-        invoiceTotalAmount: this.normalizeMoney(Number(l.invoice?.totalAmount ?? 0)),
+        invoiceTotalAmount: this.normalizeMoney(
+          Number(l.invoice?.totalAmount ?? 0),
+        ),
         appliedAmount: this.normalizeMoney(Number(l.appliedAmount ?? 0)),
       }))
       .filter((l) => l.appliedAmount > 0);
@@ -592,7 +640,10 @@ export class ArReceiptsService {
     );
 
     const appliedTotal = this.normalizeMoney(
-      receiptLines.reduce((s, l) => s + this.normalizeMoney(l.appliedAmount), 0),
+      receiptLines.reduce(
+        (s, l) => s + this.normalizeMoney(l.appliedAmount),
+        0,
+      ),
     );
     const unappliedTotal = this.normalizeMoney(receiptAmount - appliedTotal);
 
@@ -600,14 +651,17 @@ export class ArReceiptsService {
       const appliedIncl = this.normalizeMoney(
         Number(appliedAllByInvoiceId.get(l.invoiceId) ?? 0),
       );
-      const balanceAfter = this.normalizeMoney(l.invoiceTotalAmount - appliedIncl);
+      const balanceAfter = this.normalizeMoney(
+        l.invoiceTotalAmount - appliedIncl,
+      );
       return {
         ...l,
         balanceAfter,
       };
     });
 
-    const showExchange = !!currency && !!baseCurrency && currency !== baseCurrency;
+    const showExchange =
+      !!currency && !!baseCurrency && currency !== baseCurrency;
 
     const html = `<!doctype html>
 <html>
@@ -675,14 +729,16 @@ export class ArReceiptsService {
         </thead>
         <tbody>
           ${allocRows
-            .map((l: any) => `<tr>
+            .map(
+              (l: any) => `<tr>
               <td>${this.escapeHtml(l.invoiceNumber)}</td>
               <td>${this.escapeHtml(l.invoiceDate ?? '')}</td>
               <td>${this.escapeHtml(l.dueDate ?? '')}</td>
               <td class="num">${this.formatMoney(l.invoiceTotalAmount)}</td>
               <td class="num">${this.formatMoney(l.appliedAmount)}</td>
               <td class="num">${this.formatMoney(l.balanceAfter)}</td>
-            </tr>`)
+            </tr>`,
+            )
             .join('')}
         </tbody>
       </table>
@@ -753,11 +809,20 @@ export class ArReceiptsService {
     const drawDivider = () => {
       doc.save();
       doc.strokeColor(colors.border);
-      doc.moveTo(page.left, doc.y).lineTo(page.left + page.width, doc.y).stroke();
+      doc
+        .moveTo(page.left, doc.y)
+        .lineTo(page.left + page.width, doc.y)
+        .stroke();
       doc.restore();
     };
 
-    const labelValue = (label: string, value: string, x: number, y: number, w: number) => {
+    const labelValue = (
+      label: string,
+      value: string,
+      x: number,
+      y: number,
+      w: number,
+    ) => {
       doc.font('Helvetica-Bold').fontSize(9).fillColor(colors.text);
       doc.text(label, x, y, { width: w });
       doc.font('Helvetica').fontSize(10).fillColor(colors.text);
@@ -765,13 +830,23 @@ export class ArReceiptsService {
     };
 
     doc.fillColor(colors.text);
-    doc.font('Helvetica-Bold').fontSize(18).text(tenantName || 'USPIRE PROFESSIONAL SERVICES', page.left, doc.y);
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(18)
+      .text(tenantName || 'USPIRE PROFESSIONAL SERVICES', page.left, doc.y);
     doc.moveDown(0.2);
-    doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text('Prepared in accordance with IFRS');
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor(colors.muted)
+      .text('Prepared in accordance with IFRS');
     doc.fillColor(colors.text);
     doc.moveDown(0.6);
 
-    doc.font('Helvetica-Bold').fontSize(22).text('RECEIPT', page.left, doc.y, { align: 'right' });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(22)
+      .text('RECEIPT', page.left, doc.y, { align: 'right' });
     doc.moveDown(0.2);
 
     const metaTop = doc.y;
@@ -796,20 +871,49 @@ export class ArReceiptsService {
     drawDivider();
     doc.moveDown(0.8);
 
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(colors.text).text('Received From');
-    doc.font('Helvetica').fontSize(10).text(customerName || '', { continued: false });
-    if (customerEmail) doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(customerEmail);
-    if (customerPhone) doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(customerPhone);
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .fillColor(colors.text)
+      .text('Received From');
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .text(customerName || '', { continued: false });
+    if (customerEmail)
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .fillColor(colors.muted)
+        .text(customerEmail);
+    if (customerPhone)
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .fillColor(colors.muted)
+        .text(customerPhone);
     if (customerAddress) {
-      doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(customerAddress, {
-        width: page.width,
-      });
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .fillColor(colors.muted)
+        .text(customerAddress, {
+          width: page.width,
+        });
     }
     doc.fillColor(colors.text);
     doc.moveDown(0.6);
 
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(colors.text).text('Payment Details');
-    doc.font('Helvetica').fontSize(10).fillColor(colors.text).text(`Payment Method: ${paymentMethod}`);
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .fillColor(colors.text)
+      .text('Payment Details');
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .fillColor(colors.text)
+      .text(`Payment Method: ${paymentMethod}`);
     if (reference) doc.text(`Reference: ${reference}`);
     doc.moveDown(0.8);
 
@@ -822,9 +926,16 @@ export class ArReceiptsService {
       balance: 90,
     };
     const tableWidth =
-      cols.invoice + cols.invDate + cols.dueDate + cols.invTotal + cols.applied + cols.balance;
+      cols.invoice +
+      cols.invDate +
+      cols.dueDate +
+      cols.invTotal +
+      cols.applied +
+      cols.balance;
     const scale = page.width / tableWidth;
-    Object.keys(cols).forEach((k) => ((cols as any)[k] = (cols as any)[k] * scale));
+    Object.keys(cols).forEach(
+      (k) => ((cols as any)[k] = (cols as any)[k] * scale),
+    );
 
     const xInvoice = page.left;
     const xInvDate = xInvoice + cols.invoice;
@@ -842,11 +953,23 @@ export class ArReceiptsService {
       doc.text('Invoice #', xInvoice + 4, y + 5, { width: cols.invoice - 8 });
       doc.text('Inv Date', xInvDate + 4, y + 5, { width: cols.invDate - 8 });
       doc.text('Due Date', xDueDate + 4, y + 5, { width: cols.dueDate - 8 });
-      doc.text('Invoice Total', xInvTotal + 4, y + 5, { width: cols.invTotal - 8, align: 'right' });
-      doc.text('Applied', xApplied + 4, y + 5, { width: cols.applied - 8, align: 'right' });
-      doc.text('Balance After', xBalance + 4, y + 5, { width: cols.balance - 8, align: 'right' });
+      doc.text('Invoice Total', xInvTotal + 4, y + 5, {
+        width: cols.invTotal - 8,
+        align: 'right',
+      });
+      doc.text('Applied', xApplied + 4, y + 5, {
+        width: cols.applied - 8,
+        align: 'right',
+      });
+      doc.text('Balance After', xBalance + 4, y + 5, {
+        width: cols.balance - 8,
+        align: 'right',
+      });
       doc.strokeColor(colors.border);
-      doc.moveTo(page.left, y + 18).lineTo(page.left + page.width, y + 18).stroke();
+      doc
+        .moveTo(page.left, y + 18)
+        .lineTo(page.left + page.width, y + 18)
+        .stroke();
       doc.y = y + 24;
     };
 
@@ -856,17 +979,29 @@ export class ArReceiptsService {
       const y = doc.y;
       const cellPadY = 6;
       const maxH = Math.max(
-        doc.heightOfString(row.invoiceNumber || '', { width: cols.invoice - 8 }),
-        doc.heightOfString(String(row.invoiceDate ?? ''), { width: cols.invDate - 8 }),
-        doc.heightOfString(String(row.dueDate ?? ''), { width: cols.dueDate - 8 }),
+        doc.heightOfString(row.invoiceNumber || '', {
+          width: cols.invoice - 8,
+        }),
+        doc.heightOfString(String(row.invoiceDate ?? ''), {
+          width: cols.invDate - 8,
+        }),
+        doc.heightOfString(String(row.dueDate ?? ''), {
+          width: cols.dueDate - 8,
+        }),
       );
       const rowH = Math.max(16, maxH) + cellPadY;
 
       ensureSpace(rowH + 8, renderTableHeader);
 
-      doc.text(row.invoiceNumber || '', xInvoice + 4, y, { width: cols.invoice - 8 });
-      doc.text(String(row.invoiceDate ?? ''), xInvDate + 4, y, { width: cols.invDate - 8 });
-      doc.text(String(row.dueDate ?? ''), xDueDate + 4, y, { width: cols.dueDate - 8 });
+      doc.text(row.invoiceNumber || '', xInvoice + 4, y, {
+        width: cols.invoice - 8,
+      });
+      doc.text(String(row.invoiceDate ?? ''), xInvDate + 4, y, {
+        width: cols.invDate - 8,
+      });
+      doc.text(String(row.dueDate ?? ''), xDueDate + 4, y, {
+        width: cols.dueDate - 8,
+      });
       doc.text(this.formatMoney(row.invoiceTotalAmount), xInvTotal + 4, y, {
         width: cols.invTotal - 8,
         align: 'right',
@@ -881,7 +1016,10 @@ export class ArReceiptsService {
       });
 
       doc.strokeColor(colors.border);
-      doc.moveTo(page.left, y + rowH).lineTo(page.left + page.width, y + rowH).stroke();
+      doc
+        .moveTo(page.left, y + rowH)
+        .lineTo(page.left + page.width, y + rowH)
+        .stroke();
       doc.y = y + rowH + 2;
     };
 
@@ -896,17 +1034,31 @@ export class ArReceiptsService {
     const totalsValueW = 120;
     const totalsX = page.left + page.width - (totalsLabelW + totalsValueW);
 
-    const renderTotalLine = (label: string, value: string, bold?: boolean, borderTop?: boolean) => {
+    const renderTotalLine = (
+      label: string,
+      value: string,
+      bold?: boolean,
+      borderTop?: boolean,
+    ) => {
       ensureSpace(16);
       if (borderTop) {
         doc.strokeColor(colors.border);
-        doc.moveTo(totalsX, doc.y).lineTo(totalsX + totalsLabelW + totalsValueW, doc.y).stroke();
+        doc
+          .moveTo(totalsX, doc.y)
+          .lineTo(totalsX + totalsLabelW + totalsValueW, doc.y)
+          .stroke();
         doc.moveDown(0.35);
       }
-      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor(colors.text);
+      doc
+        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+        .fontSize(10)
+        .fillColor(colors.text);
       const y = doc.y;
       doc.text(label, totalsX, y, { width: totalsLabelW, align: 'left' });
-      doc.text(value, totalsX + totalsLabelW, y, { width: totalsValueW, align: 'right' });
+      doc.text(value, totalsX + totalsLabelW, y, {
+        width: totalsValueW,
+        align: 'right',
+      });
       doc.y = y + 14;
     };
 
@@ -919,7 +1071,11 @@ export class ArReceiptsService {
 
     ensureSpace(110);
     doc.moveDown(0.8);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(colors.text).text('Bank Details');
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .fillColor(colors.text)
+      .text('Bank Details');
     doc.font('Helvetica').fontSize(9).fillColor(colors.muted);
     doc.text('Bank Name: FNB');
     doc.text('Account Name: Uspire Professional Services Ltd');
@@ -1022,7 +1178,9 @@ export class ArReceiptsService {
     const nextTotalAmount = dto.totalAmount ?? Number(current.totalAmount);
     const nextCurrency = dto.currency ?? String(current.currency);
     const nextExchangeRate =
-      dto.exchangeRate === undefined ? Number((current as any).exchangeRate ?? 1) : dto.exchangeRate;
+      dto.exchangeRate === undefined
+        ? Number(current.exchangeRate ?? 1)
+        : dto.exchangeRate;
 
     if (dto.customerId) {
       const customer = await (this.prisma as any).customer.findFirst({
@@ -1066,16 +1224,25 @@ export class ArReceiptsService {
         data: {
           customerId: dto.customerId,
           receiptDate: dto.receiptDate ? new Date(dto.receiptDate) : undefined,
-          currency: dto.currency === undefined ? undefined : header.receiptCurrency,
-          exchangeRate: dto.currency === undefined && dto.exchangeRate === undefined ? undefined : header.exchangeRate,
-          totalAmount: dto.totalAmount === undefined ? undefined : header.amount,
-          paymentMethod: dto.paymentMethod ? (dto.paymentMethod as any) : undefined,
+          currency:
+            dto.currency === undefined ? undefined : header.receiptCurrency,
+          exchangeRate:
+            dto.currency === undefined && dto.exchangeRate === undefined
+              ? undefined
+              : header.exchangeRate,
+          totalAmount:
+            dto.totalAmount === undefined ? undefined : header.amount,
+          paymentMethod: dto.paymentMethod
+            ? (dto.paymentMethod as any)
+            : undefined,
           paymentReference,
         },
       });
 
       if (dto.lines) {
-        await (tx as any).customerReceiptLine.deleteMany({ where: { receiptId: id } });
+        await (tx as any).customerReceiptLine.deleteMany({
+          where: { receiptId: id },
+        });
         if (dto.lines.length > 0) {
           await (tx as any).customerReceiptLine.createMany({
             data: dto.lines.map((l) => ({
@@ -1129,13 +1296,13 @@ export class ArReceiptsService {
     const header = await this.validateAndNormalizeHeader({
       tenantId: tenant.id,
       currency: String(existing.currency),
-      exchangeRate: Number((existing as any).exchangeRate ?? 1),
+      exchangeRate: Number(existing.exchangeRate ?? 1),
       totalAmount: Number(existing.totalAmount),
     });
 
     await this.validateLines({
       tenantId: tenant.id,
-      customerId: String((existing as any).customerId ?? ''),
+      customerId: String(existing.customerId ?? ''),
       receiptCurrency: header.receiptCurrency,
       totalAmount: header.amount,
       lines: (draftLines ?? []).map((l: any) => ({
@@ -1199,12 +1366,10 @@ export class ArReceiptsService {
     const arControlAccountId = (tenantConfig?.arControlAccountId ?? null) as
       | string
       | null;
-    const bankClearingAccountId = (
-      tenantConfig?.defaultBankClearingAccountId ?? null
-    ) as string | null;
-    const unappliedReceiptsAccountId = (tenantConfig?.unappliedReceiptsAccountId ?? null) as
-      | string
-      | null;
+    const bankClearingAccountId = (tenantConfig?.defaultBankClearingAccountId ??
+      null) as string | null;
+    const unappliedReceiptsAccountId =
+      (tenantConfig?.unappliedReceiptsAccountId ?? null) as string | null;
     if (!bankClearingAccountId) {
       throw new BadRequestException({
         error: 'Missing configuration: default bank clearing account',
@@ -1222,7 +1387,7 @@ export class ArReceiptsService {
       this.prisma.account.findFirst({
         where: {
           tenantId: tenant.id,
-          id: bankClearingAccountId as string,
+          id: bankClearingAccountId,
           isActive: true,
           type: 'ASSET',
         },
@@ -1231,7 +1396,7 @@ export class ArReceiptsService {
       this.prisma.account.findFirst({
         where: {
           tenantId: tenant.id,
-          id: arControlAccountId as string,
+          id: arControlAccountId,
           isActive: true,
           type: 'ASSET',
         },
@@ -1254,7 +1419,8 @@ export class ArReceiptsService {
 
     const allocatedTotal = this.normalizeMoney(
       (draftLines ?? []).reduce(
-        (s: number, l: any) => s + this.normalizeMoney(Number(l.appliedAmount ?? 0)),
+        (s: number, l: any) =>
+          s + this.normalizeMoney(Number(l.appliedAmount ?? 0)),
         0,
       ),
     );
@@ -1293,7 +1459,10 @@ export class ArReceiptsService {
       });
       if (!current) throw new NotFoundException('Receipt not found');
       if (current.status === 'POSTED') {
-        return { receiptId: current.id, glJournalId: current.glJournalId ?? null };
+        return {
+          receiptId: current.id,
+          glJournalId: current.glJournalId ?? null,
+        };
       }
       if (current.status !== 'DRAFT') {
         throw new BadRequestException('Only DRAFT receipts can be posted');
@@ -1340,7 +1509,13 @@ export class ArReceiptsService {
             create: [
               { accountId: bankAccount.id, debit: amount, credit: 0 },
               ...(allocatedTotal > 0
-                ? [{ accountId: arAccount.id, debit: 0, credit: allocatedTotal }]
+                ? [
+                    {
+                      accountId: arAccount.id,
+                      debit: 0,
+                      credit: allocatedTotal,
+                    },
+                  ]
                 : []),
               ...(unappliedTotal > 0
                 ? [

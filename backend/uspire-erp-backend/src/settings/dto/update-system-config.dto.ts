@@ -104,5 +104,10 @@ export class UpdateSystemConfigDto {
   @IsOptional()
   @ValidateIf(isNotNull)
   @IsString()
+  defaultBankClearingAccountId?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
   unappliedReceiptsAccountId?: string | null;
 }

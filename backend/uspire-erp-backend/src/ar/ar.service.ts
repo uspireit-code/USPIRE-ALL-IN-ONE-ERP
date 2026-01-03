@@ -84,7 +84,9 @@ export class ArService {
       );
     }
 
-    const netAmount = this.round2(dto.lines.reduce((s, l) => s + (l.amount ?? 0), 0));
+    const netAmount = this.round2(
+      dto.lines.reduce((s, l) => s + (l.amount ?? 0), 0),
+    );
     this.assertInvoiceLines(dto.lines, netAmount);
 
     const accounts = await this.prisma.account.findMany({
@@ -175,7 +177,9 @@ export class ArService {
       throw new BadRequestException('Only DRAFT invoices can be posted');
     }
 
-    const netAmount = this.round2(inv.lines.reduce((s, l: any) => s + Number(l.lineTotal), 0));
+    const netAmount = this.round2(
+      inv.lines.reduce((s, l: any) => s + Number(l.lineTotal), 0),
+    );
 
     const period = await this.prisma.accountingPeriod.findFirst({
       where: {

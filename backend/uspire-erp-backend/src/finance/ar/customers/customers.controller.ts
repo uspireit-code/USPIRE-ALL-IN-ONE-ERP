@@ -19,7 +19,11 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../rbac/jwt-auth.guard';
 import { Permissions } from '../../../rbac/permissions.decorator';
 import { PermissionsGuard } from '../../../rbac/permissions.guard';
-import { CreateCustomerDto, ListCustomersQueryDto, UpdateCustomerDto } from './customers.dto';
+import {
+  CreateCustomerDto,
+  ListCustomersQueryDto,
+  UpdateCustomerDto,
+} from './customers.dto';
 import { FinanceArCustomersService } from './customers.service';
 
 @Controller('finance/ar/customers')
@@ -78,7 +82,10 @@ export class FinanceArCustomersController {
   async downloadImportCsvTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.customers.getCustomerImportCsvTemplate(req);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
     res.send(out.body);
   }
 
@@ -86,8 +93,14 @@ export class FinanceArCustomersController {
   @Permissions('CUSTOMERS_IMPORT')
   async downloadImportXlsxTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.customers.getCustomerImportXlsxTemplate(req);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
     res.send(out.body);
   }
 

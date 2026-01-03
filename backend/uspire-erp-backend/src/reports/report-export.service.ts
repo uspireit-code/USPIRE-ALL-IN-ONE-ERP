@@ -360,12 +360,10 @@ export class ReportExportService {
         align: 'right',
       });
       if (hasCompare) {
-        doc.text(
-          'Comparative',
-          x + labelWidth + colAmount,
-          y,
-          { width: colCompare, align: 'right' },
-        );
+        doc.text('Comparative', x + labelWidth + colAmount, y, {
+          width: colCompare,
+          align: 'right',
+        });
       }
       doc.moveDown(0.5);
       doc
@@ -386,12 +384,10 @@ export class ReportExportService {
         align: 'right',
       });
       if (hasCompare) {
-        doc.text(
-          'Comparative',
-          x + labelWidth + colAmount,
-          y,
-          { width: colCompare, align: 'right' },
-        );
+        doc.text('Comparative', x + labelWidth + colAmount, y, {
+          width: colCompare,
+          align: 'right',
+        });
       }
       doc.moveDown(0.5);
       doc
@@ -546,7 +542,10 @@ export class ReportExportService {
     row('Share capital', params.soce.shareCapital);
     row('Retained earnings', params.soce.retainedEarnings);
     row('Other reserves', params.soce.otherReserves);
-    row('Total equity', params.soce.totalEquity, { bold: true, separatorAbove: true });
+    row('Total equity', params.soce.totalEquity, {
+      bold: true,
+      separatorAbove: true,
+    });
 
     return await new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));

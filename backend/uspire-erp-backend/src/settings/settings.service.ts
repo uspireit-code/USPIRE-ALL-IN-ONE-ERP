@@ -954,6 +954,7 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
         updatedAt: true,
       },
@@ -995,6 +996,7 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
         faviconUrl: true,
         logoUrl: true,
@@ -1122,6 +1124,14 @@ export class SettingsService {
               ? null
               : dto.secondaryAccentColor.trim() || null,
 
+        defaultBankClearingAccountId:
+          (dto as any).defaultBankClearingAccountId === undefined
+            ? undefined
+            : (dto as any).defaultBankClearingAccountId === null
+              ? null
+              : String((dto as any).defaultBankClearingAccountId).trim() ||
+                null,
+
         unappliedReceiptsAccountId:
           (dto as any).unappliedReceiptsAccountId === undefined
             ? undefined
@@ -1152,6 +1162,7 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
         updatedAt: true,
       },
@@ -1176,7 +1187,10 @@ export class SettingsService {
       secondaryColor: updated.secondaryColor,
       accentColor: updated.accentColor,
       secondaryAccentColor: updated.secondaryAccentColor,
-      unappliedReceiptsAccountId: (updated as any).unappliedReceiptsAccountId ?? null,
+      defaultBankClearingAccountId:
+        (updated as any).defaultBankClearingAccountId ?? null,
+      unappliedReceiptsAccountId:
+        (updated as any).unappliedReceiptsAccountId ?? null,
       faviconUrl: updated.faviconUrl,
       logoUrl: updated.logoUrl,
     };

@@ -74,7 +74,10 @@ export class FinanceArInvoicesController {
   async downloadImportCsvTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.invoices.getImportCsvTemplate(req);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
     res.send(out.body);
   }
 
@@ -86,7 +89,10 @@ export class FinanceArInvoicesController {
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
     res.send(out.body);
   }
 
@@ -109,13 +115,20 @@ export class FinanceArInvoicesController {
     });
 
     res.setHeader('Content-Type', out.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
     res.send(out.body);
   }
 
   @Post(':id/post')
   @Permissions('AR_INVOICE_POST')
-  async postInvoice(@Req() req: Request, @Param('id') id: string, @Body() dto: PostInvoiceDto) {
+  async postInvoice(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: PostInvoiceDto,
+  ) {
     return this.invoices.post(req, id, {
       arControlAccountCode: dto.arControlAccountCode,
     });

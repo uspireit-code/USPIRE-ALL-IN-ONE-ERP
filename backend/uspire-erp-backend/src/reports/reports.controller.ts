@@ -497,7 +497,10 @@ export class ReportsController {
       const { entityLegalName, currencyIsoCode } =
         this.getTenantPdfMetaOrThrow(req);
       const body = await this.exports.toSocePdf({
-        soce: await this.financial.computeSOCE(req, { from: dto.from, to: dto.to }),
+        soce: await this.financial.computeSOCE(req, {
+          from: dto.from,
+          to: dto.to,
+        }),
         header: {
           entityLegalName,
           reportName: 'Statement of Changes in Equity',

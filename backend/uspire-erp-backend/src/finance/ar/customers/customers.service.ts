@@ -1,8 +1,17 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { CreateCustomerDto, ListCustomersQueryDto, UpdateCustomerDto } from './customers.dto';
+import type {
+  CreateCustomerDto,
+  ListCustomersQueryDto,
+  UpdateCustomerDto,
+} from './customers.dto';
 
 @Injectable()
 export class FinanceArCustomersService {
@@ -22,13 +31,17 @@ export class FinanceArCustomersService {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
   }
 
-  private validateCustomerNameEmailOrThrow(params: { name: string; email: string }) {
+  private validateCustomerNameEmailOrThrow(params: {
+    name: string;
+    email: string;
+  }) {
     const name = String(params.name ?? '').trim();
     if (!name) throw new BadRequestException('Customer name is required');
 
     const email = String(params.email ?? '').trim();
     if (!email) throw new BadRequestException('Customer email is required');
-    if (!this.isValidEmail(email)) throw new BadRequestException('Invalid email format');
+    if (!this.isValidEmail(email))
+      throw new BadRequestException('Invalid email format');
 
     return { name, email };
   }
@@ -52,7 +65,9 @@ export class FinanceArCustomersService {
       .replace(/[^a-z0-9]/g, '');
   }
 
-  private parseCsvRows(buf: Buffer): Array<{ rowNumber: number; row: Record<string, string> }> {
+  private parseCsvRows(
+    buf: Buffer,
+  ): Array<{ rowNumber: number; row: Record<string, string> }> {
     const text = buf.toString('utf8');
     const lines = text
       .replace(/\r\n/g, '\n')
@@ -97,14 +112,18 @@ export class FinanceArCustomersService {
       for (let j = 0; j < headers.length; j++) {
         row[headers[j]] = String(cols[j] ?? '').trim();
       }
-      const hasAny = Object.values(row).some((v) => String(v ?? '').trim() !== '');
+      const hasAny = Object.values(row).some(
+        (v) => String(v ?? '').trim() !== '',
+      );
       if (hasAny) rows.push({ rowNumber: i + 1, row });
     }
 
     return rows;
   }
 
-  private async readXlsxRows(buf: Buffer): Promise<Array<{ rowNumber: number; row: Record<string, any> }>> {
+  private async readXlsxRows(
+    buf: Buffer,
+  ): Promise<Array<{ rowNumber: number; row: Record<string, any> }>> {
     const wb = new ExcelJS.Workbook();
     await (wb.xlsx as any).load(buf as any);
 
@@ -126,7 +145,9 @@ export class FinanceArCustomersService {
         const cell = row.getCell(idx + 1);
         obj[h] = (cell.value as any)?.text ?? cell.value;
       });
-      const hasAny = Object.values(obj).some((v) => String(v ?? '').trim() !== '');
+      const hasAny = Object.values(obj).some(
+        (v) => String(v ?? '').trim() !== '',
+      );
       if (hasAny) rows.push({ rowNumber: r, row: obj });
     }
 
@@ -135,7 +156,9 @@ export class FinanceArCustomersService {
 
   private async nextCustomerCode(tx: any, tenantId: string) {
     const counter = await tx.tenantSequenceCounter.upsert({
-      where: { tenantId_name: { tenantId, name: this.CUSTOMER_CODE_SEQUENCE_NAME } },
+      where: {
+        tenantId_name: { tenantId, name: this.CUSTOMER_CODE_SEQUENCE_NAME },
+      },
       create: { tenantId, name: this.CUSTOMER_CODE_SEQUENCE_NAME, value: 0 },
       update: {},
       select: { id: true },
@@ -159,13 +182,17 @@ export class FinanceArCustomersService {
       where: {
         tenantId: params.tenantId,
         customerCode: params.customerCode,
-        ...(params.excludeCustomerId ? { id: { not: params.excludeCustomerId } } : {}),
+        ...(params.excludeCustomerId
+          ? { id: { not: params.excludeCustomerId } }
+          : {}),
       } as any,
       select: { id: true },
     });
 
     if (existing) {
-      throw new ConflictException('Customer code already exists for this tenant');
+      throw new ConflictException(
+        'Customer code already exists for this tenant',
+      );
     }
   }
 
@@ -175,7 +202,8 @@ export class FinanceArCustomersService {
     const page = Number(q.page ?? 1);
     const pageSize = Number(q.pageSize ?? 20);
     const safePage = Number.isFinite(page) && page > 0 ? page : 1;
-    const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 200) : 20;
+    const safePageSize =
+      Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 200) : 20;
 
     const status = q.status ? String(q.status) : 'ACTIVE';
     const search = String(q.search ?? '').trim();
@@ -214,7 +242,10 @@ export class FinanceArCustomersService {
   async create(req: Request, dto: CreateCustomerDto) {
     const tenant = this.ensureTenant(req);
 
-    const { name, email } = this.validateCustomerNameEmailOrThrow({ name: String(dto.name ?? ''), email: String(dto.email ?? '') });
+    const { name, email } = this.validateCustomerNameEmailOrThrow({
+      name: String(dto.name ?? ''),
+      email: String(dto.email ?? ''),
+    });
 
     const created = await this.prisma.$transaction(async (tx) => {
       let customerCode = String(dto.customerCode ?? '').trim();
@@ -223,7 +254,10 @@ export class FinanceArCustomersService {
           where: { tenantId: tenant.id, customerCode } as any,
           select: { id: true },
         });
-        if (existing) throw new ConflictException('Customer code already exists for this tenant');
+        if (existing)
+          throw new ConflictException(
+            'Customer code already exists for this tenant',
+          );
       } else {
         for (let i = 0; i < 50; i++) {
           const next = await this.nextCustomerCode(tx, tenant.id);
@@ -236,7 +270,10 @@ export class FinanceArCustomersService {
             break;
           }
         }
-        if (!customerCode) throw new ConflictException('Failed to generate unique customer code');
+        if (!customerCode)
+          throw new ConflictException(
+            'Failed to generate unique customer code',
+          );
       }
 
       return tx.customer.create({
@@ -270,14 +307,21 @@ export class FinanceArCustomersService {
 
     if (!existing) throw new NotFoundException('Customer not found');
 
-    if ((dto as any).customerCode && String((dto as any).customerCode ?? '').trim() !== String(existing.customerCode ?? '').trim()) {
+    if (
+      (dto as any).customerCode &&
+      String((dto as any).customerCode ?? '').trim() !==
+        String(existing.customerCode ?? '').trim()
+    ) {
       throw new BadRequestException('customerCode is immutable');
     }
 
     const nameRaw = dto.name !== undefined ? String(dto.name ?? '') : '';
     const emailRaw = dto.email !== undefined ? String(dto.email ?? '') : '';
 
-    const { name, email } = this.validateCustomerNameEmailOrThrow({ name: nameRaw, email: emailRaw });
+    const { name, email } = this.validateCustomerNameEmailOrThrow({
+      name: nameRaw,
+      email: emailRaw,
+    });
 
     const status = dto.status !== undefined ? String(dto.status) : undefined;
     if (status !== undefined && status !== 'ACTIVE' && status !== 'INACTIVE') {
@@ -290,15 +334,25 @@ export class FinanceArCustomersService {
         name,
         ...(status !== undefined ? { status } : {}),
         email,
-        ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
-        ...(dto.contactPerson !== undefined ? { contactPerson: dto.contactPerson?.trim() || null } : {}),
-        ...(dto.billingAddress !== undefined ? { billingAddress: dto.billingAddress?.trim() || null } : {}),
-        ...(dto.taxNumber !== undefined ? { taxNumber: dto.taxNumber?.trim() || null } : {}),
+        ...(dto.phone !== undefined
+          ? { phone: dto.phone?.trim() || null }
+          : {}),
+        ...(dto.contactPerson !== undefined
+          ? { contactPerson: dto.contactPerson?.trim() || null }
+          : {}),
+        ...(dto.billingAddress !== undefined
+          ? { billingAddress: dto.billingAddress?.trim() || null }
+          : {}),
+        ...(dto.taxNumber !== undefined
+          ? { taxNumber: dto.taxNumber?.trim() || null }
+          : {}),
       } as any,
     });
   }
 
-  private buildImportPreviewRows(rawRows: Array<{ rowNumber: number; row: Record<string, any> }>) {
+  private buildImportPreviewRows(
+    rawRows: Array<{ rowNumber: number; row: Record<string, any> }>,
+  ) {
     type PreviewRow = {
       rowNumber: number;
       customerCode?: string;
@@ -318,18 +372,32 @@ export class FinanceArCustomersService {
       const row = r.row ?? {};
 
       const name = String(row['name'] ?? row['customername'] ?? '').trim();
-      const customerCode = String(row['customercode'] ?? row['code'] ?? '').trim();
+      const customerCode = String(
+        row['customercode'] ?? row['code'] ?? '',
+      ).trim();
       const email = String(row['email'] ?? '').trim();
-      const contactPerson = String(row['contactperson'] ?? row['contact'] ?? '').trim();
+      const contactPerson = String(
+        row['contactperson'] ?? row['contact'] ?? '',
+      ).trim();
       const phone = String(row['phone'] ?? '').trim();
-      const billingAddress = String(row['billingaddress'] ?? row['address'] ?? '').trim();
-      const statusRaw = String(row['status'] ?? '').trim().toUpperCase();
-      const status = statusRaw === 'INACTIVE' ? 'INACTIVE' : statusRaw === 'ACTIVE' ? 'ACTIVE' : undefined;
+      const billingAddress = String(
+        row['billingaddress'] ?? row['address'] ?? '',
+      ).trim();
+      const statusRaw = String(row['status'] ?? '')
+        .trim()
+        .toUpperCase();
+      const status =
+        statusRaw === 'INACTIVE'
+          ? 'INACTIVE'
+          : statusRaw === 'ACTIVE'
+            ? 'ACTIVE'
+            : undefined;
 
       const errors: string[] = [];
       if (!name) errors.push('Customer name is required');
       if (!email) errors.push('Customer email is required');
-      if (email && !this.isValidEmail(email)) errors.push('Invalid email format');
+      if (email && !this.isValidEmail(email))
+        errors.push('Invalid email format');
       if (statusRaw && !status) errors.push(`Invalid status '${statusRaw}'`);
 
       preview.push({
@@ -360,11 +428,16 @@ export class FinanceArCustomersService {
     const isXlsx = lower.endsWith('.xlsx');
     const isCsv = lower.endsWith('.csv');
     if (!isXlsx && !isCsv) {
-      throw new BadRequestException('Unsupported file type. Please upload .xlsx or .csv');
+      throw new BadRequestException(
+        'Unsupported file type. Please upload .xlsx or .csv',
+      );
     }
 
     const rawRows = isCsv
-      ? this.parseCsvRows(file.buffer).map((r) => ({ rowNumber: r.rowNumber, row: r.row as any }))
+      ? this.parseCsvRows(file.buffer).map((r) => ({
+          rowNumber: r.rowNumber,
+          row: r.row as any,
+        }))
       : await this.readXlsxRows(file.buffer);
 
     const preview = this.buildImportPreviewRows(rawRows);
@@ -391,14 +464,19 @@ export class FinanceArCustomersService {
     const isXlsx = lower.endsWith('.xlsx');
     const isCsv = lower.endsWith('.csv');
     if (!isXlsx && !isCsv) {
-      throw new BadRequestException('Unsupported file type. Please upload .xlsx or .csv');
+      throw new BadRequestException(
+        'Unsupported file type. Please upload .xlsx or .csv',
+      );
     }
 
     type FailedRow = { rowNumber: number; reason: string };
     const failedRows: FailedRow[] = [];
 
     const rawRows = isCsv
-      ? this.parseCsvRows(file.buffer).map((r) => ({ rowNumber: r.rowNumber, row: r.row as any }))
+      ? this.parseCsvRows(file.buffer).map((r) => ({
+          rowNumber: r.rowNumber,
+          row: r.row as any,
+        }))
       : await this.readXlsxRows(file.buffer);
 
     if (rawRows.length === 0) {
@@ -417,14 +495,27 @@ export class FinanceArCustomersService {
       const row = r.row ?? {};
 
       const name = String(row['name'] ?? row['customername'] ?? '').trim();
-      const customerCodeRaw = String(row['customercode'] ?? row['code'] ?? '').trim();
-      const contactPerson = String(row['contactperson'] ?? row['contact'] ?? '').trim();
+      const customerCodeRaw = String(
+        row['customercode'] ?? row['code'] ?? '',
+      ).trim();
+      const contactPerson = String(
+        row['contactperson'] ?? row['contact'] ?? '',
+      ).trim();
       const email = String(row['email'] ?? '').trim();
       const phone = String(row['phone'] ?? '').trim();
-      const billingAddress = String(row['billingaddress'] ?? row['address'] ?? '').trim();
+      const billingAddress = String(
+        row['billingaddress'] ?? row['address'] ?? '',
+      ).trim();
       const taxNumber = String(row['taxnumber'] ?? '').trim();
-      const statusRaw = String(row['status'] ?? '').trim().toUpperCase();
-      const status = statusRaw === 'INACTIVE' ? 'INACTIVE' : statusRaw === 'ACTIVE' ? 'ACTIVE' : null;
+      const statusRaw = String(row['status'] ?? '')
+        .trim()
+        .toUpperCase();
+      const status =
+        statusRaw === 'INACTIVE'
+          ? 'INACTIVE'
+          : statusRaw === 'ACTIVE'
+            ? 'ACTIVE'
+            : null;
 
       if (!name) {
         failedRows.push({ rowNumber, reason: 'Customer name is required' });
@@ -467,7 +558,10 @@ export class FinanceArCustomersService {
                 break;
               }
             }
-            if (!customerCode) throw new ConflictException('Failed to generate unique customer code');
+            if (!customerCode)
+              throw new ConflictException(
+                'Failed to generate unique customer code',
+              );
           }
 
           return tx.customer.create({
@@ -501,14 +595,33 @@ export class FinanceArCustomersService {
     };
   }
 
-  async getCustomerImportCsvTemplate(req: Request): Promise<{ fileName: string; body: string }> {
+  async getCustomerImportCsvTemplate(
+    req: Request,
+  ): Promise<{ fileName: string; body: string }> {
     const tenant = req.tenant;
     const user = req.user;
-    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+    if (!tenant || !user)
+      throw new BadRequestException('Missing tenant or user context');
 
-    const headers = ['customerCode', 'name', 'email', 'contactPerson', 'phone', 'billingAddress', 'status'];
+    const headers = [
+      'customerCode',
+      'name',
+      'email',
+      'contactPerson',
+      'phone',
+      'billingAddress',
+      'status',
+    ];
     const sample = [
-      ['CUST-000001', 'Acme Trading', 'john.smith@acme.com', 'John Smith', '+1 555 0100', '123 Main St', 'ACTIVE'],
+      [
+        'CUST-000001',
+        'Acme Trading',
+        'john.smith@acme.com',
+        'John Smith',
+        '+1 555 0100',
+        '123 Main St',
+        'ACTIVE',
+      ],
     ];
 
     const escape = (v: any) => {
@@ -519,24 +632,49 @@ export class FinanceArCustomersService {
       return s;
     };
 
-    const body = [headers.join(','), ...sample.map((r) => r.map(escape).join(','))].join('\n') + '\n';
+    const body =
+      [headers.join(','), ...sample.map((r) => r.map(escape).join(','))].join(
+        '\n',
+      ) + '\n';
     return { fileName: 'customer_import_template.csv', body };
   }
 
-  async getCustomerImportXlsxTemplate(req: Request): Promise<{ fileName: string; body: Buffer }> {
+  async getCustomerImportXlsxTemplate(
+    req: Request,
+  ): Promise<{ fileName: string; body: Buffer }> {
     const tenant = req.tenant;
     const user = req.user;
-    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+    if (!tenant || !user)
+      throw new BadRequestException('Missing tenant or user context');
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Customers');
 
-    ws.addRow(['customerCode', 'name', 'email', 'contactPerson', 'phone', 'billingAddress', 'status']);
-    ws.addRow(['CUST-000001', 'Acme Trading', 'john.smith@acme.com', 'John Smith', '+1 555 0100', '123 Main St', 'ACTIVE']);
+    ws.addRow([
+      'customerCode',
+      'name',
+      'email',
+      'contactPerson',
+      'phone',
+      'billingAddress',
+      'status',
+    ]);
+    ws.addRow([
+      'CUST-000001',
+      'Acme Trading',
+      'john.smith@acme.com',
+      'John Smith',
+      '+1 555 0100',
+      '123 Main St',
+      'ACTIVE',
+    ]);
     ws.getRow(1).font = { bold: true };
     ws.columns.forEach((c) => (c.width = 22));
 
     const buf = await wb.xlsx.writeBuffer();
-    return { fileName: 'customer_import_template.xlsx', body: Buffer.from(buf as any) };
+    return {
+      fileName: 'customer_import_template.xlsx',
+      body: Buffer.from(buf as any),
+    };
   }
 }

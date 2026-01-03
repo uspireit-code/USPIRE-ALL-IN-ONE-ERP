@@ -40,7 +40,11 @@ export class ArReceiptsController {
     @Param('customerId') customerId: string,
     @Query('currency') currency?: string,
   ) {
-    return this.receipts.listCustomerOutstandingInvoices(req, customerId, currency);
+    return this.receipts.listCustomerOutstandingInvoices(
+      req,
+      customerId,
+      currency,
+    );
   }
 
   @Get(':id')
@@ -62,7 +66,10 @@ export class ArReceiptsController {
     });
 
     res.setHeader('Content-Type', out.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
     res.send(out.body);
   }
 
@@ -90,7 +97,11 @@ export class ArReceiptsController {
 
   @Patch(':id')
   @Permissions('AR_RECEIPTS_CREATE')
-  async update(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateReceiptDto) {
+  async update(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateReceiptDto,
+  ) {
     return this.receipts.updateReceipt(req, id, dto);
   }
 
@@ -102,7 +113,11 @@ export class ArReceiptsController {
 
   @Post(':id/void')
   @Permissions('AR_RECEIPT_VOID')
-  async void(@Req() req: Request, @Param('id') id: string, @Body() dto: VoidReceiptDto) {
+  async void(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: VoidReceiptDto,
+  ) {
     return this.receipts.voidReceipt(req, id, dto.reason);
   }
 }

@@ -47,16 +47,22 @@ export class FinanceArInvoicesService {
     discountTotal: number;
   } {
     const gross = this.round2(this.toNum(params.gross ?? 0));
-    const discountPercent = this.round6(this.toNum(params.discountPercent ?? 0));
+    const discountPercent = this.round6(
+      this.toNum(params.discountPercent ?? 0),
+    );
     const discountAmount = this.round2(this.toNum(params.discountAmount ?? 0));
 
     const hasPercent = discountPercent > 0;
     const hasAmount = discountAmount > 0;
     if (hasPercent && hasAmount) {
-      throw new BadRequestException('Invoice line discountPercent and discountAmount are mutually exclusive');
+      throw new BadRequestException(
+        'Invoice line discountPercent and discountAmount are mutually exclusive',
+      );
     }
     if (discountPercent < 0 || discountPercent > 100) {
-      throw new BadRequestException('Invoice line discountPercent must be between 0 and 100');
+      throw new BadRequestException(
+        'Invoice line discountPercent must be between 0 and 100',
+      );
     }
     if (discountAmount < 0) {
       throw new BadRequestException('Invoice line discountAmount must be >= 0');
@@ -69,7 +75,9 @@ export class FinanceArInvoicesService {
         : 0;
 
     if (computedDiscountTotal > gross) {
-      throw new BadRequestException('Invoice line discount cannot exceed gross amount');
+      throw new BadRequestException(
+        'Invoice line discount cannot exceed gross amount',
+      );
     }
 
     return {
@@ -108,7 +116,9 @@ export class FinanceArInvoicesService {
       .replace(/[^a-z0-9]/g, '');
   }
 
-  private parseCsvRows(buf: Buffer): Array<{ rowNumber: number; row: Record<string, string> }> {
+  private parseCsvRows(
+    buf: Buffer,
+  ): Array<{ rowNumber: number; row: Record<string, string> }> {
     const text = buf.toString('utf8');
     const lines = text
       .replace(/\r\n/g, '\n')
@@ -153,14 +163,18 @@ export class FinanceArInvoicesService {
       for (let j = 0; j < headers.length; j++) {
         row[headers[j]] = String(cols[j] ?? '').trim();
       }
-      const hasAny = Object.values(row).some((v) => String(v ?? '').trim() !== '');
+      const hasAny = Object.values(row).some(
+        (v) => String(v ?? '').trim() !== '',
+      );
       if (hasAny) rows.push({ rowNumber: i + 1, row });
     }
 
     return rows;
   }
 
-  private async readXlsxRows(buf: Buffer): Promise<Array<{ rowNumber: number; row: Record<string, any> }>> {
+  private async readXlsxRows(
+    buf: Buffer,
+  ): Promise<Array<{ rowNumber: number; row: Record<string, any> }>> {
     const wb = new ExcelJS.Workbook();
     await (wb.xlsx as any).load(buf as any);
 
@@ -183,7 +197,9 @@ export class FinanceArInvoicesService {
         const v = (cell.value as any)?.text ?? cell.value;
         obj[h] = v;
       });
-      const hasAny = Object.values(obj).some((v) => String(v ?? '').trim() !== '');
+      const hasAny = Object.values(obj).some(
+        (v) => String(v ?? '').trim() !== '',
+      );
       if (hasAny) rows.push({ rowNumber, row: obj });
     });
 
@@ -205,7 +221,10 @@ export class FinanceArInvoicesService {
     return Number.isFinite(n) ? n : 0;
   }
 
-  private async assertOpenPeriodForInvoiceDate(params: { tenantId: string; invoiceDate: Date }) {
+  private async assertOpenPeriodForInvoiceDate(params: {
+    tenantId: string;
+    invoiceDate: Date;
+  }) {
     const period = await this.prisma.accountingPeriod.findFirst({
       where: {
         tenantId: params.tenantId,
@@ -272,7 +291,11 @@ export class FinanceArInvoicesService {
     return `INV-${String(bumped.value).padStart(6, '0')}`;
   }
 
-  private async computeOutstandingBalance(params: { tenantId: string; invoiceId: string; totalAmount: number }) {
+  private async computeOutstandingBalance(params: {
+    tenantId: string;
+    invoiceId: string;
+    totalAmount: number;
+  }) {
     const g = await (this.prisma as any).customerReceiptLine.groupBy({
       by: ['invoiceId'],
       where: {
@@ -357,9 +380,18 @@ export class FinanceArInvoicesService {
         ...l,
         quantity: Number(l.quantity),
         unitPrice: Number(l.unitPrice),
-        discountPercent: l.discountPercent === null || l.discountPercent === undefined ? l.discountPercent : Number(l.discountPercent),
-        discountAmount: l.discountAmount === null || l.discountAmount === undefined ? l.discountAmount : Number(l.discountAmount),
-        discountTotal: l.discountTotal === null || l.discountTotal === undefined ? l.discountTotal : Number(l.discountTotal),
+        discountPercent:
+          l.discountPercent === null || l.discountPercent === undefined
+            ? l.discountPercent
+            : Number(l.discountPercent),
+        discountAmount:
+          l.discountAmount === null || l.discountAmount === undefined
+            ? l.discountAmount
+            : Number(l.discountAmount),
+        discountTotal:
+          l.discountTotal === null || l.discountTotal === undefined
+            ? l.discountTotal
+            : Number(l.discountTotal),
         lineTotal: Number(l.lineTotal),
       })),
       outstandingBalance: await this.computeOutstandingBalance({
@@ -380,26 +412,41 @@ export class FinanceArInvoicesService {
     if (!dueDate) throw new BadRequestException('dueDate is required');
 
     if (dueDate < invoiceDate) {
-      throw new BadRequestException('Due date cannot be earlier than invoice date');
+      throw new BadRequestException(
+        'Due date cannot be earlier than invoice date',
+      );
     }
 
-    await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
+    await this.assertOpenPeriodForInvoiceDate({
+      tenantId: tenant.id,
+      invoiceDate,
+    });
 
     const currency = String(dto.currency ?? '').trim();
     if (!currency) throw new BadRequestException('currency is required');
 
-    const tenantCurrency = String((tenant as any)?.defaultCurrency ?? '').trim();
+    const tenantCurrency = String(
+      (tenant as any)?.defaultCurrency ?? '',
+    ).trim();
     const exchangeRate =
       tenantCurrency && currency.toUpperCase() === tenantCurrency.toUpperCase()
         ? 1
         : this.round6(this.toNum((dto as any).exchangeRate ?? 0));
     if (!(exchangeRate > 0)) {
-      throw new BadRequestException('exchangeRate is required and must be > 0 for non-base currency');
+      throw new BadRequestException(
+        'exchangeRate is required and must be > 0 for non-base currency',
+      );
     }
 
     const customer = await (this.prisma as any).customer.findFirst({
       where: { id: dto.customerId, tenantId: tenant.id },
-      select: { id: true, status: true, name: true, email: true, billingAddress: true },
+      select: {
+        id: true,
+        status: true,
+        name: true,
+        email: true,
+        billingAddress: true,
+      },
     });
 
     if (!customer) throw new BadRequestException('Customer not found');
@@ -429,17 +476,25 @@ export class FinanceArInvoicesService {
       const unitPrice = this.toNum(l.unitPrice);
       const description = String(l.description ?? '').trim();
 
-      if (!l.accountId) throw new BadRequestException('Invoice line missing accountId');
-      if (!description) throw new BadRequestException('Invoice line description is required');
-      if (!(qty > 0)) throw new BadRequestException('Invoice line quantity must be > 0');
-      if (!(unitPrice > 0)) throw new BadRequestException('Invoice line unitPrice must be > 0');
+      if (!l.accountId)
+        throw new BadRequestException('Invoice line missing accountId');
+      if (!description)
+        throw new BadRequestException('Invoice line description is required');
+      if (!(qty > 0))
+        throw new BadRequestException('Invoice line quantity must be > 0');
+      if (!(unitPrice > 0))
+        throw new BadRequestException('Invoice line unitPrice must be > 0');
 
       const acct = byId.get(l.accountId);
       if (!acct) {
-        throw new BadRequestException(`Account not found or inactive: ${l.accountId}`);
+        throw new BadRequestException(
+          `Account not found or inactive: ${l.accountId}`,
+        );
       }
       if ((acct as any).type !== 'INCOME') {
-        throw new BadRequestException(`Invoice line account must be INCOME: ${l.accountId}`);
+        throw new BadRequestException(
+          `Invoice line account must be INCOME: ${l.accountId}`,
+        );
       }
 
       const gross = this.round2(qty * unitPrice);
@@ -461,8 +516,15 @@ export class FinanceArInvoicesService {
       };
     });
 
-    const subtotal = this.round2(computedLines.reduce((s, l) => s + l.lineTotal, 0));
-    const discountTotal = this.round2(computedLines.reduce((s, l) => s + this.toNum((l as any).discountTotal ?? 0), 0));
+    const subtotal = this.round2(
+      computedLines.reduce((s, l) => s + l.lineTotal, 0),
+    );
+    const discountTotal = this.round2(
+      computedLines.reduce(
+        (s, l) => s + this.toNum((l as any).discountTotal ?? 0),
+        0,
+      ),
+    );
     const taxAmount = 0;
     const totalAmount = this.round2(subtotal + taxAmount);
 
@@ -478,10 +540,16 @@ export class FinanceArInvoicesService {
           currency,
           exchangeRate,
           reference: dto.reference ? String(dto.reference).trim() : undefined,
-          invoiceNote: (dto as any).invoiceNote ? String((dto as any).invoiceNote).trim() : undefined,
-          customerNameSnapshot: String((customer as any).name ?? '').trim(),
-          customerEmailSnapshot: (customer as any).email ? String((customer as any).email).trim() : undefined,
-          customerBillingAddressSnapshot: (customer as any).billingAddress ? String((customer as any).billingAddress).trim() : undefined,
+          invoiceNote: (dto as any).invoiceNote
+            ? String((dto as any).invoiceNote).trim()
+            : undefined,
+          customerNameSnapshot: String(customer.name ?? '').trim(),
+          customerEmailSnapshot: customer.email
+            ? String(customer.email).trim()
+            : undefined,
+          customerBillingAddressSnapshot: customer.billingAddress
+            ? String(customer.billingAddress).trim()
+            : undefined,
           subtotal,
           taxAmount,
           totalAmount,
@@ -507,7 +575,11 @@ export class FinanceArInvoicesService {
     return this.getById(req, (created as any).id);
   }
 
-  async post(req: Request, id: string, opts?: { arControlAccountCode?: string }) {
+  async post(
+    req: Request,
+    id: string,
+    opts?: { arControlAccountCode?: string },
+  ) {
     const tenant = this.ensureTenant(req);
     const user = this.ensureUser(req);
 
@@ -521,11 +593,20 @@ export class FinanceArInvoicesService {
       throw new BadRequestException('Invoice is already posted');
     }
 
-    if ((inv as any).dueDate && (inv as any).invoiceDate && (inv as any).dueDate < (inv as any).invoiceDate) {
-      throw new BadRequestException('Due date cannot be earlier than invoice date');
+    if (
+      (inv as any).dueDate &&
+      (inv as any).invoiceDate &&
+      (inv as any).dueDate < (inv as any).invoiceDate
+    ) {
+      throw new BadRequestException(
+        'Due date cannot be earlier than invoice date',
+      );
     }
 
-    await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate: (inv as any).invoiceDate });
+    await this.assertOpenPeriodForInvoiceDate({
+      tenantId: tenant.id,
+      invoiceDate: (inv as any).invoiceDate,
+    });
 
     const arCode = String(opts?.arControlAccountCode ?? '1100');
     const arAccount = await this.prisma.account.findFirst({
@@ -538,7 +619,9 @@ export class FinanceArInvoicesService {
       select: { id: true, code: true, name: true },
     });
     if (!arAccount) {
-      throw new BadRequestException(`AR control account not found or invalid: ${arCode}`);
+      throw new BadRequestException(
+        `AR control account not found or invalid: ${arCode}`,
+      );
     }
 
     const lines = ((inv as any).lines ?? []).map((l: any) => ({
@@ -546,12 +629,17 @@ export class FinanceArInvoicesService {
       lineTotal: this.round2(Number(l.lineTotal)),
     }));
 
-    if (lines.length < 1) throw new BadRequestException('Invoice must have at least 1 line');
+    if (lines.length < 1)
+      throw new BadRequestException('Invoice must have at least 1 line');
 
-    const creditsTotal = this.round2(lines.reduce((s, l) => s + l.lineTotal, 0));
+    const creditsTotal = this.round2(
+      lines.reduce((s, l) => s + l.lineTotal, 0),
+    );
     const invTotal = this.round2(Number((inv as any).totalAmount));
     if (creditsTotal !== invTotal) {
-      throw new BadRequestException('Invoice totals failed validation before posting');
+      throw new BadRequestException(
+        'Invoice totals failed validation before posting',
+      );
     }
 
     let postedJournal: any = null;
@@ -610,14 +698,19 @@ export class FinanceArInvoicesService {
             entityId: String((inv as any).id),
             action: 'AR_INVOICE_POST',
             outcome: 'SUCCESS',
-            reason: JSON.stringify({ invoiceNumber: (inv as any).invoiceNumber }),
+            reason: JSON.stringify({
+              invoiceNumber: (inv as any).invoiceNumber,
+            }),
             userId: user.id,
             permissionUsed: 'AR_INVOICE_POST',
           } as any,
         } as any)
         .catch(() => undefined);
 
-      return { invoice: await this.getById(req, (updated as any).id), glJournal: postedJournal };
+      return {
+        invoice: await this.getById(req, (updated as any).id),
+        glJournal: postedJournal,
+      };
     } catch (e: any) {
       await this.prisma.auditEvent
         .create({
@@ -643,7 +736,11 @@ export class FinanceArInvoicesService {
     this.ensureUser(req);
 
     const ids = Array.from(
-      new Set((dto.invoiceIds ?? []).map((x) => String(x ?? '').trim()).filter(Boolean)),
+      new Set(
+        (dto.invoiceIds ?? [])
+          .map((x) => String(x ?? '').trim())
+          .filter(Boolean),
+      ),
     );
     if (ids.length < 1) throw new BadRequestException('invoiceIds is required');
 
@@ -691,9 +788,48 @@ export class FinanceArInvoicesService {
 
     const fileName = `invoice_import_template.csv`;
     const sampleRows = [
-      ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', '1', '1500', '10', ''],
-      ['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', '2', '750', '', '25.00'],
-      ['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', '1', '99', '', ''],
+      [
+        'SAMPLE',
+        'INVREF-1001',
+        'CUST-001',
+        '2026-01-01',
+        '2026-01-31',
+        'USD',
+        '4000',
+        'Consulting services - Phase 1',
+        '1',
+        '1500',
+        '10',
+        '',
+      ],
+      [
+        'SAMPLE',
+        'INVREF-1001',
+        'CUST-001',
+        '2026-01-01',
+        '2026-01-31',
+        'USD',
+        '4000',
+        'Consulting services - Phase 2',
+        '2',
+        '750',
+        '',
+        '25.00',
+      ],
+      [
+        'SAMPLE',
+        'INVREF-2001',
+        'CUST-002',
+        '2026-01-05',
+        '2026-02-05',
+        'USD',
+        '4010',
+        'Monthly subscription',
+        '1',
+        '99',
+        '',
+        '',
+      ],
     ];
     const body = `${headers.join(',')}\n${sampleRows.map((r) => r.join(',')).join('\n')}\n`;
     return { fileName, body };
@@ -720,21 +856,68 @@ export class FinanceArInvoicesService {
 
     // Header notes (Excel comments) to guide users; SAMPLE rows are ignored during preview/import.
     try {
-      ws.getCell('A1').note = 'Optional. Use SAMPLE to include example rows (ignored during preview/import). Leave blank for real data.';
-      ws.getCell('B1').note = 'Required. Rows with the same invoiceRef are grouped into ONE invoice with multiple lines.';
-      ws.getCell('C1').note = 'Required. Must be consistent for all rows within the same invoiceRef group.';
-      ws.getCell('D1').note = 'Required. Must be consistent for all rows within the same invoiceRef group.';
-      ws.getCell('E1').note = 'Required. Must be consistent for all rows within the same invoiceRef group. Must be >= Invoice Date.';
-      ws.getCell('F1').note = 'Required. Use a valid ISO code (e.g. USD). Must be consistent within invoiceRef group.';
-      ws.getCell('K1').note = 'Optional. Discount percent (0-100). Mutually exclusive with discountAmount.';
-      ws.getCell('L1').note = 'Optional. Discount amount (>= 0). Mutually exclusive with discountPercent.';
+      ws.getCell('A1').note =
+        'Optional. Use SAMPLE to include example rows (ignored during preview/import). Leave blank for real data.';
+      ws.getCell('B1').note =
+        'Required. Rows with the same invoiceRef are grouped into ONE invoice with multiple lines.';
+      ws.getCell('C1').note =
+        'Required. Must be consistent for all rows within the same invoiceRef group.';
+      ws.getCell('D1').note =
+        'Required. Must be consistent for all rows within the same invoiceRef group.';
+      ws.getCell('E1').note =
+        'Required. Must be consistent for all rows within the same invoiceRef group. Must be >= Invoice Date.';
+      ws.getCell('F1').note =
+        'Required. Use a valid ISO code (e.g. USD). Must be consistent within invoiceRef group.';
+      ws.getCell('K1').note =
+        'Optional. Discount percent (0-100). Mutually exclusive with discountAmount.';
+      ws.getCell('L1').note =
+        'Optional. Discount amount (>= 0). Mutually exclusive with discountPercent.';
     } catch {
       // ignore if notes unsupported
     }
 
-    ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 1', 1, 1500, 10, null]);
-    ws.addRow(['SAMPLE', 'INVREF-1001', 'CUST-001', '2026-01-01', '2026-01-31', 'USD', '4000', 'Consulting services - Phase 2', 2, 750, null, 25]);
-    ws.addRow(['SAMPLE', 'INVREF-2001', 'CUST-002', '2026-01-05', '2026-02-05', 'USD', '4010', 'Monthly subscription', 1, 99, null, null]);
+    ws.addRow([
+      'SAMPLE',
+      'INVREF-1001',
+      'CUST-001',
+      '2026-01-01',
+      '2026-01-31',
+      'USD',
+      '4000',
+      'Consulting services - Phase 1',
+      1,
+      1500,
+      10,
+      null,
+    ]);
+    ws.addRow([
+      'SAMPLE',
+      'INVREF-1001',
+      'CUST-001',
+      '2026-01-01',
+      '2026-01-31',
+      'USD',
+      '4000',
+      'Consulting services - Phase 2',
+      2,
+      750,
+      null,
+      25,
+    ]);
+    ws.addRow([
+      'SAMPLE',
+      'INVREF-2001',
+      'CUST-002',
+      '2026-01-05',
+      '2026-02-05',
+      'USD',
+      '4010',
+      'Monthly subscription',
+      1,
+      99,
+      null,
+      null,
+    ]);
 
     const fileName = `invoice_import_template.xlsx`;
     const body = await (wb.xlsx as any).writeBuffer();
@@ -750,7 +933,10 @@ export class FinanceArInvoicesService {
       return this.readXlsxRows(buf);
     }
 
-    return this.parseCsvRows(buf).map((r) => ({ rowNumber: r.rowNumber, row: r.row }));
+    return this.parseCsvRows(buf).map((r) => ({
+      rowNumber: r.rowNumber,
+      row: r.row,
+    }));
   }
 
   async previewImport(req: Request, file: any, opts?: { importId?: string }) {
@@ -762,19 +948,41 @@ export class FinanceArInvoicesService {
 
     const parsedAll = rows.map((r) => {
       const raw = r.row;
-      const rowTypeRaw = String(raw.rowtype ?? raw.row_type ?? raw.type ?? raw.flag ?? '').trim();
+      const rowTypeRaw = String(
+        raw.rowtype ?? raw.row_type ?? raw.type ?? raw.flag ?? '',
+      ).trim();
       const isSample = rowTypeRaw.toUpperCase() === 'SAMPLE';
-      const invoiceRef = String(raw.invoiceref ?? raw.invoice_ref ?? raw.invoicereference ?? '').trim();
-      const customerCode = String(raw.customercode ?? raw.customer_code ?? raw.customer ?? '').trim();
-      const invoiceDate = String(raw.invoicedate ?? raw.invoice_date ?? '').trim();
+      const invoiceRef = String(
+        raw.invoiceref ?? raw.invoice_ref ?? raw.invoicereference ?? '',
+      ).trim();
+      const customerCode = String(
+        raw.customercode ?? raw.customer_code ?? raw.customer ?? '',
+      ).trim();
+      const invoiceDate = String(
+        raw.invoicedate ?? raw.invoice_date ?? '',
+      ).trim();
       const dueDate = String(raw.duedate ?? raw.due_date ?? '').trim();
-      const revenueAccountCode = String(raw.revenueaccountcode ?? raw.revenue_account_code ?? raw.accountcode ?? raw.account_code ?? '').trim();
+      const revenueAccountCode = String(
+        raw.revenueaccountcode ??
+          raw.revenue_account_code ??
+          raw.accountcode ??
+          raw.account_code ??
+          '',
+      ).trim();
       const description = String(raw.description ?? '').trim();
       const quantity = this.toNum(raw.quantity ?? 1);
       const unitPrice = this.toNum(raw.unitprice ?? raw.unit_price ?? 0);
       const currency = String(raw.currency ?? '').trim();
-      const discountPercent = raw.discountpercent ?? raw.discount_percent ?? raw.discpercent ?? raw.disc_percent;
-      const discountAmount = raw.discountamount ?? raw.discount_amount ?? raw.discamount ?? raw.disc_amount;
+      const discountPercent =
+        raw.discountpercent ??
+        raw.discount_percent ??
+        raw.discpercent ??
+        raw.disc_percent;
+      const discountAmount =
+        raw.discountamount ??
+        raw.discount_amount ??
+        raw.discamount ??
+        raw.disc_amount;
 
       const errors: string[] = [];
       if (isSample) {
@@ -797,8 +1005,10 @@ export class FinanceArInvoicesService {
       }
       if (!invoiceRef) errors.push('invoiceRef is required');
       if (!customerCode) errors.push('Customer Code is required');
-      if (!invoiceDate || !this.parseYmdToDateOrNull(invoiceDate)) errors.push('Invoice Date is required and must be a valid date');
-      if (!dueDate || !this.parseYmdToDateOrNull(dueDate)) errors.push('Due Date is required and must be a valid date');
+      if (!invoiceDate || !this.parseYmdToDateOrNull(invoiceDate))
+        errors.push('Invoice Date is required and must be a valid date');
+      if (!dueDate || !this.parseYmdToDateOrNull(dueDate))
+        errors.push('Due Date is required and must be a valid date');
       if (!currency) errors.push('Currency is required');
       if (!revenueAccountCode) errors.push('Revenue Account Code is required');
       if (!description) errors.push('Description is required');
@@ -807,7 +1017,9 @@ export class FinanceArInvoicesService {
 
       if (errors.length === 0) {
         try {
-          const gross = this.round2(this.toNum(quantity) * this.toNum(unitPrice));
+          const gross = this.round2(
+            this.toNum(quantity) * this.toNum(unitPrice),
+          );
           this.computeDiscount({
             gross,
             discountPercent,
@@ -844,8 +1056,12 @@ export class FinanceArInvoicesService {
 
     const parsed = (parsedAll ?? []).filter((p: any) => !p._isSample);
 
-    const customerCodes = [...new Set(parsed.map((p) => p.customerCode).filter(Boolean))];
-    const accountCodes = [...new Set(parsed.map((p) => p.revenueAccountCode).filter(Boolean))];
+    const customerCodes = [
+      ...new Set(parsed.map((p) => p.customerCode).filter(Boolean)),
+    ];
+    const accountCodes = [
+      ...new Set(parsed.map((p) => p.revenueAccountCode).filter(Boolean)),
+    ];
 
     const [customersRaw, accountsRaw] = await Promise.all([
       (this.prisma as any).customer.findMany({
@@ -853,7 +1069,11 @@ export class FinanceArInvoicesService {
         select: { id: true, customerCode: true, status: true },
       }),
       this.prisma.account.findMany({
-        where: { tenantId: tenant.id, code: { in: accountCodes }, isActive: true },
+        where: {
+          tenantId: tenant.id,
+          code: { in: accountCodes },
+          isActive: true,
+        },
         select: { id: true, code: true, type: true },
       }),
     ]);
@@ -861,8 +1081,12 @@ export class FinanceArInvoicesService {
     const customers = (customersRaw ?? []) as any[];
     const accounts = (accountsRaw ?? []) as any[];
 
-    const customerByCode = new Map(customers.map((c: any) => [String(c.customerCode), c] as const));
-    const accountByCode = new Map(accounts.map((a: any) => [String(a.code), a] as const));
+    const customerByCode = new Map(
+      customers.map((c: any) => [String(c.customerCode), c] as const),
+    );
+    const accountByCode = new Map(
+      accounts.map((a: any) => [String(a.code), a] as const),
+    );
 
     for (const p of parsed) {
       if (p.customerCode) {
@@ -873,14 +1097,20 @@ export class FinanceArInvoicesService {
       if (p.revenueAccountCode) {
         const a = accountByCode.get(p.revenueAccountCode);
         if (!a) p.errors.push('Revenue account not found or inactive');
-        else if (a.type !== 'INCOME') p.errors.push('Revenue account must be INCOME');
+        else if (a.type !== 'INCOME')
+          p.errors.push('Revenue account must be INCOME');
       }
       const invDate = this.parseYmdToDateOrNull(p.invoiceDate);
       if (invDate) {
         try {
-          await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate: invDate });
+          await this.assertOpenPeriodForInvoiceDate({
+            tenantId: tenant.id,
+            invoiceDate: invDate,
+          });
         } catch (e: any) {
-          p.errors.push(String(e?.message ?? 'Invoice Date period is not OPEN'));
+          p.errors.push(
+            String(e?.message ?? 'Invoice Date period is not OPEN'),
+          );
         }
       }
     }
@@ -899,21 +1129,40 @@ export class FinanceArInvoicesService {
       if (!rows || rows.length < 2) continue;
       const base = rows[0];
       const baseCustomer = String(base.customerCode ?? '').trim();
-      const baseCurrency = String(base.currency ?? '').trim().toUpperCase();
+      const baseCurrency = String(base.currency ?? '')
+        .trim()
+        .toUpperCase();
       const baseInvDate = String(base.invoiceDate ?? '').trim();
       const baseDueDate = String(base.dueDate ?? '').trim();
 
-      const mixedCustomer = rows.some((r) => String(r.customerCode ?? '').trim() !== baseCustomer);
-      const mixedCurrency = rows.some((r) => String(r.currency ?? '').trim().toUpperCase() !== baseCurrency);
-      const mixedInvDate = rows.some((r) => String(r.invoiceDate ?? '').trim() !== baseInvDate);
-      const mixedDueDate = rows.some((r) => String(r.dueDate ?? '').trim() !== baseDueDate);
+      const mixedCustomer = rows.some(
+        (r) => String(r.customerCode ?? '').trim() !== baseCustomer,
+      );
+      const mixedCurrency = rows.some(
+        (r) =>
+          String(r.currency ?? '')
+            .trim()
+            .toUpperCase() !== baseCurrency,
+      );
+      const mixedInvDate = rows.some(
+        (r) => String(r.invoiceDate ?? '').trim() !== baseInvDate,
+      );
+      const mixedDueDate = rows.some(
+        (r) => String(r.dueDate ?? '').trim() !== baseDueDate,
+      );
 
-      if (!mixedCustomer && !mixedCurrency && !mixedInvDate && !mixedDueDate) continue;
+      if (!mixedCustomer && !mixedCurrency && !mixedInvDate && !mixedDueDate)
+        continue;
 
       for (const r of rows) {
-        if (mixedCustomer) r.errors.push(`Mixed customers in invoiceRef group: ${invoiceRef}`);
-        if (mixedCurrency) r.errors.push(`Mixed currencies in invoiceRef group: ${invoiceRef}`);
-        if (mixedInvDate || mixedDueDate) r.errors.push(`Mixed invoice/due dates in invoiceRef group: ${invoiceRef}`);
+        if (mixedCustomer)
+          r.errors.push(`Mixed customers in invoiceRef group: ${invoiceRef}`);
+        if (mixedCurrency)
+          r.errors.push(`Mixed currencies in invoiceRef group: ${invoiceRef}`);
+        if (mixedInvDate || mixedDueDate)
+          r.errors.push(
+            `Mixed invoice/due dates in invoiceRef group: ${invoiceRef}`,
+          );
       }
     }
 
@@ -947,16 +1196,23 @@ export class FinanceArInvoicesService {
     } catch (e: any) {
       const code = String(e?.code ?? '');
       if (code === 'P2002') {
-        throw new BadRequestException('This import has already been processed.');
+        throw new BadRequestException(
+          'This import has already been processed.',
+        );
       }
       throw e;
     }
 
     const preview = await this.previewImport(req, file, { importId });
-    const validRows = preview.rows.filter((r: any) => (r.errors ?? []).length === 0);
+    const validRows = preview.rows.filter(
+      (r: any) => (r.errors ?? []).length === 0,
+    );
     const failedRows = preview.rows
       .filter((r: any) => (r.errors ?? []).length > 0)
-      .map((r: any) => ({ rowNumber: r.rowNumber, reason: (r.errors ?? []).join('; ') }));
+      .map((r: any) => ({
+        rowNumber: r.rowNumber,
+        reason: (r.errors ?? []).join('; '),
+      }));
 
     if (validRows.length === 0) {
       return {
@@ -967,8 +1223,12 @@ export class FinanceArInvoicesService {
       };
     }
 
-    const customerCodes = [...new Set(validRows.map((r: any) => r.customerCode))];
-    const accountCodes = [...new Set(validRows.map((r: any) => r.revenueAccountCode))];
+    const customerCodes = [
+      ...new Set(validRows.map((r: any) => r.customerCode)),
+    ];
+    const accountCodes = [
+      ...new Set(validRows.map((r: any) => r.revenueAccountCode)),
+    ];
 
     const [customers, accounts] = await Promise.all([
       (this.prisma as any).customer.findMany({
@@ -976,13 +1236,22 @@ export class FinanceArInvoicesService {
         select: { id: true, customerCode: true },
       }),
       this.prisma.account.findMany({
-        where: { tenantId: tenant.id, code: { in: accountCodes }, isActive: true, type: 'INCOME' },
+        where: {
+          tenantId: tenant.id,
+          code: { in: accountCodes },
+          isActive: true,
+          type: 'INCOME',
+        },
         select: { id: true, code: true },
       }),
     ]);
 
-    const customerIdByCode = new Map(customers.map((c: any) => [String(c.customerCode), c.id] as const));
-    const accountIdByCode = new Map(accounts.map((a: any) => [String(a.code), a.id] as const));
+    const customerIdByCode = new Map(
+      customers.map((c: any) => [String(c.customerCode), c.id] as const),
+    );
+    const accountIdByCode = new Map(
+      accounts.map((a: any) => [String(a.code), a.id] as const),
+    );
 
     const groups = new Map<string, any[]>();
     for (const r of validRows) {
@@ -1007,37 +1276,55 @@ export class FinanceArInvoicesService {
         }
 
         if (dueDate < invoiceDate) {
-          throw new BadRequestException('Due date cannot be earlier than invoice date');
+          throw new BadRequestException(
+            'Due date cannot be earlier than invoice date',
+          );
         }
 
-        await this.assertOpenPeriodForInvoiceDate({ tenantId: tenant.id, invoiceDate });
+        await this.assertOpenPeriodForInvoiceDate({
+          tenantId: tenant.id,
+          invoiceDate,
+        });
 
         // Ensure the customer is ACTIVE and snapshot details are captured
         const customer = await (this.prisma as any).customer.findFirst({
           where: { tenantId: tenant.id, id: customerId },
-          select: { id: true, status: true, name: true, email: true, billingAddress: true },
+          select: {
+            id: true,
+            status: true,
+            name: true,
+            email: true,
+            billingAddress: true,
+          },
         });
         if (!customer) throw new BadRequestException('Customer not found');
-        if ((customer as any).status !== 'ACTIVE') throw new BadRequestException('Customer is inactive');
+        if (customer.status !== 'ACTIVE')
+          throw new BadRequestException('Customer is inactive');
 
-        const tenantCurrency = String((tenant as any)?.defaultCurrency ?? '').trim();
+        const tenantCurrency = String(
+          (tenant as any)?.defaultCurrency ?? '',
+        ).trim();
         const exchangeRate =
-          tenantCurrency && String(first.currency).trim().toUpperCase() === tenantCurrency.toUpperCase()
+          tenantCurrency &&
+          String(first.currency).trim().toUpperCase() ===
+            tenantCurrency.toUpperCase()
             ? 1
             : 1;
 
         const computedLines = rows.map((rr) => {
           const accountId = accountIdByCode.get(rr.revenueAccountCode);
-          if (!accountId) throw new BadRequestException('Revenue account not found');
+          if (!accountId)
+            throw new BadRequestException('Revenue account not found');
           const qty = this.toNum(rr.quantity ?? 1);
           const unitPrice = this.toNum(rr.unitPrice ?? 0);
           if (!(qty > 0)) throw new BadRequestException('Quantity must be > 0');
-          if (!(unitPrice > 0)) throw new BadRequestException('Unit Price must be > 0');
+          if (!(unitPrice > 0))
+            throw new BadRequestException('Unit Price must be > 0');
           const gross = this.round2(qty * unitPrice);
           const disc = this.computeDiscount({
             gross,
-            discountPercent: (rr as any).discountPercent,
-            discountAmount: (rr as any).discountAmount,
+            discountPercent: rr.discountPercent,
+            discountAmount: rr.discountAmount,
           });
           const lineTotal = this.round2(gross - disc.discountTotal);
           return {
@@ -1052,7 +1339,9 @@ export class FinanceArInvoicesService {
           };
         });
 
-        const subtotal = this.round2(computedLines.reduce((s, l) => s + l.lineTotal, 0));
+        const subtotal = this.round2(
+          computedLines.reduce((s, l) => s + l.lineTotal, 0),
+        );
         const taxAmount = 0;
         const totalAmount = this.round2(subtotal + taxAmount);
 
@@ -1067,9 +1356,13 @@ export class FinanceArInvoicesService {
               dueDate,
               currency: String(first.currency).trim(),
               exchangeRate,
-              customerNameSnapshot: String((customer as any).name ?? '').trim(),
-              customerEmailSnapshot: (customer as any).email ? String((customer as any).email).trim() : undefined,
-              customerBillingAddressSnapshot: (customer as any).billingAddress ? String((customer as any).billingAddress).trim() : undefined,
+              customerNameSnapshot: String(customer.name ?? '').trim(),
+              customerEmailSnapshot: customer.email
+                ? String(customer.email).trim()
+                : undefined,
+              customerBillingAddressSnapshot: customer.billingAddress
+                ? String(customer.billingAddress).trim()
+                : undefined,
               subtotal,
               taxAmount,
               totalAmount,
@@ -1110,7 +1403,11 @@ export class FinanceArInvoicesService {
     };
   }
 
-  async exportInvoice(req: Request, id: string, opts: { format: 'html' | 'pdf' }) {
+  async exportInvoice(
+    req: Request,
+    id: string,
+    opts: { format: 'html' | 'pdf' },
+  ) {
     const tenant = this.ensureTenant(req);
 
     const inv = await this.prisma.customerInvoice.findFirst({
@@ -1120,10 +1417,14 @@ export class FinanceArInvoicesService {
 
     if (!inv) throw new NotFoundException('Invoice not found');
     if ((inv as any).status !== 'POSTED') {
-      throw new BadRequestException('Invoice export is available for POSTED invoices only');
+      throw new BadRequestException(
+        'Invoice export is available for POSTED invoices only',
+      );
     }
 
-    const tenantName = String((tenant as any).legalName ?? (tenant as any).organisationName ?? '');
+    const tenantName = String(
+      (tenant as any).legalName ?? (tenant as any).organisationName ?? '',
+    );
     const invoiceNumber = String((inv as any).invoiceNumber ?? '').trim();
     const currency = String((inv as any).currency ?? '').trim();
     const invoiceNote = String((inv as any).invoiceNote ?? '').trim();
@@ -1146,8 +1447,16 @@ export class FinanceArInvoicesService {
       };
     });
     const hasDiscount = invLines.some((l) => (l.discountTotal ?? 0) > 0);
-    const discountTotalSum = this.round2(invLines.reduce((s, l) => s + (Number(l.discountTotal ?? 0) || 0), 0));
-    const grossSubtotal = this.round2(invLines.reduce((s, l) => s + this.round2(Number(l.qty ?? 0) * Number(l.unitPrice ?? 0)), 0));
+    const discountTotalSum = this.round2(
+      invLines.reduce((s, l) => s + (Number(l.discountTotal ?? 0) || 0), 0),
+    );
+    const grossSubtotal = this.round2(
+      invLines.reduce(
+        (s, l) =>
+          s + this.round2(Number(l.qty ?? 0) * Number(l.unitPrice ?? 0)),
+        0,
+      ),
+    );
 
     const html = `<!doctype html>
 <html>
@@ -1209,9 +1518,12 @@ export class FinanceArInvoicesService {
         <tbody>
           ${invLines
             .map((l: any, idx: number) => {
-              const discountText = l.discountTotal > 0
-                ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : `${this.formatMoney(l.discountTotal, currency)}`)
-                : '';
+              const discountText =
+                l.discountTotal > 0
+                  ? l.discountPercent > 0
+                    ? `${l.discountPercent.toFixed(2)}%`
+                    : `${this.formatMoney(l.discountTotal, currency)}`
+                  : '';
               return `<tr>
                 <td class="num">${idx + 1}</td>
                 <td>${this.escapeHtml(l.description)}</td>
@@ -1256,7 +1568,9 @@ export class FinanceArInvoicesService {
       try {
         PDFDocument = require('pdfkit');
       } catch {
-        throw new BadRequestException('PDF export not available (missing dependency pdfkit)');
+        throw new BadRequestException(
+          'PDF export not available (missing dependency pdfkit)',
+        );
       }
 
       const doc = new PDFDocument({ size: 'A4', margin: 36 });
@@ -1273,7 +1587,8 @@ export class FinanceArInvoicesService {
         top: doc.page.margins.top,
         bottom: doc.page.margins.bottom,
         width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-        height: doc.page.height - doc.page.margins.top - doc.page.margins.bottom,
+        height:
+          doc.page.height - doc.page.margins.top - doc.page.margins.bottom,
       };
 
       const colors = {
@@ -1290,8 +1605,12 @@ export class FinanceArInvoicesService {
 
       const invoiceDate = String((inv as any).invoiceDate).slice(0, 10);
       const dueDate = String((inv as any).dueDate).slice(0, 10);
-      const billToName = String((inv as any).customerNameSnapshot || (inv as any).customer?.name || '').trim();
-      const billToEmail = (inv as any).customerEmailSnapshot ? String((inv as any).customerEmailSnapshot).trim() : '';
+      const billToName = String(
+        (inv as any).customerNameSnapshot || (inv as any).customer?.name || '',
+      ).trim();
+      const billToEmail = (inv as any).customerEmailSnapshot
+        ? String((inv as any).customerEmailSnapshot).trim()
+        : '';
       const billToAddress = (inv as any).customerBillingAddressSnapshot
         ? String((inv as any).customerBillingAddressSnapshot).trim()
         : '';
@@ -1299,15 +1618,25 @@ export class FinanceArInvoicesService {
       const drawDivider = (y: number) => {
         doc.save();
         doc.strokeColor(colors.border);
-        doc.moveTo(page.left, y).lineTo(page.left + page.width, y).stroke();
+        doc
+          .moveTo(page.left, y)
+          .lineTo(page.left + page.width, y)
+          .stroke();
         doc.restore();
       };
 
       const drawHeaderFirstPage = () => {
         doc.fillColor(colors.text);
-        doc.font(font.bold).fontSize(20).text(tenantName || 'Invoice', page.left, doc.y, { align: 'left' });
+        doc
+          .font(font.bold)
+          .fontSize(20)
+          .text(tenantName || 'Invoice', page.left, doc.y, { align: 'left' });
         doc.moveDown(0.2);
-        doc.font(font.body).fontSize(9).fillColor(colors.muted).text('Prepared in accordance with IFRS', { align: 'left' });
+        doc
+          .font(font.body)
+          .fontSize(9)
+          .fillColor(colors.muted)
+          .text('Prepared in accordance with IFRS', { align: 'left' });
         doc.fillColor(colors.text);
         doc.moveDown(0.8);
 
@@ -1351,15 +1680,25 @@ export class FinanceArInvoicesService {
         drawDivider(doc.y);
         doc.moveDown(0.8);
 
-        doc.font(font.bold).fontSize(11).fillColor(colors.text).text('Bill To', page.left, doc.y);
+        doc
+          .font(font.bold)
+          .fontSize(11)
+          .fillColor(colors.text)
+          .text('Bill To', page.left, doc.y);
         doc.moveDown(0.3);
-        doc.font(font.body).fontSize(10).text(billToName || '');
+        doc
+          .font(font.body)
+          .fontSize(10)
+          .text(billToName || '');
         if (billToEmail) {
           doc.font(font.body).fillColor(colors.muted).text(billToEmail);
           doc.fillColor(colors.text);
         }
         if (billToAddress) {
-          doc.font(font.body).fillColor(colors.muted).text(billToAddress, { width: page.width });
+          doc
+            .font(font.body)
+            .fillColor(colors.muted)
+            .text(billToAddress, { width: page.width });
           doc.fillColor(colors.text);
         }
         doc.moveDown(0.9);
@@ -1488,7 +1827,9 @@ export class FinanceArInvoicesService {
       invLines.forEach((l, idx) => {
         const discountText = hasDiscount
           ? l.discountTotal > 0
-            ? (l.discountPercent > 0 ? `${l.discountPercent.toFixed(2)}%` : this.formatMoney(l.discountTotal, currency))
+            ? l.discountPercent > 0
+              ? `${l.discountPercent.toFixed(2)}%`
+              : this.formatMoney(l.discountTotal, currency)
             : ''
           : '';
 
@@ -1509,25 +1850,38 @@ export class FinanceArInvoicesService {
 
         doc.save();
         doc.strokeColor(colors.border);
-        doc.moveTo(page.left, y0 + rowH).lineTo(page.left + page.width, y0 + rowH).stroke();
+        doc
+          .moveTo(page.left, y0 + rowH)
+          .lineTo(page.left + page.width, y0 + rowH)
+          .stroke();
         doc.restore();
 
-        doc.text(this.formatMoney(l.qty, currency), table.qtyX + colPaddingX, y0 + rowPaddingY, {
-          width: table.qtyW - colPaddingX * 2,
-          align: 'center',
-          lineBreak: false,
-        });
+        doc.text(
+          this.formatMoney(l.qty, currency),
+          table.qtyX + colPaddingX,
+          y0 + rowPaddingY,
+          {
+            width: table.qtyW - colPaddingX * 2,
+            align: 'center',
+            lineBreak: false,
+          },
+        );
 
         doc.text(descText, table.descX + colPaddingX, y0 + rowPaddingY, {
           width: table.descW - colPaddingX * 2,
           align: 'left',
         });
 
-        doc.text(this.formatMoney(l.unitPrice, currency), table.unitX + colPaddingX, y0 + rowPaddingY, {
-          width: table.unitW - colPaddingX * 2,
-          align: 'right',
-          lineBreak: false,
-        });
+        doc.text(
+          this.formatMoney(l.unitPrice, currency),
+          table.unitX + colPaddingX,
+          y0 + rowPaddingY,
+          {
+            width: table.unitW - colPaddingX * 2,
+            align: 'right',
+            lineBreak: false,
+          },
+        );
 
         if (hasDiscount) {
           doc.fillColor(colors.muted);
@@ -1539,11 +1893,16 @@ export class FinanceArInvoicesService {
           doc.fillColor(colors.text);
         }
 
-        doc.text(this.formatMoney(l.lineTotal, currency), table.totalX + colPaddingX, y0 + rowPaddingY, {
-          width: table.totalW - colPaddingX * 2,
-          align: 'right',
-          lineBreak: false,
-        });
+        doc.text(
+          this.formatMoney(l.lineTotal, currency),
+          table.totalX + colPaddingX,
+          y0 + rowPaddingY,
+          {
+            width: table.totalW - colPaddingX * 2,
+            align: 'right',
+            lineBreak: false,
+          },
+        );
 
         doc.y = y0 + rowH;
       });
@@ -1560,42 +1919,87 @@ export class FinanceArInvoicesService {
       const totalsBlockWidth = 240;
       const totalsX = page.left + page.width - totalsBlockWidth;
 
-      const totalsLine = (label: string, value: string, opts?: { bold?: boolean }) => {
-        doc.font(opts?.bold ? font.bold : font.body).fontSize(10).fillColor(colors.text);
+      const totalsLine = (
+        label: string,
+        value: string,
+        opts?: { bold?: boolean },
+      ) => {
+        doc
+          .font(opts?.bold ? font.bold : font.body)
+          .fontSize(10)
+          .fillColor(colors.text);
         const y = doc.y;
-        doc.text(label, totalsX, y, { width: totalsBlockWidth * 0.62, align: 'left' });
-        doc.text(value, totalsX + totalsBlockWidth * 0.62, y, { width: totalsBlockWidth * 0.38, align: 'right', lineBreak: false });
+        doc.text(label, totalsX, y, {
+          width: totalsBlockWidth * 0.62,
+          align: 'left',
+        });
+        doc.text(value, totalsX + totalsBlockWidth * 0.62, y, {
+          width: totalsBlockWidth * 0.38,
+          align: 'right',
+          lineBreak: false,
+        });
         doc.y = y + 14;
       };
 
       if (hasDiscount) {
         totalsLine('Gross Subtotal', this.formatMoney(grossSubtotal, currency));
-        totalsLine('Less: Discount', this.formatMoney(discountTotalSum, currency));
-        totalsLine('Net Subtotal', this.formatMoney(Number((inv as any).subtotal ?? 0), currency));
+        totalsLine(
+          'Less: Discount',
+          this.formatMoney(discountTotalSum, currency),
+        );
+        totalsLine(
+          'Net Subtotal',
+          this.formatMoney(Number((inv as any).subtotal ?? 0), currency),
+        );
       } else {
-        totalsLine('Subtotal', this.formatMoney(Number((inv as any).subtotal ?? 0), currency));
+        totalsLine(
+          'Subtotal',
+          this.formatMoney(Number((inv as any).subtotal ?? 0), currency),
+        );
       }
-      totalsLine('Tax', this.formatMoney(Number((inv as any).taxAmount ?? 0), currency));
+      totalsLine(
+        'Tax',
+        this.formatMoney(Number((inv as any).taxAmount ?? 0), currency),
+      );
       doc.save();
       doc.strokeColor(colors.border);
-      doc.moveTo(totalsX, doc.y + 2).lineTo(totalsX + totalsBlockWidth, doc.y + 2).stroke();
+      doc
+        .moveTo(totalsX, doc.y + 2)
+        .lineTo(totalsX + totalsBlockWidth, doc.y + 2)
+        .stroke();
       doc.restore();
       doc.y += 6;
       doc.font(font.bold).fontSize(11).fillColor(colors.text);
       const totalY = doc.y;
-      doc.text('Total', totalsX, totalY, { width: totalsBlockWidth * 0.62, align: 'left' });
-      doc.text(this.formatMoney(Number((inv as any).totalAmount ?? 0), currency), totalsX + totalsBlockWidth * 0.62, totalY, {
-        width: totalsBlockWidth * 0.38,
-        align: 'right',
-        lineBreak: false,
+      doc.text('Total', totalsX, totalY, {
+        width: totalsBlockWidth * 0.62,
+        align: 'left',
       });
+      doc.text(
+        this.formatMoney(Number((inv as any).totalAmount ?? 0), currency),
+        totalsX + totalsBlockWidth * 0.62,
+        totalY,
+        {
+          width: totalsBlockWidth * 0.38,
+          align: 'right',
+          lineBreak: false,
+        },
+      );
       doc.y = totalY + 16;
 
       if (invoiceNote) {
         doc.moveDown(0.8);
-        doc.font(font.bold).fontSize(10).fillColor(colors.text).text('Invoice Note', page.left, doc.y);
+        doc
+          .font(font.bold)
+          .fontSize(10)
+          .fillColor(colors.text)
+          .text('Invoice Note', page.left, doc.y);
         doc.moveDown(0.3);
-        doc.font(font.body).fontSize(9).fillColor(colors.text).text(invoiceNote, page.left, doc.y, { width: page.width });
+        doc
+          .font(font.body)
+          .fontSize(9)
+          .fillColor(colors.text)
+          .text(invoiceNote, page.left, doc.y, { width: page.width });
       }
 
       const bankBlockH = estimateBankDetailsHeight();
@@ -1607,10 +2011,17 @@ export class FinanceArInvoicesService {
 
       const bankYFinal = doc.page.height - doc.page.margins.bottom - bankBlockH;
       doc.save();
-      doc.rect(page.left, bankYFinal, page.width, bankBlockH).strokeColor(colors.border).stroke();
+      doc
+        .rect(page.left, bankYFinal, page.width, bankBlockH)
+        .strokeColor(colors.border)
+        .stroke();
       doc.restore();
 
-      doc.font(font.bold).fontSize(10).fillColor(colors.text).text('Bank Details', page.left + 10, bankYFinal + 8);
+      doc
+        .font(font.bold)
+        .fontSize(10)
+        .fillColor(colors.text)
+        .text('Bank Details', page.left + 10, bankYFinal + 8);
       doc.font(font.body).fontSize(9).fillColor(colors.muted);
       const bankText =
         'Bank Name: FNB\n' +
@@ -1618,7 +2029,9 @@ export class FinanceArInvoicesService {
         'Account Number: 63144493680\n' +
         'Branch Name/Number: Commercial Suite/260001\n' +
         'Swift Code: FIRNZMLX';
-      doc.text(bankText, page.left + 10, bankYFinal + 26, { width: page.width - 20 });
+      doc.text(bankText, page.left + 10, bankYFinal + 26, {
+        width: page.width - 20,
+      });
       doc.fillColor(colors.text);
 
       doc.end();

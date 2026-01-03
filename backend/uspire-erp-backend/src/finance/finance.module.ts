@@ -14,7 +14,11 @@ import { FinanceArInvoicesService } from './ar/invoices/invoices.service';
 
 @Module({
   imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule],
-  controllers: [CoaController, FinanceArCustomersController, FinanceArInvoicesController],
+  controllers: [
+    CoaController,
+    FinanceArCustomersController,
+    FinanceArInvoicesController,
+  ],
   providers: [
     CoaService,
     FinanceArCustomersService,
