@@ -24,11 +24,17 @@ export type AccountLookup = {
   code: string;
   name: string;
   type: string;
+  requiresDepartment?: boolean;
+  requiresProject?: boolean;
+  requiresFund?: boolean;
 };
 
 export type CustomerInvoiceLine = {
   id: string;
   accountId: string;
+  departmentId?: string | null;
+  projectId?: string | null;
+  fundId?: string | null;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -324,6 +330,9 @@ export async function createInvoice(params: {
   invoiceNote?: string;
   lines: Array<{
     accountId: string;
+    departmentId?: string;
+    projectId?: string;
+    fundId?: string;
     description: string;
     quantity?: number;
     unitPrice: number;

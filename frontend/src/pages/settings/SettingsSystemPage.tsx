@@ -66,6 +66,10 @@ export function SettingsSystemPage() {
   const [receiptBankBranch, setReceiptBankBranch] = useState('');
   const [receiptBankSwiftCode, setReceiptBankSwiftCode] = useState('');
 
+  const [requiresDepartmentOnInvoices, setRequiresDepartmentOnInvoices] = useState(false);
+  const [requiresProjectOnInvoices, setRequiresProjectOnInvoices] = useState(false);
+  const [requiresFundOnInvoices, setRequiresFundOnInvoices] = useState(false);
+
   const [defaultBankClearingAccountId, setDefaultBankClearingAccountId] = useState<string>('');
   const [bankClearingSearch, setBankClearingSearch] = useState('');
   const [bankClearingPickerOpen, setBankClearingPickerOpen] = useState(false);
@@ -123,6 +127,10 @@ export function SettingsSystemPage() {
       setReceiptBankAccountNumber(s.receiptBankAccountNumber ?? '');
       setReceiptBankBranch(s.receiptBankBranch ?? '');
       setReceiptBankSwiftCode(s.receiptBankSwiftCode ?? '');
+
+      setRequiresDepartmentOnInvoices(Boolean(s.requiresDepartmentOnInvoices));
+      setRequiresProjectOnInvoices(Boolean(s.requiresProjectOnInvoices));
+      setRequiresFundOnInvoices(Boolean(s.requiresFundOnInvoices));
 
       setDefaultBankClearingAccountId(s.defaultBankClearingAccountId ?? '');
       setBankClearingSearch('');
@@ -249,11 +257,14 @@ export function SettingsSystemPage() {
       (system.receiptBankAccountNumber ?? '') !== receiptBankAccountNumber.trim() ||
       (system.receiptBankBranch ?? '') !== receiptBankBranch.trim() ||
       (system.receiptBankSwiftCode ?? '') !== receiptBankSwiftCode.trim() ||
+      Boolean(system.requiresDepartmentOnInvoices) !== Boolean(requiresDepartmentOnInvoices) ||
+      Boolean(system.requiresProjectOnInvoices) !== Boolean(requiresProjectOnInvoices) ||
+      Boolean(system.requiresFundOnInvoices) !== Boolean(requiresFundOnInvoices) ||
       (system.arControlAccountId ?? '') !== arControlAccountId.trim() ||
       (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
       Boolean(pendingFaviconFile)
     );
-  }, [accentColor, allowSelfPosting, arControlAccountId, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, receiptBankAccountName, receiptBankAccountNumber, receiptBankBranch, receiptBankName, receiptBankSwiftCode, secondaryAccentColor, secondaryColor, system, timezone]);
+  }, [accentColor, allowSelfPosting, arControlAccountId, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, receiptBankAccountName, receiptBankAccountNumber, receiptBankBranch, receiptBankName, receiptBankSwiftCode, requiresDepartmentOnInvoices, requiresFundOnInvoices, requiresProjectOnInvoices, secondaryAccentColor, secondaryColor, system, timezone]);
 
   async function onPickFavicon() {
     faviconInputRef.current?.click();
@@ -319,6 +330,9 @@ export function SettingsSystemPage() {
         receiptBankAccountNumber: receiptBankAccountNumber.trim() ? receiptBankAccountNumber.trim() : null,
         receiptBankBranch: receiptBankBranch.trim() ? receiptBankBranch.trim() : null,
         receiptBankSwiftCode: receiptBankSwiftCode.trim() ? receiptBankSwiftCode.trim() : null,
+        requiresDepartmentOnInvoices,
+        requiresProjectOnInvoices,
+        requiresFundOnInvoices,
         arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
         defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
       });

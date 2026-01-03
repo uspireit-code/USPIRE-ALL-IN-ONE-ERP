@@ -58,7 +58,15 @@ export class ArService {
         type: 'INCOME',
       },
       orderBy: [{ code: 'asc' }],
-      select: { id: true, code: true, name: true, type: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
     });
   }
 

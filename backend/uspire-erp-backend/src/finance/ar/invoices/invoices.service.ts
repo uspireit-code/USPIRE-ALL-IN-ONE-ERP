@@ -376,8 +376,11 @@ export class FinanceArInvoicesService {
       subtotal: Number((inv as any).subtotal),
       taxAmount: Number((inv as any).taxAmount),
       totalAmount: Number((inv as any).totalAmount),
-      lines: (inv as any).lines.map((l: any) => ({
+      lines: ((inv as any).lines ?? []).map((l: any) => ({
         ...l,
+        departmentId: (l as any).departmentId ?? null,
+        projectId: (l as any).projectId ?? null,
+        fundId: (l as any).fundId ?? null,
         quantity: Number(l.quantity),
         unitPrice: Number(l.unitPrice),
         discountPercent:
@@ -506,6 +509,9 @@ export class FinanceArInvoicesService {
       const lineTotal = this.round2(gross - disc.discountTotal);
       return {
         accountId: l.accountId,
+        departmentId: (l as any).departmentId ?? null,
+        projectId: (l as any).projectId ?? null,
+        fundId: (l as any).fundId ?? null,
         description,
         quantity: qty,
         unitPrice,
@@ -558,6 +564,9 @@ export class FinanceArInvoicesService {
           lines: {
             create: computedLines.map((l) => ({
               accountId: l.accountId,
+              departmentId: (l as any).departmentId ?? undefined,
+              projectId: (l as any).projectId ?? undefined,
+              fundId: (l as any).fundId ?? undefined,
               description: l.description,
               quantity: l.quantity,
               unitPrice: l.unitPrice,
@@ -626,6 +635,10 @@ export class FinanceArInvoicesService {
 
     const lines = ((inv as any).lines ?? []).map((l: any) => ({
       accountId: l.accountId,
+      departmentId: (l as any).departmentId ?? null,
+      projectId: (l as any).projectId ?? null,
+      fundId: (l as any).fundId ?? null,
+      description: String(l.description ?? '').trim(),
       lineTotal: this.round2(Number(l.lineTotal)),
     }));
 
@@ -640,6 +653,72 @@ export class FinanceArInvoicesService {
       throw new BadRequestException(
         'Invoice totals failed validation before posting',
       );
+    }
+
+    const revenueAccountIds = [...new Set(lines.map((l) => l.accountId).filter(Boolean))] as string[];
+    const revenueAccounts = await this.prisma.account.findMany({
+      where: {
+        tenantId: tenant.id,
+        id: { in: revenueAccountIds },
+        isActive: true,
+      } as any,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
+    });
+    const revenueAccountById = new Map(revenueAccounts.map((a: any) => [a.id, a] as const));
+
+    const tenantRules = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
+      },
+    });
+
+    const issues: Array<{
+      lineNumber: number;
+      accountId: string;
+      accountCode: string | null;
+      accountName: string | null;
+      missing: Array<'department' | 'project' | 'fund'>;
+    }> = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const acct = revenueAccountById.get(l.accountId) as any;
+      const missing: Array<'department' | 'project' | 'fund'> = [];
+
+      const needsDept = Boolean((acct?.requiresDepartment ?? false) || (tenantRules?.requiresDepartmentOnInvoices ?? false));
+      const needsProj = Boolean((acct?.requiresProject ?? false) || (tenantRules?.requiresProjectOnInvoices ?? false));
+      const needsFund = Boolean((acct?.requiresFund ?? false) || (tenantRules?.requiresFundOnInvoices ?? false));
+
+      if (needsDept && !l.departmentId) missing.push('department');
+      if (needsProj && !l.projectId) missing.push('project');
+      if (needsFund && !l.fundId) missing.push('fund');
+
+      if (missing.length > 0) {
+        issues.push({
+          lineNumber: i + 1,
+          accountId: l.accountId,
+          accountCode: acct?.code ?? null,
+          accountName: acct?.name ?? null,
+          missing,
+        });
+      }
+    }
+
+    if (issues.length > 0) {
+      throw new BadRequestException({
+        error: 'Missing required invoice dimensions',
+        issues,
+      });
     }
 
     let postedJournal: any = null;
@@ -657,11 +736,17 @@ export class FinanceArInvoicesService {
                 accountId: arAccount.id,
                 debit: (inv as any).totalAmount,
                 credit: 0,
+                departmentId: (lines as any)[0]?.departmentId ?? null,
+                projectId: (lines as any)[0]?.projectId ?? null,
+                fundId: (lines as any)[0]?.fundId ?? null,
               },
               ...lines.map((l: any) => ({
                 accountId: l.accountId,
                 debit: 0,
                 credit: l.lineTotal,
+                departmentId: l.departmentId ?? null,
+                projectId: l.projectId ?? null,
+                fundId: l.fundId ?? null,
               })),
             ],
           },

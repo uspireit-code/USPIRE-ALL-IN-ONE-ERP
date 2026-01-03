@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useBranding } from '../../branding/BrandingContext';
@@ -6,6 +6,7 @@ import type { AccountLookup, Customer } from '../../services/ar';
 import { createInvoice, listEligibleAccounts, listCustomers } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
 import { formatMoney } from '../../money';
+import { listDepartments, listProjects, listFunds, type DepartmentLookup, type ProjectLookup, type FundLookup } from '../../services/gl';
 
 type Line = {
   accountId: string;
@@ -16,6 +17,9 @@ type Line = {
   unitPrice: string;
   discountPercent: string;
   discountAmount: string;
+  departmentId?: string;
+  projectId?: string;
+  fundId?: string;
 };
 
 function todayIsoDate() {
@@ -35,6 +39,9 @@ export function CreateInvoicePage() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<AccountLookup[]>([]);
+  const [departments, setDepartments] = useState<DepartmentLookup[]>([]);
+  const [projects, setProjects] = useState<ProjectLookup[]>([]);
+  const [funds, setFunds] = useState<FundLookup[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -75,11 +82,14 @@ export function CreateInvoicePage() {
     setLoadingLookups(true);
     setError(null);
 
-    Promise.all([listCustomers(), listEligibleAccounts()])
-      .then(([custs, accs]) => {
+    Promise.all([listCustomers(), listEligibleAccounts(), listDepartments(), listProjects(), listFunds()])
+      .then(([custs, accs, deps, projs, fnds]) => {
         if (!mounted) return;
         setCustomers((custs.items ?? []).filter((c) => c.status === 'ACTIVE'));
         setAccounts(accs);
+        setDepartments(deps);
+        setProjects(projs);
+        setFunds(fnds);
       })
       .catch((err: any) => {
         setError(getApiErrorMessage(err, 'Failed to load lookups'));
@@ -159,6 +169,10 @@ export function CreateInvoicePage() {
       return Boolean(l.accountId && desc && qty > 0 && unitPrice > 0);
     };
   }, []);
+
+  const accountById = useMemo(() => {
+    return new Map(accounts.map((a) => [a.id, a] as const));
+  }, [accounts]);
 
   const hasAnyValidLine = useMemo(() => lines.some((l) => isLineValid(l)), [isLineValid, lines]);
   const allLinesValid = useMemo(() => lines.every((l) => isLineValid(l)), [isLineValid, lines]);
@@ -254,8 +268,22 @@ export function CreateInvoicePage() {
     }
 
     if (!allLinesValid) {
-      setError('All invoice lines must have an account, description, quantity > 0, and unit price > 0');
+      setError('Each line requires revenue account, description, quantity and unit price');
       return;
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const acct = accountById.get(l.accountId);
+      if (!acct) continue;
+      const missing: string[] = [];
+      if (acct.requiresDepartment && !l.departmentId) missing.push('department');
+      if (acct.requiresProject && !l.projectId) missing.push('project');
+      if (acct.requiresFund && !l.fundId) missing.push('fund');
+      if (missing.length > 0) {
+        setError(`Line ${i + 1} (${acct.code} – ${acct.name}) is missing: ${missing.join(', ')}`);
+        return;
+      }
     }
 
     for (const l of lines) {
@@ -296,11 +324,14 @@ export function CreateInvoicePage() {
         invoiceNote: invoiceNote.trim() || undefined,
         lines: lines.map((l) => ({
           accountId: l.accountId,
-          description: l.description,
+          departmentId: l.departmentId || undefined,
+          projectId: l.projectId || undefined,
+          fundId: l.fundId || undefined,
+          description: String(l.description ?? '').trim(),
           quantity: Number(l.quantity) || 1,
           unitPrice: Number(l.unitPrice) || 0,
-          discountPercent: Number(l.discountPercent) > 0 ? Number(l.discountPercent) : undefined,
-          discountAmount: Number(l.discountAmount) > 0 ? Number(l.discountAmount) : undefined,
+          discountPercent: showDiscountUi ? Number(l.discountPercent) || undefined : undefined,
+          discountAmount: showDiscountUi ? Number(l.discountAmount) || undefined : undefined,
         })),
       });
 
@@ -500,8 +531,20 @@ export function CreateInvoicePage() {
               </tr>
             </thead>
             <tbody>
-              {lines.map((l, idx) => (
-                <tr key={idx}>
+              {lines.map((l, idx) => {
+                const acct = l.accountId ? accountById.get(l.accountId) : null;
+                const needsDept = Boolean(acct?.requiresDepartment);
+                const needsProj = Boolean(acct?.requiresProject);
+                const needsFund = Boolean(acct?.requiresFund);
+                const fundOptions = l.projectId
+                  ? funds.filter((f) => f.projectId === l.projectId)
+                  : funds;
+
+                const dimColSpan = showDiscountUi ? 8 : 6;
+
+                return (
+                  <Fragment key={`${idx}-block`}>
+                    <tr key={`${idx}-main`}>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -632,8 +675,69 @@ export function CreateInvoicePage() {
                       Remove
                     </button>
                   </td>
-                </tr>
-              ))}
+                    </tr>
+
+                    <tr key={`${idx}-dims`}>
+                      <td colSpan={dimColSpan} style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                          <label style={{ fontSize: 12 }}>
+                            Department{needsDept ? ' *' : ''}
+                            <select
+                              value={l.departmentId ?? ''}
+                              onChange={(e) => updateLine(idx, { departmentId: e.currentTarget.value || undefined })}
+                              style={{ width: '100%', height: 40, marginTop: 6 }}
+                            >
+                              <option value="">(None)</option>
+                              {departments.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                  {d.code} – {d.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label style={{ fontSize: 12 }}>
+                            Project{needsProj ? ' *' : ''}
+                            <select
+                              value={l.projectId ?? ''}
+                              onChange={(e) =>
+                                updateLine(idx, {
+                                  projectId: e.currentTarget.value || undefined,
+                                  fundId: undefined,
+                                })
+                              }
+                              style={{ width: '100%', height: 40, marginTop: 6 }}
+                            >
+                              <option value="">(None)</option>
+                              {projects.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.code} – {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label style={{ fontSize: 12 }}>
+                            Fund{needsFund ? ' *' : ''}
+                            <select
+                              value={l.fundId ?? ''}
+                              onChange={(e) => updateLine(idx, { fundId: e.currentTarget.value || undefined })}
+                              style={{ width: '100%', height: 40, marginTop: 6 }}
+                            >
+                              <option value="">(None)</option>
+                              {fundOptions.map((f) => (
+                                <option key={f.id} value={f.id}>
+                                  {f.code} – {f.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
 

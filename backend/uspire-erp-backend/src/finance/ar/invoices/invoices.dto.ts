@@ -15,6 +15,18 @@ export class CreateCustomerInvoiceLineDto {
   @IsUUID()
   accountId!: string;
 
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  fundId?: string;
+
   @IsString()
   description!: string;
 

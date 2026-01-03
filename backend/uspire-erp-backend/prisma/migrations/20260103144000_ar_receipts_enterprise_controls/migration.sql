@@ -1,7 +1,7 @@
 -- AlterTable
-ALTER TABLE "Tenant" ADD COLUMN     "allowSelfPosting" BOOLEAN NOT NULL DEFAULT true,
-ADD COLUMN     "receiptBankName" TEXT,
-ADD COLUMN     "receiptBankAccountName" TEXT,
-ADD COLUMN     "receiptBankAccountNumber" TEXT,
-ADD COLUMN     "receiptBankBranch" TEXT,
-ADD COLUMN     "receiptBankSwiftCode" TEXT;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "allowSelfPosting" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "receiptBankName" TEXT;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "receiptBankAccountName" TEXT;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "receiptBankAccountNumber" TEXT;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "receiptBankBranch" TEXT;
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "receiptBankSwiftCode" TEXT;

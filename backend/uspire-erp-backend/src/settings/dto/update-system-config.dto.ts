@@ -133,6 +133,21 @@ export class UpdateSystemConfigDto {
 
   @IsOptional()
   @ValidateIf(isNotNull)
+  @IsBoolean()
+  requiresDepartmentOnInvoices?: boolean | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsBoolean()
+  requiresProjectOnInvoices?: boolean | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsBoolean()
+  requiresFundOnInvoices?: boolean | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
   @IsString()
   arControlAccountId?: string | null;
 

@@ -960,6 +960,9 @@ export class SettingsService {
         receiptBankAccountNumber: true,
         receiptBankBranch: true,
         receiptBankSwiftCode: true,
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1009,6 +1012,9 @@ export class SettingsService {
         receiptBankAccountNumber: true,
         receiptBankBranch: true,
         receiptBankSwiftCode: true,
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1176,6 +1182,25 @@ export class SettingsService {
               ? null
               : String((dto as any).receiptBankSwiftCode).trim() || null,
 
+        requiresDepartmentOnInvoices:
+          (dto as any).requiresDepartmentOnInvoices === undefined
+            ? undefined
+            : (dto as any).requiresDepartmentOnInvoices === null
+              ? null
+              : Boolean((dto as any).requiresDepartmentOnInvoices),
+        requiresProjectOnInvoices:
+          (dto as any).requiresProjectOnInvoices === undefined
+            ? undefined
+            : (dto as any).requiresProjectOnInvoices === null
+              ? null
+              : Boolean((dto as any).requiresProjectOnInvoices),
+        requiresFundOnInvoices:
+          (dto as any).requiresFundOnInvoices === undefined
+            ? undefined
+            : (dto as any).requiresFundOnInvoices === null
+              ? null
+              : Boolean((dto as any).requiresFundOnInvoices),
+
         arControlAccountId:
           (dto as any).arControlAccountId === undefined
             ? undefined
@@ -1227,6 +1252,9 @@ export class SettingsService {
         receiptBankAccountNumber: true,
         receiptBankBranch: true,
         receiptBankSwiftCode: true,
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1259,6 +1287,9 @@ export class SettingsService {
       receiptBankAccountNumber: (updated as any).receiptBankAccountNumber ?? null,
       receiptBankBranch: (updated as any).receiptBankBranch ?? null,
       receiptBankSwiftCode: (updated as any).receiptBankSwiftCode ?? null,
+      requiresDepartmentOnInvoices: (updated as any).requiresDepartmentOnInvoices,
+      requiresProjectOnInvoices: (updated as any).requiresProjectOnInvoices,
+      requiresFundOnInvoices: (updated as any).requiresFundOnInvoices,
       arControlAccountId: (updated as any).arControlAccountId ?? null,
       defaultBankClearingAccountId:
         (updated as any).defaultBankClearingAccountId ?? null,
