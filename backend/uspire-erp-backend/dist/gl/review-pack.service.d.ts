@@ -16,29 +16,29 @@ export declare class ReviewPackService {
     private toSafeFileName;
     listReviewPacks(req: Request, periodId: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         periodId: string;
+        storageKey: string;
         generatedById: string;
         generatedBy: {
             id: string;
             email: string;
         };
-        storageKey: string;
         zipSize: number;
         zipSha256Hash: string;
         manifestSha256: string;
     }[]>;
     generateReviewPack(req: Request, periodId: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         periodId: string;
+        storageKey: string;
         generatedBy: {
             id: string;
             email: string;
         };
-        storageKey: string;
         zipSize: number;
         zipSha256Hash: string;
         manifestSha256: string;

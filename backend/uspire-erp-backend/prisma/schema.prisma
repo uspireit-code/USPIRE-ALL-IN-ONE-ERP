@@ -945,7 +945,7 @@ model Tenant {
   accentColor             String?
   secondaryAccentColor    String?
 
-  allowSelfPosting Boolean @default(true)
+  allowSelfPosting Boolean @default(false)
 
   receiptBankName          String?
   receiptBankAccountName   String?

@@ -24,11 +24,12 @@ export declare class GlController {
     constructor(gl: GlService, reviewPacks: ReviewPackService, exports: ReportExportService);
     private getTenantPdfMetaOrThrow;
     createAccount(req: Request, dto: CreateAccountDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
+        isActive: boolean;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
@@ -39,7 +40,6 @@ export declare class GlController {
         requiresFund: boolean;
         isBudgetRelevant: boolean;
         budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-        isActive: boolean;
         parentAccountId: string | null;
         isPosting: boolean;
         isPostingAllowed: boolean;
@@ -61,30 +61,30 @@ export declare class GlController {
         departmentRequirement: import("./gl.service").DepartmentRequirement;
     }[]>;
     listLegalEntities(req: Request, effectiveOn?: string): Promise<{
-        name: string;
         id: string;
-        code: string;
+        name: string;
         isActive: boolean;
+        code: string;
         effectiveFrom: Date;
         effectiveTo: Date | null;
     }[]>;
     listDepartments(req: Request, effectiveOn?: string): Promise<{
-        name: string;
         id: string;
-        code: string;
+        name: string;
         isActive: boolean;
+        code: string;
         effectiveFrom: Date;
         effectiveTo: Date | null;
     }[]>;
     listProjects(req: Request, effectiveOn?: string): Promise<{
-        name: string;
         id: string;
+        name: string;
         code: string;
         isRestricted: boolean;
     }[]>;
     listFunds(req: Request, effectiveOn?: string, projectId?: string): Promise<{
-        name: string;
         id: string;
+        name: string;
         code: string;
         projectId: string;
     }[]>;
@@ -92,10 +92,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -104,17 +104,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -134,8 +136,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -158,17 +158,17 @@ export declare class GlController {
         lines: {
             id: string;
             accountId: string;
-            templateId: string;
             descriptionTemplate: string | null;
             lineOrder: number;
+            templateId: string;
             debitAmount: import("@prisma/client/runtime/library").Decimal;
             creditAmount: import("@prisma/client/runtime/library").Decimal;
         }[];
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         isActive: boolean;
         createdById: string;
         journalType: import("@prisma/client").$Enums.JournalType;
@@ -183,17 +183,17 @@ export declare class GlController {
         lines: {
             id: string;
             accountId: string;
-            templateId: string;
             descriptionTemplate: string | null;
             lineOrder: number;
+            templateId: string;
             debitAmount: import("@prisma/client/runtime/library").Decimal;
             creditAmount: import("@prisma/client/runtime/library").Decimal;
         }[];
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         isActive: boolean;
         createdById: string;
         journalType: import("@prisma/client").$Enums.JournalType;
@@ -208,17 +208,17 @@ export declare class GlController {
         lines: {
             id: string;
             accountId: string;
-            templateId: string;
             descriptionTemplate: string | null;
             lineOrder: number;
+            templateId: string;
             debitAmount: import("@prisma/client/runtime/library").Decimal;
             creditAmount: import("@prisma/client/runtime/library").Decimal;
         }[];
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         isActive: boolean;
         createdById: string;
         journalType: import("@prisma/client").$Enums.JournalType;
@@ -233,10 +233,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -245,17 +245,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -275,8 +277,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -286,29 +286,29 @@ export declare class GlController {
     getRecurringTemplateHistory(req: Request, id: string): Promise<{
         id: string;
         createdAt: Date;
+        generatedBy: {
+            id: string;
+            email: string;
+            name: string;
+        };
         runDate: Date;
         generatedJournal: {
             id: string;
             status: import("@prisma/client").$Enums.JournalStatus;
-            reference: string | null;
-            journalNumber: number | null;
             description: string | null;
+            journalNumber: number | null;
+            reference: string | null;
             journalDate: Date;
-        };
-        generatedBy: {
-            name: string;
-            id: string;
-            email: string;
         };
     }[]>;
     getJournal(req: Request, id: string): Promise<{
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -317,17 +317,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -347,8 +349,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -357,17 +357,19 @@ export declare class GlController {
     }>;
     getJournalDetail(req: Request, id: string): Promise<{
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -387,8 +389,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -399,10 +399,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -411,17 +411,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -441,8 +443,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -453,10 +453,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -465,17 +465,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -495,8 +497,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -507,10 +507,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -519,17 +519,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -549,8 +551,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -563,10 +563,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -575,17 +575,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -605,8 +607,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -617,10 +617,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -629,17 +629,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -659,8 +661,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -670,17 +670,19 @@ export declare class GlController {
     postJournal(req: Request, id: string): Promise<any>;
     returnToReview(req: Request, id: string, dto: ReturnToReviewDto): Promise<{
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -700,8 +702,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -712,10 +712,10 @@ export declare class GlController {
         lines: {
             id: string;
             description: string | null;
+            accountId: string;
             lineNumber: number | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             legalEntityId: string | null;
             departmentId: string | null;
             projectId: string | null;
@@ -724,17 +724,19 @@ export declare class GlController {
         }[];
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        reference: string | null;
-        postedById: string | null;
+        approvedAt: Date | null;
         postedAt: Date | null;
+        approvedById: string | null;
+        postedById: string | null;
+        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
-        description: string | null;
+        reference: string | null;
         journalDate: Date;
         correctsJournalId: string | null;
         riskScore: number;
@@ -754,8 +756,6 @@ export declare class GlController {
         rejectedById: string | null;
         rejectedAt: Date | null;
         rejectionReason: string | null;
-        approvedById: string | null;
-        approvedAt: Date | null;
         returnedByPosterId: string | null;
         returnedByPosterAt: Date | null;
         returnReason: string | null;
@@ -792,11 +792,11 @@ export declare class GlController {
         offset: number;
     }>;
     createPeriod(req: Request, dto: CreateAccountingPeriodDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         createdAt: Date;
-        tenantId: string;
         startDate: Date;
         endDate: Date;
         closedById: string | null;
@@ -804,8 +804,8 @@ export declare class GlController {
     }>;
     getPeriodChecklist(req: Request, id: string): Promise<{
         period: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
@@ -841,22 +841,22 @@ export declare class GlController {
         } | null;
     }>;
     closePeriod(req: Request, id: string): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         createdAt: Date;
-        tenantId: string;
         startDate: Date;
         endDate: Date;
         closedById: string | null;
         closedAt: Date | null;
     }>;
     reopenPeriod(req: Request, id: string, dto: ReopenPeriodDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         createdAt: Date;
-        tenantId: string;
         startDate: Date;
         endDate: Date;
         closedById: string | null;
@@ -864,8 +864,8 @@ export declare class GlController {
     }>;
     getPeriodSummary(req: Request, id: string): Promise<{
         period: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
@@ -880,40 +880,40 @@ export declare class GlController {
     }>;
     generateReviewPack(req: Request, id: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         periodId: string;
+        storageKey: string;
         generatedBy: {
             id: string;
             email: string;
         };
-        storageKey: string;
         zipSize: number;
         zipSha256Hash: string;
         manifestSha256: string;
     }>;
     listReviewPacks(req: Request, id: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         periodId: string;
+        storageKey: string;
         generatedById: string;
         generatedBy: {
             id: string;
             email: string;
         };
-        storageKey: string;
         zipSize: number;
         zipSha256Hash: string;
         manifestSha256: string;
     }[]>;
     downloadReviewPack(req: Request, id: string, packId: string, res: Response): Promise<void>;
     listPeriods(req: Request): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         createdAt: Date;
-        tenantId: string;
         startDate: Date;
         endDate: Date;
         closedById: string | null;
@@ -941,8 +941,8 @@ export declare class GlController {
     exportTrialBalance(req: Request, dto: TrialBalanceQueryDto & ReportExportQueryDto, res: Response): Promise<void>;
     ledger(req: Request, dto: LedgerQueryDto): Promise<{
         account: {
-            name: string;
             id: string;
+            name: string;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             normalBalance: import("@prisma/client").$Enums.NormalBalance;
@@ -970,8 +970,8 @@ export declare class GlController {
     getOpeningBalances(req: Request, dto: OpeningBalancesQueryDto): Promise<{
         cutoverDate: string;
         openingPeriod: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
@@ -980,10 +980,10 @@ export declare class GlController {
             lines: {
                 id: string;
                 description: string | null;
+                accountId: string;
                 lineNumber: number | null;
                 debit: import("@prisma/client/runtime/library").Decimal;
                 credit: import("@prisma/client/runtime/library").Decimal;
-                accountId: string;
                 legalEntityId: string | null;
                 departmentId: string | null;
                 projectId: string | null;
@@ -992,17 +992,19 @@ export declare class GlController {
             }[];
         } & {
             id: string;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
-            tenantId: string;
             createdById: string;
-            reference: string | null;
-            postedById: string | null;
+            approvedAt: Date | null;
             postedAt: Date | null;
+            approvedById: string | null;
+            postedById: string | null;
+            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
-            description: string | null;
+            reference: string | null;
             journalDate: Date;
             correctsJournalId: string | null;
             riskScore: number;
@@ -1022,8 +1024,6 @@ export declare class GlController {
             rejectedById: string | null;
             rejectedAt: Date | null;
             rejectionReason: string | null;
-            approvedById: string | null;
-            approvedAt: Date | null;
             returnedByPosterId: string | null;
             returnedByPosterAt: Date | null;
             returnReason: string | null;
@@ -1041,10 +1041,10 @@ export declare class GlController {
             lines: {
                 id: string;
                 description: string | null;
+                accountId: string;
                 lineNumber: number | null;
                 debit: import("@prisma/client/runtime/library").Decimal;
                 credit: import("@prisma/client/runtime/library").Decimal;
-                accountId: string;
                 legalEntityId: string | null;
                 departmentId: string | null;
                 projectId: string | null;
@@ -1053,17 +1053,19 @@ export declare class GlController {
             }[];
         } & {
             id: string;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
-            tenantId: string;
             createdById: string;
-            reference: string | null;
-            postedById: string | null;
+            approvedAt: Date | null;
             postedAt: Date | null;
+            approvedById: string | null;
+            postedById: string | null;
+            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
-            description: string | null;
+            reference: string | null;
             journalDate: Date;
             correctsJournalId: string | null;
             riskScore: number;
@@ -1083,8 +1085,6 @@ export declare class GlController {
             rejectedById: string | null;
             rejectedAt: Date | null;
             rejectionReason: string | null;
-            approvedById: string | null;
-            approvedAt: Date | null;
             returnedByPosterId: string | null;
             returnedByPosterAt: Date | null;
             returnReason: string | null;
@@ -1097,10 +1097,10 @@ export declare class GlController {
             lines: {
                 id: string;
                 description: string | null;
+                accountId: string;
                 lineNumber: number | null;
                 debit: import("@prisma/client/runtime/library").Decimal;
                 credit: import("@prisma/client/runtime/library").Decimal;
-                accountId: string;
                 legalEntityId: string | null;
                 departmentId: string | null;
                 projectId: string | null;
@@ -1109,17 +1109,19 @@ export declare class GlController {
             }[];
         } & {
             id: string;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
-            tenantId: string;
             createdById: string;
-            reference: string | null;
-            postedById: string | null;
+            approvedAt: Date | null;
             postedAt: Date | null;
+            approvedById: string | null;
+            postedById: string | null;
+            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
-            description: string | null;
+            reference: string | null;
             journalDate: Date;
             correctsJournalId: string | null;
             riskScore: number;
@@ -1139,8 +1141,6 @@ export declare class GlController {
             rejectedById: string | null;
             rejectedAt: Date | null;
             rejectionReason: string | null;
-            approvedById: string | null;
-            approvedAt: Date | null;
             returnedByPosterId: string | null;
             returnedByPosterAt: Date | null;
             returnReason: string | null;

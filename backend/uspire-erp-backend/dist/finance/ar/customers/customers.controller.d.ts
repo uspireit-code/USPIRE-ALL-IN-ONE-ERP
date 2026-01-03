@@ -10,47 +10,47 @@ export declare class FinanceArCustomersController {
         pageSize: number;
         total: number;
         items: {
-            name: string;
             id: string;
+            tenantId: string;
+            email: string | null;
+            name: string;
             status: import("@prisma/client").$Enums.CustomerStatus;
             createdAt: Date;
             updatedAt: Date;
-            tenantId: string;
+            taxNumber: string | null;
             customerCode: string | null;
             contactPerson: string | null;
-            email: string | null;
             phone: string | null;
             billingAddress: string | null;
-            taxNumber: string | null;
         }[];
     }>;
     create(req: Request, dto: CreateCustomerDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        email: string | null;
+        name: string;
         status: import("@prisma/client").$Enums.CustomerStatus;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
+        taxNumber: string | null;
         customerCode: string | null;
         contactPerson: string | null;
-        email: string | null;
         phone: string | null;
         billingAddress: string | null;
-        taxNumber: string | null;
     }>;
     update(req: Request, id: string, dto: UpdateCustomerDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        email: string | null;
+        name: string;
         status: import("@prisma/client").$Enums.CustomerStatus;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
+        taxNumber: string | null;
         customerCode: string | null;
         contactPerson: string | null;
-        email: string | null;
         phone: string | null;
         billingAddress: string | null;
-        taxNumber: string | null;
     }>;
     import(req: Request, file: any): Promise<{
         totalRows: number;
@@ -80,17 +80,17 @@ export declare class FinanceArCustomersController {
     downloadImportCsvTemplate(req: Request, res: Response): Promise<void>;
     downloadImportXlsxTemplate(req: Request, res: Response): Promise<void>;
     getById(req: Request, id: string): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        email: string | null;
+        name: string;
         status: import("@prisma/client").$Enums.CustomerStatus;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
+        taxNumber: string | null;
         customerCode: string | null;
         contactPerson: string | null;
-        email: string | null;
         phone: string | null;
         billingAddress: string | null;
-        taxNumber: string | null;
     }>;
 }

@@ -9,38 +9,52 @@ export declare class ArService {
     createCustomer(req: Request, dto: CreateCustomerDto): Promise<any>;
     listCustomers(req: Request): Promise<any>;
     listEligibleAccounts(req: Request): Promise<{
-        name: string;
         id: string;
+        name: string;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
     }[]>;
     createInvoice(req: Request, dto: CreateCustomerInvoiceDto): Promise<{
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        customerId: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
+        totalAmount: import("@prisma/client/runtime/library").Decimal;
+        postedAt: Date | null;
+        postedById: string | null;
+        taxAmount: import("@prisma/client/runtime/library").Decimal;
+        reference: string | null;
+        customerId: string;
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
-        reference: string | null;
         invoiceNote: string | null;
         customerNameSnapshot: string;
         customerEmailSnapshot: string | null;
         customerBillingAddressSnapshot: string | null;
         subtotal: import("@prisma/client/runtime/library").Decimal;
-        taxAmount: import("@prisma/client/runtime/library").Decimal;
-        totalAmount: import("@prisma/client/runtime/library").Decimal;
-        postedById: string | null;
-        postedAt: Date | null;
     }>;
     postInvoice(req: Request, id: string, opts?: {
         arControlAccountCode?: string;
     }): Promise<{
         invoice: {
+            customer: {
+                id: string;
+                tenantId: string;
+                email: string | null;
+                name: string;
+                status: import("@prisma/client").$Enums.CustomerStatus;
+                createdAt: Date;
+                updatedAt: Date;
+                taxNumber: string | null;
+                customerCode: string | null;
+                contactPerson: string | null;
+                phone: string | null;
+                billingAddress: string | null;
+            };
             lines: {
                 id: string;
                 description: string;
@@ -53,51 +67,37 @@ export declare class ArService {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
                 lineTotal: import("@prisma/client/runtime/library").Decimal;
             }[];
-            customer: {
-                name: string;
-                id: string;
-                status: import("@prisma/client").$Enums.CustomerStatus;
-                createdAt: Date;
-                updatedAt: Date;
-                tenantId: string;
-                customerCode: string | null;
-                contactPerson: string | null;
-                email: string | null;
-                phone: string | null;
-                billingAddress: string | null;
-                taxNumber: string | null;
-            };
         } & {
             id: string;
+            tenantId: string;
             status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             createdAt: Date;
-            tenantId: string;
             createdById: string;
-            customerId: string;
             invoiceNumber: string;
             invoiceDate: Date;
             dueDate: Date;
+            totalAmount: import("@prisma/client/runtime/library").Decimal;
+            postedAt: Date | null;
+            postedById: string | null;
+            taxAmount: import("@prisma/client/runtime/library").Decimal;
+            reference: string | null;
+            customerId: string;
             currency: string;
             exchangeRate: import("@prisma/client/runtime/library").Decimal;
-            reference: string | null;
             invoiceNote: string | null;
             customerNameSnapshot: string;
             customerEmailSnapshot: string | null;
             customerBillingAddressSnapshot: string | null;
             subtotal: import("@prisma/client/runtime/library").Decimal;
-            taxAmount: import("@prisma/client/runtime/library").Decimal;
-            totalAmount: import("@prisma/client/runtime/library").Decimal;
-            postedById: string | null;
-            postedAt: Date | null;
         };
         glJournal: {
             lines: {
                 id: string;
                 description: string | null;
+                accountId: string;
                 lineNumber: number | null;
                 debit: import("@prisma/client/runtime/library").Decimal;
                 credit: import("@prisma/client/runtime/library").Decimal;
-                accountId: string;
                 legalEntityId: string | null;
                 departmentId: string | null;
                 projectId: string | null;
@@ -106,17 +106,19 @@ export declare class ArService {
             }[];
         } & {
             id: string;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
-            tenantId: string;
             createdById: string;
-            reference: string | null;
-            postedById: string | null;
+            approvedAt: Date | null;
             postedAt: Date | null;
+            approvedById: string | null;
+            postedById: string | null;
+            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
-            description: string | null;
+            reference: string | null;
             journalDate: Date;
             correctsJournalId: string | null;
             riskScore: number;
@@ -136,8 +138,6 @@ export declare class ArService {
             rejectedById: string | null;
             rejectedAt: Date | null;
             rejectionReason: string | null;
-            approvedById: string | null;
-            approvedAt: Date | null;
             returnedByPosterId: string | null;
             returnedByPosterAt: Date | null;
             returnReason: string | null;
@@ -146,6 +146,20 @@ export declare class ArService {
         };
     }>;
     listInvoices(req: Request): Promise<({
+        customer: {
+            id: string;
+            tenantId: string;
+            email: string | null;
+            name: string;
+            status: import("@prisma/client").$Enums.CustomerStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            taxNumber: string | null;
+            customerCode: string | null;
+            contactPerson: string | null;
+            phone: string | null;
+            billingAddress: string | null;
+        };
         lines: {
             id: string;
             description: string;
@@ -158,42 +172,28 @@ export declare class ArService {
             discountTotal: import("@prisma/client/runtime/library").Decimal;
             lineTotal: import("@prisma/client/runtime/library").Decimal;
         }[];
-        customer: {
-            name: string;
-            id: string;
-            status: import("@prisma/client").$Enums.CustomerStatus;
-            createdAt: Date;
-            updatedAt: Date;
-            tenantId: string;
-            customerCode: string | null;
-            contactPerson: string | null;
-            email: string | null;
-            phone: string | null;
-            billingAddress: string | null;
-            taxNumber: string | null;
-        };
     } & {
         id: string;
+        tenantId: string;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdAt: Date;
-        tenantId: string;
         createdById: string;
-        customerId: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
+        totalAmount: import("@prisma/client/runtime/library").Decimal;
+        postedAt: Date | null;
+        postedById: string | null;
+        taxAmount: import("@prisma/client/runtime/library").Decimal;
+        reference: string | null;
+        customerId: string;
         currency: string;
         exchangeRate: import("@prisma/client/runtime/library").Decimal;
-        reference: string | null;
         invoiceNote: string | null;
         customerNameSnapshot: string;
         customerEmailSnapshot: string | null;
         customerBillingAddressSnapshot: string | null;
         subtotal: import("@prisma/client/runtime/library").Decimal;
-        taxAmount: import("@prisma/client/runtime/library").Decimal;
-        totalAmount: import("@prisma/client/runtime/library").Decimal;
-        postedById: string | null;
-        postedAt: Date | null;
     })[]>;
     private assertInvoiceLines;
 }
