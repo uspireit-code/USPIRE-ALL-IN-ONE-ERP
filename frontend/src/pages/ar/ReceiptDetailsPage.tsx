@@ -3,13 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import type { ArReceipt, ReceiptLineInput } from '../../services/ar';
-import { getReceiptById, postReceipt, setReceiptAllocations, updateReceipt, voidReceipt } from '../../services/ar';
+import { downloadReceiptExport, getReceiptById, postReceipt, setReceiptAllocations, updateReceipt, voidReceipt } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
 import { getArAging } from '../../services/reports';
-
-function formatMoney(n: number) {
-  return Number(n ?? 0).toFixed(2);
-}
+import { formatMoney } from '../../money';
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -28,6 +25,7 @@ export function ReceiptDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
 
   const [editTotalAmount, setEditTotalAmount] = useState('0.00');
   const [editCurrency, setEditCurrency] = useState('');
@@ -114,6 +112,7 @@ export function ReceiptDetailsPage() {
   }, [canRead, id]);
 
   const isDraft = receipt?.status === 'DRAFT';
+  const isPosted = receipt?.status === 'POSTED';
 
   const receiptAmount = round2(Number(editTotalAmount) || 0);
 
@@ -131,6 +130,31 @@ export function ReceiptDetailsPage() {
   const unappliedAmount = useMemo(() => {
     return round2(receiptAmount - appliedTotal);
   }, [appliedTotal, receiptAmount]);
+
+  const triggerDownload = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  async function onExport(format: 'html' | 'pdf') {
+    if (!receipt) return;
+    setExportBusy(true);
+    setError(null);
+    try {
+      const out = await downloadReceiptExport(receipt.id, format);
+      triggerDownload(out.blob, out.fileName);
+    } catch (err: any) {
+      setError(getApiErrorMessage(err, 'Export failed'));
+    } finally {
+      setExportBusy(false);
+    }
+  }
 
   async function refresh() {
     if (!id) return;
@@ -288,6 +312,16 @@ export function ReceiptDetailsPage() {
               Void Receipt
             </button>
           ) : null}
+          {isPosted ? (
+            <>
+              <button type="button" onClick={() => void onExport('html')} disabled={exportBusy}>
+                {exportBusy ? 'Exporting…' : 'Export (HTML)'}
+              </button>
+              <button type="button" onClick={() => void onExport('pdf')} disabled={exportBusy}>
+                {exportBusy ? 'Exporting…' : 'Export (PDF)'}
+              </button>
+            </>
+          ) : null}
           <button type="button" onClick={() => navigate('/ar/receipts')}>
             Back
           </button>
@@ -357,13 +391,13 @@ export function ReceiptDetailsPage() {
 
           <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', marginTop: 8, fontSize: 13 }}>
             <div>
-              Receipt amount: <b>{formatMoney(receiptAmount)}</b>
+              Receipt amount: <b>{formatMoney(receiptAmount, editCurrency)}</b>
             </div>
             <div>
-              Applied total: <b>{formatMoney(appliedTotal)}</b>
+              Applied total: <b>{formatMoney(appliedTotal, editCurrency)}</b>
             </div>
             <div>
-              Unapplied: <b>{formatMoney(unappliedAmount)}</b>
+              Unapplied: <b>{formatMoney(unappliedAmount, editCurrency)}</b>
             </div>
           </div>
 
@@ -374,41 +408,48 @@ export function ReceiptDetailsPage() {
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Invoice Date</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Open Balance</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Applied</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Remaining</th>
               </tr>
             </thead>
             <tbody>
               {invoiceRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ padding: 8, color: '#666' }}>
+                  <td colSpan={5} style={{ padding: 8, color: '#666' }}>
                     No open invoices
                   </td>
                 </tr>
               ) : null}
-              {invoiceRows.map((inv) => (
-                <tr key={inv.invoiceId}>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                    <Link to={`/ar/invoices/${inv.invoiceId}`}>{inv.invoiceNumber || inv.invoiceId}</Link>
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.invoiceDate ?? ''}</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                    {inv.openBalance > 0 ? formatMoney(inv.openBalance) : ''}
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                    <input
-                      value={allocations[inv.invoiceId] ?? ''}
-                      onChange={(e) => setAllocations((s) => ({ ...s, [inv.invoiceId]: e.target.value }))}
-                      disabled={!isDraft}
-                      inputMode="decimal"
-                      style={{ width: 120, textAlign: 'right' }}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {invoiceRows.map((inv) => {
+                const applied = round2(Number(allocations[inv.invoiceId] ?? 0) || 0);
+                const remaining = inv.openBalance > 0 ? round2(inv.openBalance - applied) : 0;
+                return (
+                  <tr key={inv.invoiceId}>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      <Link to={`/ar/invoices/${inv.invoiceId}`}>{inv.invoiceNumber || inv.invoiceId}</Link>
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{inv.invoiceDate ?? ''}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      {inv.openBalance > 0 ? formatMoney(inv.openBalance, editCurrency) : ''}
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      <input
+                        value={allocations[inv.invoiceId] ?? ''}
+                        onChange={(e) => setAllocations((s) => ({ ...s, [inv.invoiceId]: e.target.value }))}
+                        disabled={!isDraft}
+                        inputMode="decimal"
+                        style={{ width: 120, textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      {inv.openBalance > 0 ? formatMoney(Math.max(0, remaining), editCurrency) : ''}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-        </div>
 
-        {!isDraft ? <div style={{ fontSize: 12, color: '#666' }}>This receipt is {receipt.status} and cannot be edited.</div> : null}
+        </div>
 
         <button type="button" onClick={() => refresh()} disabled={acting} style={{ width: 120 }}>
           Refresh

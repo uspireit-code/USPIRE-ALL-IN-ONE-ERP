@@ -58,6 +58,14 @@ export function SettingsSystemPage() {
   const [secondaryColor, setSecondaryColor] = useState('');
   const [secondaryAccentColor, setSecondaryAccentColor] = useState('');
 
+  const [allowSelfPosting, setAllowSelfPosting] = useState(true);
+
+  const [receiptBankName, setReceiptBankName] = useState('');
+  const [receiptBankAccountName, setReceiptBankAccountName] = useState('');
+  const [receiptBankAccountNumber, setReceiptBankAccountNumber] = useState('');
+  const [receiptBankBranch, setReceiptBankBranch] = useState('');
+  const [receiptBankSwiftCode, setReceiptBankSwiftCode] = useState('');
+
   const [defaultBankClearingAccountId, setDefaultBankClearingAccountId] = useState<string>('');
   const [bankClearingSearch, setBankClearingSearch] = useState('');
   const [bankClearingPickerOpen, setBankClearingPickerOpen] = useState(false);
@@ -107,6 +115,14 @@ export function SettingsSystemPage() {
       setAccentColor(s.accentColor || '#EDBA35');
       setSecondaryColor(s.secondaryColor ?? '');
       setSecondaryAccentColor(s.secondaryAccentColor ?? '');
+
+      setAllowSelfPosting(s.allowSelfPosting === undefined ? true : Boolean(s.allowSelfPosting));
+
+      setReceiptBankName(s.receiptBankName ?? '');
+      setReceiptBankAccountName(s.receiptBankAccountName ?? '');
+      setReceiptBankAccountNumber(s.receiptBankAccountNumber ?? '');
+      setReceiptBankBranch(s.receiptBankBranch ?? '');
+      setReceiptBankSwiftCode(s.receiptBankSwiftCode ?? '');
 
       setDefaultBankClearingAccountId(s.defaultBankClearingAccountId ?? '');
       setBankClearingSearch('');
@@ -227,11 +243,17 @@ export function SettingsSystemPage() {
       (system.accentColor ?? '') !== accentColor.trim() ||
       (system.secondaryColor ?? '') !== secondaryColor.trim() ||
       (system.secondaryAccentColor ?? '') !== secondaryAccentColor.trim() ||
+      Boolean(system.allowSelfPosting === undefined ? true : system.allowSelfPosting) !== Boolean(allowSelfPosting) ||
+      (system.receiptBankName ?? '') !== receiptBankName.trim() ||
+      (system.receiptBankAccountName ?? '') !== receiptBankAccountName.trim() ||
+      (system.receiptBankAccountNumber ?? '') !== receiptBankAccountNumber.trim() ||
+      (system.receiptBankBranch ?? '') !== receiptBankBranch.trim() ||
+      (system.receiptBankSwiftCode ?? '') !== receiptBankSwiftCode.trim() ||
       (system.arControlAccountId ?? '') !== arControlAccountId.trim() ||
       (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
       Boolean(pendingFaviconFile)
     );
-  }, [accentColor, arControlAccountId, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, secondaryAccentColor, secondaryColor, system, timezone]);
+  }, [accentColor, allowSelfPosting, arControlAccountId, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, receiptBankAccountName, receiptBankAccountNumber, receiptBankBranch, receiptBankName, receiptBankSwiftCode, secondaryAccentColor, secondaryColor, system, timezone]);
 
   async function onPickFavicon() {
     faviconInputRef.current?.click();
@@ -291,6 +313,12 @@ export function SettingsSystemPage() {
         secondaryColor: secondaryColor.trim() ? secondaryColor.trim() : null,
         accentColor: accentColor.trim() ? accentColor.trim() : null,
         secondaryAccentColor: secondaryAccentColor.trim() ? secondaryAccentColor.trim() : null,
+        allowSelfPosting,
+        receiptBankName: receiptBankName.trim() ? receiptBankName.trim() : null,
+        receiptBankAccountName: receiptBankAccountName.trim() ? receiptBankAccountName.trim() : null,
+        receiptBankAccountNumber: receiptBankAccountNumber.trim() ? receiptBankAccountNumber.trim() : null,
+        receiptBankBranch: receiptBankBranch.trim() ? receiptBankBranch.trim() : null,
+        receiptBankSwiftCode: receiptBankSwiftCode.trim() ? receiptBankSwiftCode.trim() : null,
         arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
         defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
       });
@@ -501,6 +529,39 @@ export function SettingsSystemPage() {
                 <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.muted }}>Only affects demo UX features (if present). No accounting data is changed.</div>
               </div>
             </label>
+
+            <label style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={allowSelfPosting}
+                disabled={loading || !system}
+                onChange={(e) => setAllowSelfPosting(e.currentTarget.checked)}
+              />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.text.primary }}>Allow self-posting</div>
+                <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.muted }}>If disabled, users cannot post receipts they prepared (segregation of duties).</div>
+              </div>
+            </label>
+
+            <div style={{ height: 1, background: tokens.colors.border.subtle }} />
+
+            <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.text.primary }}>Receipt export bank details</div>
+            <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>These appear on customer receipt exports (HTML/PDF).</div>
+            <Field label="Bank name">
+              <Input value={receiptBankName} disabled={loading || !system} onChange={(e) => setReceiptBankName(e.target.value)} placeholder="Optional" />
+            </Field>
+            <Field label="Account name">
+              <Input value={receiptBankAccountName} disabled={loading || !system} onChange={(e) => setReceiptBankAccountName(e.target.value)} placeholder="Optional" />
+            </Field>
+            <Field label="Account number">
+              <Input value={receiptBankAccountNumber} disabled={loading || !system} onChange={(e) => setReceiptBankAccountNumber(e.target.value)} placeholder="Optional" />
+            </Field>
+            <Field label="Branch">
+              <Input value={receiptBankBranch} disabled={loading || !system} onChange={(e) => setReceiptBankBranch(e.target.value)} placeholder="Optional" />
+            </Field>
+            <Field label="Swift code">
+              <Input value={receiptBankSwiftCode} disabled={loading || !system} onChange={(e) => setReceiptBankSwiftCode(e.target.value)} placeholder="Optional" />
+            </Field>
 
             <div style={{ height: 1, background: tokens.colors.border.subtle }} />
 

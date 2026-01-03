@@ -1,0 +1,341 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ArService = void 0;
+const common_1 = require("@nestjs/common");
+const prisma_service_1 = require("../prisma/prisma.service");
+let ArService = class ArService {
+    prisma;
+    constructor(prisma) {
+        this.prisma = prisma;
+    }
+    round2(n) {
+        return Math.round(n * 100) / 100;
+    }
+    async createCustomer(req, dto) {
+        const tenant = req.tenant;
+        if (!tenant) {
+            throw new common_1.BadRequestException('Missing tenant context');
+        }
+        return this.prisma.customer.create({
+            data: {
+                tenantId: tenant.id,
+                name: dto.name,
+                taxNumber: dto.taxNumber,
+                status: 'ACTIVE',
+            },
+        });
+    }
+    async listCustomers(req) {
+        const tenant = req.tenant;
+        if (!tenant) {
+            throw new common_1.BadRequestException('Missing tenant context');
+        }
+        return this.prisma.customer.findMany({
+            where: { tenantId: tenant.id, status: 'ACTIVE' },
+            orderBy: { name: 'asc' },
+        });
+    }
+    async listEligibleAccounts(req) {
+        const tenant = req.tenant;
+        if (!tenant) {
+            throw new common_1.BadRequestException('Missing tenant context');
+        }
+        return this.prisma.account.findMany({
+            where: {
+                tenantId: tenant.id,
+                isActive: true,
+                type: 'INCOME',
+            },
+            orderBy: [{ code: 'asc' }],
+            select: { id: true, code: true, name: true, type: true },
+        });
+    }
+    async createInvoice(req, dto) {
+        const tenant = req.tenant;
+        const user = req.user;
+        if (!tenant || !user) {
+            throw new common_1.BadRequestException('Missing tenant or user context');
+        }
+        const customer = await this.prisma.customer.findFirst({
+            where: { id: dto.customerId, tenantId: tenant.id },
+            select: { id: true, status: true },
+        });
+        if (!customer) {
+            throw new common_1.BadRequestException('Customer not found');
+        }
+        if (customer.status !== 'ACTIVE') {
+            throw new common_1.BadRequestException('Customer is inactive and cannot be used for new transactions.');
+        }
+        const netAmount = this.round2(dto.lines.reduce((s, l) => s + (l.amount ?? 0), 0));
+        this.assertInvoiceLines(dto.lines, netAmount);
+        const accounts = await this.prisma.account.findMany({
+            where: {
+                tenantId: tenant.id,
+                id: { in: dto.lines.map((l) => l.accountId) },
+                isActive: true,
+            },
+            select: { id: true, type: true },
+        });
+        const accountMap = new Map(accounts.map((a) => [a.id, a]));
+        for (const line of dto.lines) {
+            const a = accountMap.get(line.accountId);
+            if (!a) {
+                throw new common_1.BadRequestException(`Account not found or inactive: ${line.accountId}`);
+            }
+            if (a.type !== 'INCOME') {
+                throw new common_1.BadRequestException(`Invoice line account must be INCOME: ${line.accountId}`);
+            }
+        }
+        const currency = 'USD';
+        const subtotal = this.round2(netAmount);
+        const taxAmount = 0;
+        const totalAmount = this.round2(subtotal + taxAmount);
+        const invoice = await this.prisma.customerInvoice.create({
+            data: {
+                tenantId: tenant.id,
+                customerId: dto.customerId,
+                invoiceNumber: dto.invoiceNumber,
+                invoiceDate: new Date(dto.invoiceDate),
+                dueDate: new Date(dto.dueDate),
+                currency,
+                subtotal,
+                taxAmount,
+                totalAmount,
+                createdById: user.id,
+                status: 'DRAFT',
+                lines: {
+                    create: dto.lines.map((l) => ({
+                        accountId: l.accountId,
+                        description: l.description,
+                        quantity: 1,
+                        unitPrice: l.amount,
+                        lineTotal: l.amount,
+                    })),
+                },
+            },
+            include: { lines: true, customer: true },
+        });
+        return invoice;
+    }
+    async postInvoice(req, id, opts) {
+        const tenant = req.tenant;
+        const user = req.user;
+        if (!tenant || !user) {
+            throw new common_1.BadRequestException('Missing tenant or user context');
+        }
+        const inv = await this.prisma.customerInvoice.findFirst({
+            where: { id, tenantId: tenant.id },
+            include: { lines: true },
+        });
+        if (!inv) {
+            throw new common_1.NotFoundException('Invoice not found');
+        }
+        if (inv.status === 'POSTED') {
+            throw new common_1.BadRequestException('Invoice is already posted');
+        }
+        if (inv.status !== 'DRAFT') {
+            throw new common_1.BadRequestException('Only DRAFT invoices can be posted');
+        }
+        const netAmount = this.round2(inv.lines.reduce((s, l) => s + Number(l.lineTotal), 0));
+        const period = await this.prisma.accountingPeriod.findFirst({
+            where: {
+                tenantId: tenant.id,
+                startDate: { lte: inv.invoiceDate },
+                endDate: { gte: inv.invoiceDate },
+            },
+            select: { id: true, status: true, name: true },
+        });
+        if (!period || period.status !== 'OPEN') {
+            await this.prisma.auditEvent
+                .create({
+                data: {
+                    tenantId: tenant.id,
+                    eventType: 'AR_POST',
+                    entityType: 'CUSTOMER_INVOICE',
+                    entityId: inv.id,
+                    action: 'AR_INVOICE_POST',
+                    outcome: 'BLOCKED',
+                    reason: !period
+                        ? 'No accounting period exists for the invoice date'
+                        : `Accounting period is not OPEN: ${period.name}`,
+                    userId: user.id,
+                    permissionUsed: 'AR_INVOICE_POST',
+                },
+            })
+                .catch(() => undefined);
+            throw new common_1.ForbiddenException({
+                error: 'Posting blocked by accounting period control',
+                reason: !period
+                    ? 'No accounting period exists for the invoice date'
+                    : `Accounting period is not OPEN: ${period.name}`,
+            });
+        }
+        if (period.name === 'Opening Balances') {
+            await this.prisma.auditEvent
+                .create({
+                data: {
+                    tenantId: tenant.id,
+                    eventType: 'AR_POST',
+                    entityType: 'CUSTOMER_INVOICE',
+                    entityId: inv.id,
+                    action: 'AR_INVOICE_POST',
+                    outcome: 'BLOCKED',
+                    reason: 'Operational postings are not allowed in the Opening Balances period',
+                    userId: user.id,
+                    permissionUsed: 'AR_INVOICE_POST',
+                },
+            })
+                .catch(() => undefined);
+            throw new common_1.ForbiddenException({
+                error: 'Posting blocked by opening balances control period',
+                reason: 'Operational postings are not allowed in the Opening Balances period',
+            });
+        }
+        const cutoverLocked = await this.prisma.accountingPeriod.findFirst({
+            where: {
+                tenantId: tenant.id,
+                name: 'Opening Balances',
+                status: 'CLOSED',
+            },
+            orderBy: { startDate: 'desc' },
+            select: { startDate: true },
+        });
+        if (cutoverLocked && inv.invoiceDate < cutoverLocked.startDate) {
+            await this.prisma.auditEvent
+                .create({
+                data: {
+                    tenantId: tenant.id,
+                    eventType: 'AR_POST',
+                    entityType: 'CUSTOMER_INVOICE',
+                    entityId: inv.id,
+                    action: 'AR_INVOICE_POST',
+                    outcome: 'BLOCKED',
+                    reason: `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`,
+                    userId: user.id,
+                    permissionUsed: 'AR_INVOICE_POST',
+                },
+            })
+                .catch(() => undefined);
+            throw new common_1.ForbiddenException({
+                error: 'Posting blocked by cutover lock',
+                reason: `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`,
+            });
+        }
+        const arCode = opts?.arControlAccountCode ?? '1100';
+        const arAccount = await this.prisma.account.findFirst({
+            where: {
+                tenantId: tenant.id,
+                code: arCode,
+                isActive: true,
+                type: 'ASSET',
+            },
+            select: { id: true, code: true, name: true },
+        });
+        if (!arAccount) {
+            throw new common_1.BadRequestException(`AR control account not found or invalid: ${arCode}`);
+        }
+        const journal = await this.prisma.journalEntry.create({
+            data: {
+                tenantId: tenant.id,
+                journalDate: inv.invoiceDate,
+                reference: `AR-INVOICE:${inv.id}`,
+                description: `AR invoice posting: ${inv.id}`,
+                createdById: inv.createdById,
+                lines: {
+                    create: [
+                        {
+                            accountId: arAccount.id,
+                            debit: inv.totalAmount,
+                            credit: 0,
+                        },
+                        ...inv.lines.map((l) => ({
+                            accountId: l.accountId,
+                            debit: 0,
+                            credit: l.lineTotal,
+                        })),
+                    ],
+                },
+            },
+            include: { lines: true },
+        });
+        const postedJournal = await this.prisma.journalEntry.update({
+            where: { id: journal.id },
+            data: {
+                status: 'POSTED',
+                postedById: user.id,
+                postedAt: new Date(),
+            },
+            include: { lines: true },
+        });
+        const updatedInvoice = await this.prisma.customerInvoice.update({
+            where: { id: inv.id },
+            data: {
+                status: 'POSTED',
+                postedById: user.id,
+                postedAt: new Date(),
+            },
+            include: { customer: true, lines: true },
+        });
+        await this.prisma.auditEvent
+            .create({
+            data: {
+                tenantId: tenant.id,
+                eventType: 'AR_POST',
+                entityType: 'CUSTOMER_INVOICE',
+                entityId: inv.id,
+                action: 'AR_INVOICE_POST',
+                outcome: 'SUCCESS',
+                userId: user.id,
+                permissionUsed: 'AR_INVOICE_POST',
+            },
+        })
+            .catch(() => undefined);
+        return { invoice: updatedInvoice, glJournal: postedJournal };
+    }
+    async listInvoices(req) {
+        const tenant = req.tenant;
+        if (!tenant) {
+            throw new common_1.BadRequestException('Missing tenant context');
+        }
+        return this.prisma.customerInvoice.findMany({
+            where: { tenantId: tenant.id },
+            orderBy: { createdAt: 'desc' },
+            include: { customer: true, lines: true },
+        });
+    }
+    assertInvoiceLines(lines, totalAmount) {
+        if (!lines || lines.length < 1) {
+            throw new common_1.BadRequestException('Invoice must have at least 1 line');
+        }
+        for (const l of lines) {
+            if ((l.amount ?? 0) <= 0) {
+                throw new common_1.BadRequestException('Invoice line amount must be greater than zero');
+            }
+        }
+        const round2 = (n) => Math.round(n * 100) / 100;
+        const sum = round2(lines.reduce((s, l) => s + (l.amount ?? 0), 0));
+        const total = round2(totalAmount ?? 0);
+        if (sum !== total) {
+            throw new common_1.BadRequestException({
+                error: 'Invoice lines do not sum to totalAmount',
+                sum,
+                totalAmount: total,
+            });
+        }
+    }
+};
+exports.ArService = ArService;
+exports.ArService = ArService = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+], ArService);
+//# sourceMappingURL=ar.service.js.map

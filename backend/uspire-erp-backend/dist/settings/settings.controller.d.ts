@@ -31,60 +31,8 @@ export declare class SettingsController {
         logoUrl: string;
     }>;
     downloadLogo(req: Request, res: Response): Promise<void>;
-    getSystemConfig(req: Request): Promise<{
-        logoUrl: string | null;
-        faviconUrl: string | null;
-        id: string;
-        name: string;
-        organisationName: string;
-        organisationShortName: string | null;
-        primaryColor: string;
-        secondaryColor: string | null;
-        legalName: string | null;
-        defaultCurrency: string | null;
-        country: string | null;
-        timezone: string | null;
-        financialYearStartMonth: number | null;
-        dateFormat: string | null;
-        numberFormat: string | null;
-        defaultLandingPage: string | null;
-        defaultDashboard: string | null;
-        defaultLanguage: string | null;
-        demoModeEnabled: boolean | null;
-        defaultUserRoleCode: string | null;
-        accentColor: string | null;
-        secondaryAccentColor: string | null;
-        defaultBankClearingAccountId: string | null;
-        unappliedReceiptsAccountId: string | null;
-        updatedAt: Date;
-    }>;
-    updateSystemConfig(req: Request, dto: UpdateSystemConfigDto): Promise<{
-        logoUrl: string | null;
-        faviconUrl: string | null;
-        id: string;
-        name: string;
-        organisationName: string;
-        organisationShortName: string | null;
-        primaryColor: string;
-        secondaryColor: string | null;
-        legalName: string | null;
-        defaultCurrency: string | null;
-        country: string | null;
-        timezone: string | null;
-        financialYearStartMonth: number | null;
-        dateFormat: string | null;
-        numberFormat: string | null;
-        defaultLandingPage: string | null;
-        defaultDashboard: string | null;
-        defaultLanguage: string | null;
-        demoModeEnabled: boolean | null;
-        defaultUserRoleCode: string | null;
-        accentColor: string | null;
-        secondaryAccentColor: string | null;
-        defaultBankClearingAccountId: string | null;
-        unappliedReceiptsAccountId: string | null;
-        updatedAt: Date;
-    }>;
+    getSystemConfig(req: Request): Promise<any>;
+    updateSystemConfig(req: Request, dto: UpdateSystemConfigDto): Promise<any>;
     uploadFavicon(req: Request, file: any): Promise<{
         faviconUrl: string;
     }>;
@@ -101,10 +49,10 @@ export declare class SettingsController {
         createdAt: Date;
     }[]>;
     listRoles(req: Request): Promise<{
-        id: string;
         name: string;
-        description: string | null;
+        id: string;
         createdAt: Date;
+        description: string | null;
     }[]>;
     validateRoles(req: Request, dto: ValidateUserRolesDto): Promise<{
         valid: boolean;

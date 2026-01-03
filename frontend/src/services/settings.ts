@@ -33,6 +33,12 @@ export type TenantSystemConfig = {
   secondaryColor: string | null;
   accentColor: string | null;
   secondaryAccentColor: string | null;
+  allowSelfPosting?: boolean;
+  receiptBankName?: string | null;
+  receiptBankAccountName?: string | null;
+  receiptBankAccountNumber?: string | null;
+  receiptBankBranch?: string | null;
+  receiptBankSwiftCode?: string | null;
   arControlAccountId?: string | null;
   defaultBankClearingAccountId?: string | null;
   unappliedReceiptsAccountId?: string | null;

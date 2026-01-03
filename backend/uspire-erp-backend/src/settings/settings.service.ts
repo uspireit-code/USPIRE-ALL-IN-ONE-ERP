@@ -929,7 +929,7 @@ export class SettingsService {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');
 
-    const row = await this.prisma.tenant.findUnique({
+    const row = await (this.prisma as any).tenant.findUnique({
       where: { id: tenant.id },
       select: {
         id: true,
@@ -954,6 +954,12 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        allowSelfPosting: true,
+        receiptBankName: true,
+        receiptBankAccountName: true,
+        receiptBankAccountNumber: true,
+        receiptBankBranch: true,
+        receiptBankSwiftCode: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -976,7 +982,7 @@ export class SettingsService {
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
 
-    const before = await this.prisma.tenant.findUnique({
+    const before = await (this.prisma as any).tenant.findUnique({
       where: { id: tenant.id },
       select: {
         organisationName: true,
@@ -997,6 +1003,12 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        allowSelfPosting: true,
+        receiptBankName: true,
+        receiptBankAccountName: true,
+        receiptBankAccountNumber: true,
+        receiptBankBranch: true,
+        receiptBankSwiftCode: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1017,7 +1029,7 @@ export class SettingsService {
       }
     }
 
-    const updated = await this.prisma.tenant.update({
+    const updated = await (this.prisma as any).tenant.update({
       where: { id: tenant.id },
       data: {
         organisationName:
@@ -1126,6 +1138,44 @@ export class SettingsService {
               ? null
               : dto.secondaryAccentColor.trim() || null,
 
+        allowSelfPosting:
+          (dto as any).allowSelfPosting === undefined
+            ? undefined
+            : (dto as any).allowSelfPosting === null
+              ? undefined
+              : Boolean((dto as any).allowSelfPosting),
+
+        receiptBankName:
+          (dto as any).receiptBankName === undefined
+            ? undefined
+            : (dto as any).receiptBankName === null
+              ? null
+              : String((dto as any).receiptBankName).trim() || null,
+        receiptBankAccountName:
+          (dto as any).receiptBankAccountName === undefined
+            ? undefined
+            : (dto as any).receiptBankAccountName === null
+              ? null
+              : String((dto as any).receiptBankAccountName).trim() || null,
+        receiptBankAccountNumber:
+          (dto as any).receiptBankAccountNumber === undefined
+            ? undefined
+            : (dto as any).receiptBankAccountNumber === null
+              ? null
+              : String((dto as any).receiptBankAccountNumber).trim() || null,
+        receiptBankBranch:
+          (dto as any).receiptBankBranch === undefined
+            ? undefined
+            : (dto as any).receiptBankBranch === null
+              ? null
+              : String((dto as any).receiptBankBranch).trim() || null,
+        receiptBankSwiftCode:
+          (dto as any).receiptBankSwiftCode === undefined
+            ? undefined
+            : (dto as any).receiptBankSwiftCode === null
+              ? null
+              : String((dto as any).receiptBankSwiftCode).trim() || null,
+
         arControlAccountId:
           (dto as any).arControlAccountId === undefined
             ? undefined
@@ -1171,6 +1221,12 @@ export class SettingsService {
         secondaryColor: true,
         accentColor: true,
         secondaryAccentColor: true,
+        allowSelfPosting: true,
+        receiptBankName: true,
+        receiptBankAccountName: true,
+        receiptBankAccountNumber: true,
+        receiptBankBranch: true,
+        receiptBankSwiftCode: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1197,6 +1253,12 @@ export class SettingsService {
       secondaryColor: updated.secondaryColor,
       accentColor: updated.accentColor,
       secondaryAccentColor: updated.secondaryAccentColor,
+      allowSelfPosting: (updated as any).allowSelfPosting,
+      receiptBankName: (updated as any).receiptBankName ?? null,
+      receiptBankAccountName: (updated as any).receiptBankAccountName ?? null,
+      receiptBankAccountNumber: (updated as any).receiptBankAccountNumber ?? null,
+      receiptBankBranch: (updated as any).receiptBankBranch ?? null,
+      receiptBankSwiftCode: (updated as any).receiptBankSwiftCode ?? null,
       arControlAccountId: (updated as any).arControlAccountId ?? null,
       defaultBankClearingAccountId:
         (updated as any).defaultBankClearingAccountId ?? null,

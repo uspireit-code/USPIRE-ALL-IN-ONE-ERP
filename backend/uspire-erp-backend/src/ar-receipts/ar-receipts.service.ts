@@ -328,6 +328,28 @@ export class ArReceiptsService {
       orderBy: [{ createdAt: 'asc' }],
     });
 
+    const invoiceIds = [...new Set((lines ?? []).map((l: any) => l.invoiceId))];
+    const appliedAll = invoiceIds.length
+      ? await (this.prisma as any).customerReceiptLine.groupBy({
+          by: ['invoiceId'],
+          where: {
+            tenantId: tenant.id,
+            invoiceId: { in: invoiceIds },
+            receipt: {
+              tenantId: tenant.id,
+              status: 'POSTED',
+            },
+          } as any,
+          _sum: { appliedAmount: true },
+        })
+      : [];
+    const appliedAllByInvoiceId = new Map(
+      (appliedAll ?? []).map((g: any) => [
+        g.invoiceId,
+        this.normalizeMoney(Number(g._sum?.appliedAmount ?? 0)),
+      ]),
+    );
+
     return {
       receiptId,
       lines: (lines ?? []).map((l: any) => ({
@@ -340,6 +362,23 @@ export class ArReceiptsService {
         invoiceTotalAmount: l.invoice ? Number(l.invoice.totalAmount) : null,
         currency: l.invoice?.currency ?? null,
         appliedAmount: Number(l.appliedAmount),
+        openBalanceBefore: l.invoice
+          ? this.normalizeMoney(
+              this.normalizeMoney(Number(l.invoice.totalAmount ?? 0)) -
+                this.normalizeMoney(
+                  (Number(appliedAllByInvoiceId.get(l.invoiceId) ?? 0) || 0) -
+                    this.normalizeMoney(Number(l.appliedAmount ?? 0)),
+                ),
+            )
+          : null,
+        remainingBalanceAfter: l.invoice
+          ? this.normalizeMoney(
+              this.normalizeMoney(Number(l.invoice.totalAmount ?? 0)) -
+                this.normalizeMoney(
+                  Number(appliedAllByInvoiceId.get(l.invoiceId) ?? 0),
+                ),
+            )
+          : null,
         createdAt: l.createdAt ? new Date(l.createdAt).toISOString() : null,
       })),
     };
@@ -555,13 +594,18 @@ export class ArReceiptsService {
     const tenant = this.ensureTenant(req);
 
     const [t, r] = await Promise.all([
-      this.prisma.tenant.findUnique({
+      (this.prisma as any).tenant.findUnique({
         where: { id: tenant.id },
         select: {
           id: true,
           legalName: true,
           organisationName: true,
           defaultCurrency: true,
+          receiptBankName: true,
+          receiptBankAccountName: true,
+          receiptBankAccountNumber: true,
+          receiptBankBranch: true,
+          receiptBankSwiftCode: true,
         },
       }),
       (this.prisma as any).customerReceipt.findFirst({
@@ -582,6 +626,18 @@ export class ArReceiptsService {
       (t as any).legalName ?? (t as any).organisationName ?? '',
     ).trim();
     const baseCurrency = String((t as any).defaultCurrency ?? '').trim();
+
+    const receiptBankName = String((t as any).receiptBankName ?? '').trim();
+    const receiptBankAccountName = String(
+      (t as any).receiptBankAccountName ?? '',
+    ).trim();
+    const receiptBankAccountNumber = String(
+      (t as any).receiptBankAccountNumber ?? '',
+    ).trim();
+    const receiptBankBranch = String((t as any).receiptBankBranch ?? '').trim();
+    const receiptBankSwiftCode = String(
+      (t as any).receiptBankSwiftCode ?? '',
+    ).trim();
     const receiptNumber = String(r.receiptNumber ?? '').trim();
     const receiptDate = r.receiptDate
       ? new Date(r.receiptDate).toISOString().slice(0, 10)
@@ -755,11 +811,11 @@ export class ArReceiptsService {
       <div class="card">
         <div style="font-weight:700;">Bank Details</div>
         <div class="muted" style="margin-top:6px;">
-          Bank Name: FNB<br/>
-          Account Name: Uspire Professional Services Ltd<br/>
-          Account Number: 63144493680<br/>
-          Branch Name/Number: Commercial Suite / 260001<br/>
-          Swift Code: FIRNZMLX
+          ${receiptBankName ? `Bank Name: ${this.escapeHtml(receiptBankName)}<br/>` : ''}
+          ${receiptBankAccountName ? `Account Name: ${this.escapeHtml(receiptBankAccountName)}<br/>` : ''}
+          ${receiptBankAccountNumber ? `Account Number: ${this.escapeHtml(receiptBankAccountNumber)}<br/>` : ''}
+          ${receiptBankBranch ? `Branch: ${this.escapeHtml(receiptBankBranch)}<br/>` : ''}
+          ${receiptBankSwiftCode ? `Swift Code: ${this.escapeHtml(receiptBankSwiftCode)}` : ''}
         </div>
       </div>
     </div>
@@ -1077,11 +1133,11 @@ export class ArReceiptsService {
       .fillColor(colors.text)
       .text('Bank Details');
     doc.font('Helvetica').fontSize(9).fillColor(colors.muted);
-    doc.text('Bank Name: FNB');
-    doc.text('Account Name: Uspire Professional Services Ltd');
-    doc.text('Account Number: 63144493680');
-    doc.text('Branch Name/Number: Commercial Suite / 260001');
-    doc.text('Swift Code: FIRNZMLX');
+    if (receiptBankName) doc.text(`Bank Name: ${receiptBankName}`);
+    if (receiptBankAccountName) doc.text(`Account Name: ${receiptBankAccountName}`);
+    if (receiptBankAccountNumber) doc.text(`Account Number: ${receiptBankAccountNumber}`);
+    if (receiptBankBranch) doc.text(`Branch: ${receiptBankBranch}`);
+    if (receiptBankSwiftCode) doc.text(`Swift Code: ${receiptBankSwiftCode}`);
     doc.fillColor(colors.text);
 
     doc.end();
@@ -1269,8 +1325,10 @@ export class ArReceiptsService {
       select: {
         id: true,
         status: true,
+        receiptNumber: true,
         receiptDate: true,
         customerId: true,
+        customer: { select: { id: true, name: true } },
         currency: true,
         exchangeRate: true,
         totalAmount: true,
@@ -1286,6 +1344,24 @@ export class ArReceiptsService {
 
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Only DRAFT receipts can be posted');
+    }
+
+    const tenantControls = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        allowSelfPosting: true,
+        arControlAccountId: true,
+        defaultBankClearingAccountId: true,
+        unappliedReceiptsAccountId: true,
+      },
+    });
+
+    if (tenantControls && tenantControls.allowSelfPosting === false) {
+      if (String(existing.createdById) === String(user.id)) {
+        throw new ForbiddenException(
+          'Posting blocked: you cannot post a receipt you prepared (segregation of duties)',
+        );
+      }
     }
 
     const draftLines = await (this.prisma as any).customerReceiptLine.findMany({
@@ -1354,22 +1430,13 @@ export class ArReceiptsService {
       });
     }
 
-    const tenantConfig = await (this.prisma as any).tenant.findUnique({
-      where: { id: tenant.id },
-      select: {
-        arControlAccountId: true,
-        defaultBankClearingAccountId: true,
-        unappliedReceiptsAccountId: true,
-      },
-    });
-
-    const arControlAccountId = (tenantConfig?.arControlAccountId ?? null) as
+    const arControlAccountId = (tenantControls?.arControlAccountId ?? null) as
       | string
       | null;
-    const bankClearingAccountId = (tenantConfig?.defaultBankClearingAccountId ??
+    const bankClearingAccountId = (tenantControls?.defaultBankClearingAccountId ??
       null) as string | null;
     const unappliedReceiptsAccountId =
-      (tenantConfig?.unappliedReceiptsAccountId ?? null) as string | null;
+      (tenantControls?.unappliedReceiptsAccountId ?? null) as string | null;
     if (!bankClearingAccountId) {
       throw new BadRequestException({
         error: 'Missing configuration: default bank clearing account',
@@ -1498,24 +1565,107 @@ export class ArReceiptsService {
         return { receiptId: id, glJournalId: existingJournal.id };
       }
 
+      const invoiceIds = [...new Set((draftLines ?? []).map((l: any) => l.invoiceId))];
+      const invoices = invoiceIds.length
+        ? await tx.customerInvoice.findMany({
+            where: { tenantId: tenant.id, id: { in: invoiceIds } } as any,
+            select: { id: true, invoiceNumber: true } as any,
+          })
+        : [];
+      const invoiceNumberById = new Map(
+        (invoices ?? []).map((i: any) => [i.id, String(i.invoiceNumber ?? '').trim()] as const),
+      );
+
+      const invoiceJournals = invoiceIds.length
+        ? await tx.journalEntry.findMany({
+            where: {
+              tenantId: tenant.id,
+              status: 'POSTED',
+              reference: { in: invoiceIds.map((iid: string) => `AR-INVOICE:${iid}`) },
+            } as any,
+            include: { lines: true } as any,
+          })
+        : [];
+      const dimsByInvoiceId = new Map<
+        string,
+        {
+          legalEntityId: string | null;
+          departmentId: string | null;
+          projectId: string | null;
+          fundId: string | null;
+        }
+      >();
+      for (const j of invoiceJournals ?? []) {
+        const ref = String((j as any).reference ?? '');
+        const invoiceId = ref.startsWith('AR-INVOICE:') ? ref.slice('AR-INVOICE:'.length) : '';
+        if (!invoiceId) continue;
+        const jl = ((j as any).lines ?? []).find(
+          (l: any) => Number(l.debit ?? 0) > 0,
+        );
+        dimsByInvoiceId.set(invoiceId, {
+          legalEntityId: (jl as any)?.legalEntityId ?? null,
+          departmentId: (jl as any)?.departmentId ?? null,
+          projectId: (jl as any)?.projectId ?? null,
+          fundId: (jl as any)?.fundId ?? null,
+        });
+      }
+
+      const legalEntity = await tx.legalEntity.findFirst({
+        where: {
+          tenantId: tenant.id,
+          isActive: true,
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+        },
+        orderBy: { effectiveFrom: 'desc' },
+        select: { id: true },
+      });
+      const defaultLegalEntityId = legalEntity?.id ?? null;
+
+      const receiptNumber = String((existing as any).receiptNumber ?? '').trim();
+      const customerName = String((existing as any).customer?.name ?? '').trim();
+
       const journal = await tx.journalEntry.create({
         data: {
           tenantId: tenant.id,
           journalDate: existing.receiptDate,
           reference: `AR-RECEIPT:${id}`,
-          description: `AR receipt posting: ${id}`,
+          description: `AR receipt posting: ${receiptNumber || id}`,
           createdById: existing.createdById,
           lines: {
             create: [
-              { accountId: bankAccount.id, debit: amount, credit: 0 },
+              {
+                accountId: bankAccount.id,
+                debit: amount,
+                credit: 0,
+                legalEntityId: defaultLegalEntityId,
+                description: `Receipt ${receiptNumber || id} from ${customerName || 'Customer'}`,
+              },
               ...(allocatedTotal > 0
-                ? [
-                    {
-                      accountId: arAccount.id,
-                      debit: 0,
-                      credit: allocatedTotal,
-                    },
-                  ]
+                ? (draftLines ?? [])
+                    .map((l: any) => ({
+                      invoiceId: l.invoiceId,
+                      appliedAmount: this.normalizeMoney(Number(l.appliedAmount ?? 0)),
+                    }))
+                    .filter((l: any) => l.appliedAmount > 0)
+                    .map((l: any) => {
+                      const dims = dimsByInvoiceId.get(l.invoiceId) ?? {
+                        legalEntityId: defaultLegalEntityId,
+                        departmentId: null,
+                        projectId: null,
+                        fundId: null,
+                      };
+                      return {
+                        accountId: arAccount.id,
+                        debit: 0,
+                        credit: l.appliedAmount,
+                        legalEntityId: dims.legalEntityId ?? defaultLegalEntityId,
+                        departmentId: dims.departmentId,
+                        projectId: dims.projectId,
+                        fundId: dims.fundId,
+                        description: `Settlement of ${invoiceNumberById.get(l.invoiceId) || l.invoiceId}`,
+                      };
+                    })
                 : []),
               ...(unappliedTotal > 0
                 ? [
@@ -1523,6 +1673,8 @@ export class ArReceiptsService {
                       accountId: (unappliedAccount as any).id,
                       debit: 0,
                       credit: unappliedTotal,
+                      legalEntityId: defaultLegalEntityId,
+                      description: 'Unapplied customer receipt',
                     },
                   ]
                 : []),
@@ -1562,7 +1714,11 @@ export class ArReceiptsService {
             entityId: id,
             action: 'AR_RECEIPT_POST',
             outcome: 'SUCCESS',
-            reason: JSON.stringify({ journalId: postedJournal.id }),
+            reason: JSON.stringify({
+              journalId: postedJournal.id,
+              preparedById: existing.createdById,
+              postedById: user.id,
+            }),
             userId: user.id,
             permissionUsed: 'AR_RECEIPTS_CREATE',
           } as any,

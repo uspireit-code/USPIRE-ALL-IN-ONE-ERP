@@ -103,6 +103,36 @@ export class UpdateSystemConfigDto {
 
   @IsOptional()
   @ValidateIf(isNotNull)
+  @IsBoolean()
+  allowSelfPosting?: boolean | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  receiptBankName?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  receiptBankAccountName?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  receiptBankAccountNumber?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  receiptBankBranch?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  receiptBankSwiftCode?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
   @IsString()
   arControlAccountId?: string | null;
 

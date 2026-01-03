@@ -836,6 +836,13 @@ let SettingsService = class SettingsService {
                 secondaryColor: true,
                 accentColor: true,
                 secondaryAccentColor: true,
+                allowSelfPosting: true,
+                receiptBankName: true,
+                receiptBankAccountName: true,
+                receiptBankAccountNumber: true,
+                receiptBankBranch: true,
+                receiptBankSwiftCode: true,
+                arControlAccountId: true,
                 defaultBankClearingAccountId: true,
                 unappliedReceiptsAccountId: true,
                 updatedAt: true,
@@ -875,6 +882,13 @@ let SettingsService = class SettingsService {
                 secondaryColor: true,
                 accentColor: true,
                 secondaryAccentColor: true,
+                allowSelfPosting: true,
+                receiptBankName: true,
+                receiptBankAccountName: true,
+                receiptBankAccountNumber: true,
+                receiptBankBranch: true,
+                receiptBankSwiftCode: true,
+                arControlAccountId: true,
                 defaultBankClearingAccountId: true,
                 unappliedReceiptsAccountId: true,
                 faviconUrl: true,
@@ -976,11 +990,47 @@ let SettingsService = class SettingsService {
                     : dto.secondaryAccentColor === null
                         ? null
                         : dto.secondaryAccentColor.trim() || null,
+                allowSelfPosting: dto.allowSelfPosting === undefined
+                    ? undefined
+                    : dto.allowSelfPosting === null
+                        ? undefined
+                        : Boolean(dto.allowSelfPosting),
+                receiptBankName: dto.receiptBankName === undefined
+                    ? undefined
+                    : dto.receiptBankName === null
+                        ? null
+                        : String(dto.receiptBankName).trim() || null,
+                receiptBankAccountName: dto.receiptBankAccountName === undefined
+                    ? undefined
+                    : dto.receiptBankAccountName === null
+                        ? null
+                        : String(dto.receiptBankAccountName).trim() || null,
+                receiptBankAccountNumber: dto.receiptBankAccountNumber === undefined
+                    ? undefined
+                    : dto.receiptBankAccountNumber === null
+                        ? null
+                        : String(dto.receiptBankAccountNumber).trim() || null,
+                receiptBankBranch: dto.receiptBankBranch === undefined
+                    ? undefined
+                    : dto.receiptBankBranch === null
+                        ? null
+                        : String(dto.receiptBankBranch).trim() || null,
+                receiptBankSwiftCode: dto.receiptBankSwiftCode === undefined
+                    ? undefined
+                    : dto.receiptBankSwiftCode === null
+                        ? null
+                        : String(dto.receiptBankSwiftCode).trim() || null,
+                arControlAccountId: dto.arControlAccountId === undefined
+                    ? undefined
+                    : dto.arControlAccountId === null
+                        ? null
+                        : String(dto.arControlAccountId).trim() || null,
                 defaultBankClearingAccountId: dto.defaultBankClearingAccountId === undefined
                     ? undefined
                     : dto.defaultBankClearingAccountId === null
                         ? null
-                        : String(dto.defaultBankClearingAccountId).trim() || null,
+                        : String(dto.defaultBankClearingAccountId).trim() ||
+                            null,
                 unappliedReceiptsAccountId: dto.unappliedReceiptsAccountId === undefined
                     ? undefined
                     : dto.unappliedReceiptsAccountId === null
@@ -1010,6 +1060,13 @@ let SettingsService = class SettingsService {
                 secondaryColor: true,
                 accentColor: true,
                 secondaryAccentColor: true,
+                allowSelfPosting: true,
+                receiptBankName: true,
+                receiptBankAccountName: true,
+                receiptBankAccountNumber: true,
+                receiptBankBranch: true,
+                receiptBankSwiftCode: true,
+                arControlAccountId: true,
                 defaultBankClearingAccountId: true,
                 unappliedReceiptsAccountId: true,
                 updatedAt: true,
@@ -1034,6 +1091,13 @@ let SettingsService = class SettingsService {
             secondaryColor: updated.secondaryColor,
             accentColor: updated.accentColor,
             secondaryAccentColor: updated.secondaryAccentColor,
+            allowSelfPosting: updated.allowSelfPosting,
+            receiptBankName: updated.receiptBankName ?? null,
+            receiptBankAccountName: updated.receiptBankAccountName ?? null,
+            receiptBankAccountNumber: updated.receiptBankAccountNumber ?? null,
+            receiptBankBranch: updated.receiptBankBranch ?? null,
+            receiptBankSwiftCode: updated.receiptBankSwiftCode ?? null,
+            arControlAccountId: updated.arControlAccountId ?? null,
             defaultBankClearingAccountId: updated.defaultBankClearingAccountId ?? null,
             unappliedReceiptsAccountId: updated.unappliedReceiptsAccountId ?? null,
             faviconUrl: updated.faviconUrl,

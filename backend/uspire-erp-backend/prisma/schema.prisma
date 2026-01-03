@@ -945,6 +945,14 @@ model Tenant {
   accentColor             String?
   secondaryAccentColor    String?
 
+  allowSelfPosting Boolean @default(true)
+
+  receiptBankName          String?
+  receiptBankAccountName   String?
+  receiptBankAccountNumber String?
+  receiptBankBranch        String?
+  receiptBankSwiftCode     String?
+
   arControlAccountId          String?
   defaultBankClearingAccountId String?
   unappliedReceiptsAccountId   String?

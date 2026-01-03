@@ -476,3 +476,9 @@ export async function voidReceipt(id: string, reason: string) {
     body: JSON.stringify({ reason }),
   });
 }
+
+export async function downloadReceiptExport(id: string, format: 'html' | 'pdf' = 'html') {
+  const q = new URLSearchParams();
+  q.set('format', format);
+  return downloadBlob(`/ar/receipts/${id}/export?${q.toString()}`);
+}

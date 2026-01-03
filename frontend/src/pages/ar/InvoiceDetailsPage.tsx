@@ -70,6 +70,13 @@ export function InvoiceDetailsPage() {
     };
   }, [invoice?.lines]);
 
+  const balances = useMemo(() => {
+    const total = Number(invoice?.totalAmount ?? 0);
+    const remaining = Number(invoice?.outstandingBalance ?? invoice?.totalAmount ?? 0);
+    const applied = Math.max(0, total - remaining);
+    return { total, applied, remaining };
+  }, [invoice?.outstandingBalance, invoice?.totalAmount]);
+
   const triggerDownload = (blob: Blob, fileName: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -170,10 +177,13 @@ export function InvoiceDetailsPage() {
           <b>Tax:</b> {formatMoney(invoice.taxAmount, invoice.currency)}
         </div>
         <div>
-          <b>Total:</b> {formatMoney(invoice.totalAmount, invoice.currency)}
+          <b>Invoice Total:</b> {formatMoney(balances.total, invoice.currency)}
         </div>
         <div>
-          <b>Outstanding Balance:</b> {formatMoney(Number(invoice.outstandingBalance ?? invoice.totalAmount), invoice.currency)}
+          <b>Total Applied Receipts:</b> {formatMoney(balances.applied, invoice.currency)}
+        </div>
+        <div>
+          <b>Remaining Balance:</b> {formatMoney(balances.remaining, invoice.currency)}
         </div>
       </div>
 
