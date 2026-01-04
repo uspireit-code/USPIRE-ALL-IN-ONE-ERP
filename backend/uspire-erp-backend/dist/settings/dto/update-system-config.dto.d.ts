@@ -23,6 +23,9 @@ export declare class UpdateSystemConfigDto {
     receiptBankAccountNumber?: string | null;
     receiptBankBranch?: string | null;
     receiptBankSwiftCode?: string | null;
+    requiresDepartmentOnInvoices?: boolean | null;
+    requiresProjectOnInvoices?: boolean | null;
+    requiresFundOnInvoices?: boolean | null;
     arControlAccountId?: string | null;
     defaultBankClearingAccountId?: string | null;
     unappliedReceiptsAccountId?: string | null;

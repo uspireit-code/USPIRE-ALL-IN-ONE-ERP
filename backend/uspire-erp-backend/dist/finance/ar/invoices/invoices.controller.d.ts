@@ -20,10 +20,10 @@ export declare class FinanceArInvoicesController {
         tenantId: string;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdAt: Date;
-        createdById: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
+        createdById: string;
         postedAt: Date | null;
         postedById: string | null;
         reference: string | null;
@@ -78,10 +78,10 @@ export declare class FinanceArInvoicesController {
         tenantId: string;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdAt: Date;
-        createdById: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
+        createdById: string;
         postedAt: Date | null;
         postedById: string | null;
         reference: string | null;
@@ -105,10 +105,10 @@ export declare class FinanceArInvoicesController {
             tenantId: string;
             status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             createdAt: Date;
-            createdById: string;
             invoiceNumber: string;
             invoiceDate: Date;
             dueDate: Date;
+            createdById: string;
             postedAt: Date | null;
             postedById: string | null;
             reference: string | null;

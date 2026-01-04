@@ -165,8 +165,8 @@ export declare class BudgetsService {
                 code: string;
             };
             id: string;
-            amount: Prisma.Decimal;
             accountId: string;
+            amount: Prisma.Decimal;
             periodId: string;
             period: {
                 id: string;

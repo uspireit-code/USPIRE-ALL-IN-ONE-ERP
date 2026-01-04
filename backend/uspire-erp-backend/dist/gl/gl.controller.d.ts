@@ -29,13 +29,14 @@ export declare class GlController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
         fsMappingLevel2: string | null;
         isCashEquivalent: boolean;
+        requiresDepartment: boolean;
         requiresProject: boolean;
         requiresFund: boolean;
         isBudgetRelevant: boolean;
@@ -56,6 +57,7 @@ export declare class GlController {
         name: string;
         type: import("@prisma/client").$Enums.AccountType;
         isActive: boolean;
+        requiresDepartment: any;
         requiresProject: boolean;
         requiresFund: boolean;
         departmentRequirement: import("./gl.service").DepartmentRequirement;
@@ -63,16 +65,16 @@ export declare class GlController {
     listLegalEntities(req: Request, effectiveOn?: string): Promise<{
         id: string;
         name: string;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         effectiveFrom: Date;
         effectiveTo: Date | null;
     }[]>;
     listDepartments(req: Request, effectiveOn?: string): Promise<{
         id: string;
         name: string;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         effectiveFrom: Date;
         effectiveTo: Date | null;
     }[]>;
@@ -107,12 +109,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -158,11 +160,11 @@ export declare class GlController {
         lines: {
             id: string;
             accountId: string;
-            descriptionTemplate: string | null;
-            lineOrder: number;
             templateId: string;
+            descriptionTemplate: string | null;
             debitAmount: import("@prisma/client/runtime/library").Decimal;
             creditAmount: import("@prisma/client/runtime/library").Decimal;
+            lineOrder: number;
         }[];
     } & {
         id: string;
@@ -174,8 +176,8 @@ export declare class GlController {
         journalType: import("@prisma/client").$Enums.JournalType;
         startDate: Date;
         endDate: Date | null;
-        referenceTemplate: string;
         descriptionTemplate: string | null;
+        referenceTemplate: string;
         frequency: import("@prisma/client").$Enums.RecurringJournalFrequency;
         nextRunDate: Date;
     }>;
@@ -183,11 +185,11 @@ export declare class GlController {
         lines: {
             id: string;
             accountId: string;
-            descriptionTemplate: string | null;
-            lineOrder: number;
             templateId: string;
+            descriptionTemplate: string | null;
             debitAmount: import("@prisma/client/runtime/library").Decimal;
             creditAmount: import("@prisma/client/runtime/library").Decimal;
+            lineOrder: number;
         }[];
     } & {
         id: string;
@@ -199,8 +201,8 @@ export declare class GlController {
         journalType: import("@prisma/client").$Enums.JournalType;
         startDate: Date;
         endDate: Date | null;
-        referenceTemplate: string;
         descriptionTemplate: string | null;
+        referenceTemplate: string;
         frequency: import("@prisma/client").$Enums.RecurringJournalFrequency;
         nextRunDate: Date;
     })[]>;
@@ -208,11 +210,11 @@ export declare class GlController {
         lines: {
             id: string;
             accountId: string;
-            descriptionTemplate: string | null;
-            lineOrder: number;
             templateId: string;
+            descriptionTemplate: string | null;
             debitAmount: import("@prisma/client/runtime/library").Decimal;
             creditAmount: import("@prisma/client/runtime/library").Decimal;
+            lineOrder: number;
         }[];
     } & {
         id: string;
@@ -224,8 +226,8 @@ export declare class GlController {
         journalType: import("@prisma/client").$Enums.JournalType;
         startDate: Date;
         endDate: Date | null;
-        referenceTemplate: string;
         descriptionTemplate: string | null;
+        referenceTemplate: string;
         frequency: import("@prisma/client").$Enums.RecurringJournalFrequency;
         nextRunDate: Date;
     }>;
@@ -248,12 +250,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -320,12 +322,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -360,12 +362,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -414,12 +416,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -468,12 +470,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -522,12 +524,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -578,12 +580,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -632,12 +634,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -673,12 +675,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -727,12 +729,12 @@ export declare class GlController {
         tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
         createdAt: Date;
+        description: string | null;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        description: string | null;
         journalNumber: number | null;
         journalType: import("@prisma/client").$Enums.JournalType;
         periodId: string | null;
@@ -995,12 +997,12 @@ export declare class GlController {
             tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
+            description: string | null;
             createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
             postedById: string | null;
-            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
@@ -1056,12 +1058,12 @@ export declare class GlController {
             tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
+            description: string | null;
             createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
             postedById: string | null;
-            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
@@ -1112,12 +1114,12 @@ export declare class GlController {
             tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
+            description: string | null;
             createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
             postedById: string | null;
-            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;

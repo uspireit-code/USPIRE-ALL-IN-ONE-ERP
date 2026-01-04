@@ -58,14 +58,19 @@ export function AuthProvider(props: { children: React.ReactNode }) {
   }, [refreshMe, state.isAuthenticated, state.me]);
 
   const login = useCallback(async (params: { tenantId?: string; tenantName?: string; email: string; password: string }) => {
+    const tenantIdTrimmed = (params.tenantId ?? '').trim();
+    const tenantNameTrimmed = (params.tenantName ?? '').trim();
+
+    const payload: Record<string, unknown> = {
+      email: params.email,
+      password: params.password,
+      ...(tenantIdTrimmed ? { tenantId: tenantIdTrimmed } : {}),
+      ...(tenantNameTrimmed ? { tenantName: tenantNameTrimmed } : {}),
+    };
+
     const resp = await apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({
-        email: params.email,
-        password: params.password,
-        tenantId: params.tenantId?.trim() ? params.tenantId.trim() : undefined,
-        tenantName: params.tenantName?.trim() ? params.tenantName.trim() : undefined,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (resp.tenant?.id) {

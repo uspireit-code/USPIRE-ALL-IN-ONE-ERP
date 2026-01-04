@@ -31,6 +31,9 @@ export declare class InternalController {
         receiptBankAccountNumber: string | null;
         receiptBankBranch: string | null;
         receiptBankSwiftCode: string | null;
+        requiresDepartmentOnInvoices: boolean;
+        requiresProjectOnInvoices: boolean;
+        requiresFundOnInvoices: boolean;
         arControlAccountId: string | null;
         defaultBankClearingAccountId: string | null;
         unappliedReceiptsAccountId: string | null;
@@ -70,6 +73,9 @@ export declare class InternalController {
             receiptBankAccountNumber: string | null;
             receiptBankBranch: string | null;
             receiptBankSwiftCode: string | null;
+            requiresDepartmentOnInvoices: boolean;
+            requiresProjectOnInvoices: boolean;
+            requiresFundOnInvoices: boolean;
             arControlAccountId: string | null;
             defaultBankClearingAccountId: string | null;
             unappliedReceiptsAccountId: string | null;

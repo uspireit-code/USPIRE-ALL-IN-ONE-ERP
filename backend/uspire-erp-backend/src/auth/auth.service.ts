@@ -17,6 +17,8 @@ type JwtAccessPayload = {
   sub: string;
   tenantId: string;
   email: string;
+  roles: string[];
+  permissions: string[];
 };
 
 type JwtRefreshPayload = {
@@ -56,47 +58,171 @@ export class AuthService {
   async login(req: Request, dto: LoginDto) {
     const email = dto.email.toLowerCase();
 
-    const tenant = await this.resolveTenantForLogin({
-      req,
-      tenantId: dto.tenantId,
-      tenantName: dto.tenantName,
-      email,
-    });
+    const debugAuth = (process.env.DEBUG_AUTH ?? '').toString().toLowerCase() === 'true';
+    const headerTenantIdRaw = req.header('x-tenant-id');
+    const headerTenantId = String(headerTenantIdRaw ?? '').trim();
+    const requestedTenantId = (dto.tenantId ?? '').trim();
+    const requestedTenantName = (dto.tenantName ?? '').trim();
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        tenantId_email: {
-          tenantId: tenant.id,
-          email,
-        },
+    if (debugAuth) {
+      // eslint-disable-next-line no-console
+      console.log('[AuthService.login] received', {
+        email,
+        bodyTenantId: requestedTenantId || null,
+        bodyTenantName: requestedTenantName || null,
+        headerTenantId: headerTenantId || null,
+        hasHeaderTenantId: Boolean(headerTenantIdRaw),
+      });
+    }
+
+    // 1) Authenticate the user FIRST (email + password), without assuming tenant context.
+    // Since email is only unique per-tenant, we validate the password against all active
+    // users with this email, and then apply tenant selection rules.
+    const candidates = await this.prisma.user.findMany({
+      where: { email, isActive: true },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        passwordHash: true,
+        isActive: true,
       },
+      take: 10,
     });
 
-    if (!user || !user.isActive) {
+    if (debugAuth) {
+      // eslint-disable-next-line no-console
+      console.log('[AuthService.login] candidates', {
+        count: candidates.length,
+        tenantIds: Array.from(new Set(candidates.map((c) => c.tenantId))),
+      });
+    }
+
+    if (candidates.length === 0) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const matches = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!matches) {
+    const passwordMatches: Array<{ id: string; tenantId: string; email: string }> = [];
+    for (const u of candidates) {
+      const ok = await bcrypt.compare(dto.password, u.passwordHash);
+      if (ok) {
+        passwordMatches.push({ id: u.id, tenantId: u.tenantId, email: u.email });
+      }
+    }
+
+    if (debugAuth) {
+      // eslint-disable-next-line no-console
+      console.log('[AuthService.login] passwordMatches', {
+        count: passwordMatches.length,
+        tenantIds: Array.from(new Set(passwordMatches.map((m) => m.tenantId))),
+      });
+    }
+
+    if (passwordMatches.length === 0) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // 2) Resolve tenant AFTER authentication.
+    let selectedTenantId: string | null = null;
+
+    if (requestedTenantId) {
+      const tenantExists = await this.prisma.tenant.findUnique({
+        where: { id: requestedTenantId },
+        select: { id: true },
+      });
+      if (!tenantExists) {
+        throw new BadRequestException('Tenant not found');
+      }
+
+      const match = passwordMatches.find((m) => m.tenantId === requestedTenantId);
+      if (!match) {
+        throw new BadRequestException('User is not assigned to the selected organisation.');
+      }
+
+      selectedTenantId = requestedTenantId;
+    } else if (requestedTenantName) {
+      const tenantByName = await this.prisma.tenant.findFirst({
+        where: { name: requestedTenantName },
+        select: { id: true },
+      });
+      if (!tenantByName) {
+        throw new BadRequestException('Tenant not found');
+      }
+
+      const match = passwordMatches.find((m) => m.tenantId === tenantByName.id);
+      if (!match) {
+        throw new BadRequestException('User is not assigned to the selected organisation.');
+      }
+
+      selectedTenantId = tenantByName.id;
+    } else {
+      const uniqueTenantIds = [...new Set(passwordMatches.map((m) => m.tenantId))];
+
+      if (debugAuth) {
+        // eslint-disable-next-line no-console
+        console.log('[AuthService.login] auto-select evaluation', {
+          uniqueTenantIds,
+        });
+      }
+
+      if (uniqueTenantIds.length === 0) {
+        throw new BadRequestException('User is not assigned to any organisation.');
+      }
+
+      if (uniqueTenantIds.length > 1) {
+        throw new BadRequestException(
+          'Multiple organisations found. Please select one.',
+        );
+      }
+
+      selectedTenantId = uniqueTenantIds[0];
+    }
+
+    if (debugAuth) {
+      // eslint-disable-next-line no-console
+      console.log('[AuthService.login] selectedTenantId', {
+        selectedTenantId,
+      });
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: selectedTenantId },
+    });
+    if (!tenant) {
+      throw new BadRequestException('Tenant not found');
+    }
+
+    const selectedUser = passwordMatches.find((m) => m.tenantId === tenant.id);
+    if (!selectedUser) {
+      // Should not be possible given the checks above, but keep it defensive.
+      throw new BadRequestException('User is not assigned to any organisation.');
+    }
+
+    const { roles, permissions } = await this.getTenantScopedRolesAndPermissions({
+      tenantId: tenant.id,
+      userId: selectedUser.id,
+    });
 
     const { accessToken, refreshToken } = await this.issueTokens({
       tenant,
-      user,
+      user: { id: selectedUser.id, tenantId: tenant.id, email: selectedUser.email } as any,
+      roles,
+      permissions,
     });
 
     return {
       accessToken,
       refreshToken,
       user: {
-        id: user.id,
-        email: user.email,
+        id: selectedUser.id,
+        email: selectedUser.email,
+        roles,
       },
       tenant: {
         id: tenant.id,
         name: tenant.name,
       },
+      permissions,
     };
   }
 
@@ -135,9 +261,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    const { roles, permissions } = await this.getTenantScopedRolesAndPermissions({
+      tenantId: tenant.id,
+      userId: user.id,
+    });
+
     const { accessToken, refreshToken } = await this.issueTokens({
       tenant,
       user,
+      roles,
+      permissions,
     });
 
     return {
@@ -253,50 +386,42 @@ export class AuthService {
     return tenant;
   }
 
-  private async resolveTenantForLogin(params: {
-    req: Request;
-    tenantId?: string;
-    tenantName?: string;
-    email: string;
-  }): Promise<Tenant> {
-    if (params.req.tenant) return params.req.tenant;
-
-    const tenantId = (params.tenantId ?? '').trim();
-    if (tenantId) {
-      const t = await this.prisma.tenant.findUnique({
-        where: { id: tenantId },
-      });
-      if (!t) throw new UnauthorizedException('Invalid credentials');
-      return t;
-    }
-
-    const tenantName = (params.tenantName ?? '').trim();
-    if (tenantName) {
-      const t = await this.prisma.tenant.findFirst({
-        where: { name: tenantName },
-      });
-      if (!t) throw new UnauthorizedException('Invalid credentials');
-      return t;
-    }
-
-    const users = await this.prisma.user.findMany({
-      where: { email: params.email, isActive: true },
-      select: { tenantId: true },
-      take: 3,
+  private async getTenantScopedRolesAndPermissions(params: {
+    tenantId: string;
+    userId: string;
+  }): Promise<{ roles: string[]; permissions: string[] }> {
+    const userRoles = await this.prisma.userRole.findMany({
+      where: {
+        userId: params.userId,
+        role: { tenantId: params.tenantId },
+      },
+      select: {
+        role: {
+          select: {
+            name: true,
+            rolePermissions: {
+              select: {
+                permission: { select: { code: true } },
+              },
+            },
+          },
+        },
+      },
     });
 
-    const uniqueTenantIds = [...new Set(users.map((u) => u.tenantId))];
-    if (uniqueTenantIds.length === 1) {
-      const t = await this.prisma.tenant.findUnique({
-        where: { id: uniqueTenantIds[0] },
-      });
-      if (!t) throw new UnauthorizedException('Invalid credentials');
-      return t;
+    const permissions = new Set<string>();
+    const roles = new Set<string>();
+    for (const ur of userRoles) {
+      roles.add(ur.role.name);
+      for (const rp of ur.role.rolePermissions) {
+        permissions.add(rp.permission.code);
+      }
     }
 
-    throw new BadRequestException(
-      'Tenant is required for login. Provide tenantId or tenantName, or ensure the email is unique across tenants.',
-    );
+    return {
+      roles: Array.from(roles),
+      permissions: Array.from(permissions),
+    };
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -310,11 +435,18 @@ export class AuthService {
     return bcrypt.hash(password, rounds);
   }
 
-  private async issueTokens(params: { tenant: Tenant; user: User }) {
+  private async issueTokens(params: {
+    tenant: Tenant;
+    user: User;
+    roles: string[];
+    permissions: string[];
+  }) {
     const accessPayload: JwtAccessPayload = {
       sub: params.user.id,
       tenantId: params.tenant.id,
       email: params.user.email,
+      roles: params.roles,
+      permissions: params.permissions,
     };
 
     const refreshPayload: JwtRefreshPayload = {

@@ -226,6 +226,21 @@ async function main() {
     update: {},
   });
 
+  const superAdminRole = await prisma.role.upsert({
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'SUPERADMIN',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'SUPERADMIN',
+      description: 'Tenant super administrator (DEV)',
+    },
+    update: {},
+  });
+
   await prisma.role.upsert({
     where: {
       tenantId_name: {
@@ -306,6 +321,14 @@ async function main() {
         roleId: adminRole.id,
         permissionId: p.id,
       })),
+    skipDuplicates: true,
+  });
+
+  await prisma.rolePermission.createMany({
+    data: allPermissions.map((p) => ({
+      roleId: superAdminRole.id,
+      permissionId: p.id,
+    })),
     skipDuplicates: true,
   });
 
@@ -949,12 +972,35 @@ async function main() {
   }
 
   const adminEmail = 'admin@uspire.local';
+  const superAdminEmail = 'superadmin@uspire.local';
   const testAdminEmail = 'test@uspire.local';
   const viewerEmail = 'viewer@uspire.local';
 
   const rounds = 12;
-  const adminPasswordHash = await bcrypt.hash('Admin123!', rounds);
+  const adminPasswordHash = await bcrypt.hash('Admin@123', rounds);
+  const superAdminPasswordHash = await bcrypt.hash('Super123', rounds);
   const viewerPasswordHash = await bcrypt.hash('Viewer123!', rounds);
+
+  const superAdminUser = await prisma.user.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: superAdminEmail,
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'Super Admin',
+      email: superAdminEmail,
+      passwordHash: superAdminPasswordHash,
+      isActive: true,
+    },
+    update: {
+      name: 'Super Admin',
+      passwordHash: superAdminPasswordHash,
+      isActive: true,
+    },
+  });
 
   const adminUser = await prisma.user.upsert({
     where: {
@@ -1022,6 +1068,8 @@ async function main() {
   await prisma.userRole.createMany({
     data: [
       { userId: adminUser.id, roleId: adminRole.id },
+      { userId: superAdminUser.id, roleId: superAdminRole.id },
+      { userId: superAdminUser.id, roleId: adminRole.id },
       { userId: testAdminUser.id, roleId: forecastMakerRole.id },
       { userId: viewerUser.id, roleId: viewerRole.id },
     ],

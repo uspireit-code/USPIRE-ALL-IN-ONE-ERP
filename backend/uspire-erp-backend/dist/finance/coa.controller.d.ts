@@ -14,8 +14,8 @@ export declare class CoaController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
             code: string;
+            isActive: boolean;
             type: import("@prisma/client").$Enums.AccountType;
             isBudgetRelevant: boolean;
             budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
@@ -41,8 +41,8 @@ export declare class CoaController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
@@ -74,8 +74,8 @@ export declare class CoaController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
@@ -142,8 +142,8 @@ export declare class CoaController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
@@ -166,8 +166,8 @@ export declare class CoaController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;

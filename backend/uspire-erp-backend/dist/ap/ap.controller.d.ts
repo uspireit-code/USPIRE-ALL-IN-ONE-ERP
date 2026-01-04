@@ -37,13 +37,14 @@ export declare class ApController {
                     name: string;
                     createdAt: Date;
                     updatedAt: Date;
-                    isActive: boolean;
                     code: string;
+                    isActive: boolean;
                     type: import("@prisma/client").$Enums.AccountType;
                     subCategory: string | null;
                     fsMappingLevel1: string | null;
                     fsMappingLevel2: string | null;
                     isCashEquivalent: boolean;
+                    requiresDepartment: boolean;
                     requiresProject: boolean;
                     requiresFund: boolean;
                     isBudgetRelevant: boolean;
@@ -72,11 +73,11 @@ export declare class ApController {
             id: string;
             tenantId: string;
             createdAt: Date;
-            sourceType: import("@prisma/client").$Enums.InvoiceTaxSourceType;
-            sourceId: string;
             taxRateId: string;
             taxableAmount: import("@prisma/client/runtime/library").Decimal;
             taxAmount: import("@prisma/client/runtime/library").Decimal;
+            sourceType: import("@prisma/client").$Enums.InvoiceTaxSourceType;
+            sourceId: string;
         })[];
         supplier: {
             id: string;
@@ -89,22 +90,22 @@ export declare class ApController {
         lines: {
             id: string;
             description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             supplierInvoiceId: string;
         }[];
         id: string;
         tenantId: string;
         status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         createdAt: Date;
-        createdById: string;
+        supplierId: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
-        supplierId: string;
         approvedById: string | null;
         postedById: string | null;
     }>;
@@ -120,8 +121,8 @@ export declare class ApController {
         lines: {
             id: string;
             description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             supplierInvoiceId: string;
         }[];
     } & {
@@ -129,14 +130,14 @@ export declare class ApController {
         tenantId: string;
         status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         createdAt: Date;
-        createdById: string;
+        supplierId: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
-        supplierId: string;
         approvedById: string | null;
         postedById: string | null;
     }>;
@@ -152,8 +153,8 @@ export declare class ApController {
         lines: {
             id: string;
             description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             supplierInvoiceId: string;
         }[];
     } & {
@@ -161,14 +162,14 @@ export declare class ApController {
         tenantId: string;
         status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         createdAt: Date;
-        createdById: string;
+        supplierId: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
-        supplierId: string;
         approvedById: string | null;
         postedById: string | null;
     }>;
@@ -185,8 +186,8 @@ export declare class ApController {
             lines: {
                 id: string;
                 description: string;
-                amount: import("@prisma/client/runtime/library").Decimal;
                 accountId: string;
+                amount: import("@prisma/client/runtime/library").Decimal;
                 supplierInvoiceId: string;
             }[];
         } & {
@@ -194,14 +195,14 @@ export declare class ApController {
             tenantId: string;
             status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
             createdAt: Date;
-            createdById: string;
+            supplierId: string;
             invoiceNumber: string;
             invoiceDate: Date;
             dueDate: Date;
             totalAmount: import("@prisma/client/runtime/library").Decimal;
+            createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
-            supplierId: string;
             approvedById: string | null;
             postedById: string | null;
         };
@@ -224,12 +225,12 @@ export declare class ApController {
             tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
+            description: string | null;
             createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
             postedById: string | null;
-            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
@@ -272,8 +273,8 @@ export declare class ApController {
         lines: {
             id: string;
             description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             supplierInvoiceId: string;
         }[];
     } & {
@@ -281,14 +282,14 @@ export declare class ApController {
         tenantId: string;
         status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         createdAt: Date;
-        createdById: string;
+        supplierId: string;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
-        supplierId: string;
         approvedById: string | null;
         postedById: string | null;
     })[]>;

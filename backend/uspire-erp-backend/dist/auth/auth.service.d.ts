@@ -23,11 +23,13 @@ export declare class AuthService {
         user: {
             id: string;
             email: string;
+            roles: string[];
         };
         tenant: {
             id: string;
             name: string;
         };
+        permissions: string[];
     }>;
     refresh(req: Request, dto: RefreshTokenDto): Promise<{
         accessToken: string;
@@ -47,7 +49,7 @@ export declare class AuthService {
         permissions: string[];
     }>;
     private getTenantFromRequest;
-    private resolveTenantForLogin;
+    private getTenantScopedRolesAndPermissions;
     private hashPassword;
     private issueTokens;
     private parseDurationToSeconds;

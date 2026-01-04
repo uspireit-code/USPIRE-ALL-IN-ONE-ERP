@@ -7,7 +7,18 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly prisma: PrismaService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
-    const tenantId = req.header('x-tenant-id');
+    const rawTenantId = req.header('x-tenant-id');
+    const tenantId = String(rawTenantId ?? '').trim();
+
+    if ((process.env.DEBUG_AUTH ?? '').toString().toLowerCase() === 'true') {
+      // eslint-disable-next-line no-console
+      console.log('[TenantMiddleware]', {
+        method: req.method,
+        path: (req as any).originalUrl ?? req.url,
+        hasHeader: Boolean(rawTenantId),
+        headerTenantId: tenantId || null,
+      });
+    }
 
     if (!tenantId) {
       next();

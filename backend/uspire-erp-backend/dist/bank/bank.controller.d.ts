@@ -16,13 +16,14 @@ export declare class BankController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
             code: string;
+            isActive: boolean;
             type: import("@prisma/client").$Enums.AccountType;
             subCategory: string | null;
             fsMappingLevel1: string | null;
             fsMappingLevel2: string | null;
             isCashEquivalent: boolean;
+            requiresDepartment: boolean;
             requiresProject: boolean;
             requiresFund: boolean;
             isBudgetRelevant: boolean;
@@ -44,9 +45,9 @@ export declare class BankController {
         createdAt: Date;
         isActive: boolean;
         glAccountId: string;
-        currency: string;
         bankName: string;
         accountNumber: string;
+        currency: string;
     }>;
     listBankAccounts(req: Request): Promise<({
         glAccount: {
@@ -55,13 +56,14 @@ export declare class BankController {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
             code: string;
+            isActive: boolean;
             type: import("@prisma/client").$Enums.AccountType;
             subCategory: string | null;
             fsMappingLevel1: string | null;
             fsMappingLevel2: string | null;
             isCashEquivalent: boolean;
+            requiresDepartment: boolean;
             requiresProject: boolean;
             requiresFund: boolean;
             isBudgetRelevant: boolean;
@@ -83,9 +85,9 @@ export declare class BankController {
         createdAt: Date;
         isActive: boolean;
         glAccountId: string;
-        currency: string;
         bankName: string;
         accountNumber: string;
+        currency: string;
     })[]>;
     createStatement(req: Request, dto: CreateBankStatementDto): Promise<any>;
     listStatements(req: Request, dto: ListBankStatementsQueryDto): Promise<any>;

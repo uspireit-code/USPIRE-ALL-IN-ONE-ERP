@@ -204,8 +204,8 @@ export declare class BudgetsController {
                 code: string;
             };
             id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             periodId: string;
             period: {
                 id: string;

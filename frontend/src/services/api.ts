@@ -44,7 +44,7 @@ const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase()
 
 function getStoredAuth() {
   const accessToken = localStorage.getItem('accessToken') ?? '';
-  const tenantId = localStorage.getItem('tenantId') ?? '';
+  const tenantId = (localStorage.getItem('tenantId') ?? '').trim();
   return { accessToken, tenantId };
 }
 
@@ -55,20 +55,24 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const { accessToken, tenantId } = getStoredAuth();
 
+  const isAuthEndpoint = inputPath.startsWith('/auth/login') || inputPath.startsWith('/auth/refresh');
+
   const headers = new Headers(init?.headers ?? {});
   const hasExplicitContentType = headers.has('Content-Type');
   const isFormDataBody = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   if (!hasExplicitContentType && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
   }
-  if (!accessToken && tenantId) headers.set('x-tenant-id', tenantId);
+  if (!accessToken && tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   if (debugApi) {
     // eslint-disable-next-line no-console
     console.debug('[apiFetch]', {
+      baseUrl: config.baseUrl,
       path: inputPath,
       method: init?.method ?? 'GET',
+      isAuthEndpoint,
       hasTenantId: Boolean(tenantId),
       hasAuthorization: Boolean(accessToken),
     });
@@ -97,20 +101,24 @@ export async function apiFetchRaw(
 ): Promise<Response> {
   const { accessToken, tenantId } = getStoredAuth();
 
+  const isAuthEndpoint = inputPath.startsWith('/auth/login') || inputPath.startsWith('/auth/refresh');
+
   const headers = new Headers(init?.headers ?? {});
   const isFormDataBody = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   const hasBody = init?.body !== undefined && init?.body !== null;
   if (hasBody && !headers.has('Content-Type') && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
   }
-  if (!accessToken && tenantId) headers.set('x-tenant-id', tenantId);
+  if (!accessToken && tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   if (debugApi) {
     // eslint-disable-next-line no-console
     console.debug('[apiFetchRaw]', {
+      baseUrl: config.baseUrl,
       path: inputPath,
       method: init?.method ?? 'GET',
+      isAuthEndpoint,
       hasTenantId: Boolean(tenantId),
       hasAuthorization: Boolean(accessToken),
     });

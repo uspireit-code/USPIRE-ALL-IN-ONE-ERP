@@ -10,6 +10,8 @@ declare global {
         tenantId: string;
         name?: string;
         email: string;
+        roles?: string[];
+        permissions?: string[];
       };
     }
   }

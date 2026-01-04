@@ -13,6 +13,8 @@ type JwtAccessPayload = {
   sub: string;
   tenantId: string;
   email: string;
+  roles: string[];
+  permissions: string[];
 };
 
 @Injectable()
@@ -49,6 +51,8 @@ export class JwtAuthGuard implements CanActivate {
       id: payload.sub,
       tenantId: payload.tenantId,
       email: payload.email,
+      roles: payload.roles,
+      permissions: payload.permissions,
     };
 
     if (req.tenant && req.tenant.id !== payload.tenantId) {

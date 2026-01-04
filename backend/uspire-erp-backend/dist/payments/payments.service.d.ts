@@ -12,9 +12,9 @@ export declare class PaymentsService {
             createdAt: Date;
             isActive: boolean;
             glAccountId: string;
-            currency: string;
             bankName: string;
             accountNumber: string;
+            currency: string;
         };
         allocations: {
             id: string;
@@ -28,16 +28,16 @@ export declare class PaymentsService {
         tenantId: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
         createdAt: Date;
+        amount: import("@prisma/client/runtime/library").Decimal;
         type: import("@prisma/client").$Enums.PaymentType;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        amount: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
-        paymentDate: Date;
         bankAccountId: string;
+        paymentDate: Date;
     }>;
     approvePayment(req: Request, id: string): Promise<{
         bankAccount: {
@@ -47,9 +47,9 @@ export declare class PaymentsService {
             createdAt: Date;
             isActive: boolean;
             glAccountId: string;
-            currency: string;
             bankName: string;
             accountNumber: string;
+            currency: string;
         };
         allocations: {
             id: string;
@@ -63,16 +63,16 @@ export declare class PaymentsService {
         tenantId: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
         createdAt: Date;
+        amount: import("@prisma/client/runtime/library").Decimal;
         type: import("@prisma/client").$Enums.PaymentType;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        amount: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
-        paymentDate: Date;
         bankAccountId: string;
+        paymentDate: Date;
     }>;
     postPayment(req: Request, id: string, opts?: {
         apControlAccountCode?: string;
@@ -86,9 +86,9 @@ export declare class PaymentsService {
                 createdAt: Date;
                 isActive: boolean;
                 glAccountId: string;
-                currency: string;
                 bankName: string;
                 accountNumber: string;
+                currency: string;
             };
             allocations: {
                 id: string;
@@ -102,16 +102,16 @@ export declare class PaymentsService {
             tenantId: string;
             status: import("@prisma/client").$Enums.PaymentStatus;
             createdAt: Date;
+            amount: import("@prisma/client/runtime/library").Decimal;
             type: import("@prisma/client").$Enums.PaymentType;
             createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
             postedById: string | null;
-            amount: import("@prisma/client/runtime/library").Decimal;
             reference: string | null;
-            paymentDate: Date;
             bankAccountId: string;
+            paymentDate: Date;
         };
         glJournal: {
             lines: {
@@ -132,12 +132,12 @@ export declare class PaymentsService {
             tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdAt: Date;
+            description: string | null;
             createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
             postedById: string | null;
-            description: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
@@ -176,9 +176,9 @@ export declare class PaymentsService {
             createdAt: Date;
             isActive: boolean;
             glAccountId: string;
-            currency: string;
             bankName: string;
             accountNumber: string;
+            currency: string;
         };
         allocations: {
             id: string;
@@ -192,16 +192,16 @@ export declare class PaymentsService {
         tenantId: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
         createdAt: Date;
+        amount: import("@prisma/client/runtime/library").Decimal;
         type: import("@prisma/client").$Enums.PaymentType;
         createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
         postedById: string | null;
-        amount: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
-        paymentDate: Date;
         bankAccountId: string;
+        paymentDate: Date;
     })[]>;
     private assertAllocations;
 }

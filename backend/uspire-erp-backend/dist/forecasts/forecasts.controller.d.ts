@@ -20,8 +20,8 @@ export declare class ForecastsController {
             id: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
-            createdById: string;
             forecastId: string;
+            createdById: string;
             versionNumber: number;
         };
     }>;
@@ -56,22 +56,22 @@ export declare class ForecastsController {
             id: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
+            forecastId: string;
             createdBy: {
                 id: string;
                 email: string;
             };
-            forecastId: string;
             versionNumber: number;
         }[];
         latestVersion: {
             id: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
+            forecastId: string;
             createdBy: {
                 id: string;
                 email: string;
             };
-            forecastId: string;
             versionNumber: number;
         };
         lines: {
@@ -81,8 +81,8 @@ export declare class ForecastsController {
                 code: string;
             };
             id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             month: number;
         }[];
     }>;

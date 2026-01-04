@@ -1,5 +1,8 @@
 export declare class CreateCustomerInvoiceLineDto {
     accountId: string;
+    departmentId?: string;
+    projectId?: string;
+    fundId?: string;
     description: string;
     quantity?: number;
     unitPrice: number;

@@ -11,11 +11,13 @@ export declare class AuthController {
         user: {
             id: string;
             email: string;
+            roles: string[];
         };
         tenant: {
             id: string;
             name: string;
         };
+        permissions: string[];
     }>;
     refresh(req: Request, dto: RefreshTokenDto): Promise<{
         accessToken: string;

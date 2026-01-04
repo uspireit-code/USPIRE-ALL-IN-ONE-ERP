@@ -94,8 +94,8 @@ export declare class CoaService {
             name: string;
             createdAt: Date;
             updatedAt: Date;
-            isActive: boolean;
             code: string;
+            isActive: boolean;
             type: import("@prisma/client").$Enums.AccountType;
             isBudgetRelevant: boolean;
             budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
@@ -121,8 +121,8 @@ export declare class CoaService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
@@ -149,8 +149,8 @@ export declare class CoaService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
@@ -173,8 +173,8 @@ export declare class CoaService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        isActive: boolean;
         code: string;
+        isActive: boolean;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
         fsMappingLevel1: string | null;
