@@ -429,6 +429,28 @@ model AccountingPeriodChecklistItem {
   @@index([completedById])
 }
 
+model AccountingPeriodChecklist {
+  id            String   @id @default(uuid())
+  tenantId      String
+  periodId      String
+  checklistCode String
+  checklistName String
+  required      Boolean  @default(true)
+  completed     Boolean  @default(false)
+  completedById String?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  period      AccountingPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  completedBy User?            @relation("AccountingPeriodChecklistCompletedBy", fields: [completedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, periodId, checklistCode])
+  @@index([tenantId])
+  @@index([periodId])
+  @@index([completedById])
+}
+
 model AccountingPeriodCloseLog {
   id        String   @id @default(uuid())
   tenantId  String
@@ -805,7 +827,13 @@ enum NormalBalance {
 
 enum AccountingPeriodStatus {
   OPEN
+  SOFT_CLOSED
   CLOSED
+}
+
+enum AccountingPeriodType {
+  OPENING
+  NORMAL
 }
 
 enum PeriodCloseChecklistItemStatus {
@@ -844,8 +872,11 @@ enum AuditEventType {
   RECURRING_TEMPLATE_UPDATE
   RECURRING_JOURNAL_GENERATED
   PERIOD_CHECKLIST_COMPLETE
+  PERIOD_CREATED
+  PERIOD_CLOSED
   PERIOD_CLOSE
   PERIOD_REOPEN
+  PERIOD_REOPENED
   SOD_VIOLATION
   USER_CREATE
   USER_STATUS_CHANGE
@@ -1006,6 +1037,8 @@ model Tenant {
   periodCloseChecklistItems PeriodCloseChecklistItem[]
 
   accountingPeriodChecklistItems AccountingPeriodChecklistItem[]
+
+  accountingPeriodChecklists AccountingPeriodChecklist[]
 
   accountingPeriodCloseLogs AccountingPeriodCloseLog[]
 
@@ -1194,6 +1227,7 @@ model User {
   journalsPosted                   JournalEntry[]              @relation("JournalPostedBy")
   journalsReturnedByPoster         JournalEntry[]              @relation("JournalReturnedByPoster")
   periodsClosed                    AccountingPeriod[]          @relation("PeriodClosedBy")
+  accountingPeriodsCreated         AccountingPeriod[]          @relation("AccountingPeriodCreatedBy")
   supplierInvoicesCreated          SupplierInvoice[]           @relation("SupplierInvoiceCreatedBy")
   supplierInvoicesApproved         SupplierInvoice[]           @relation("SupplierInvoiceApprovedBy")
   supplierInvoicesPosted           SupplierInvoice[]           @relation("SupplierInvoicePostedBy")
@@ -1215,6 +1249,8 @@ model User {
   periodCloseChecklistItemsCompleted PeriodCloseChecklistItem[] @relation("PeriodCloseChecklistItemCompletedBy")
 
   accountingPeriodChecklistItemsCompleted AccountingPeriodChecklistItem[] @relation("AccountingPeriodChecklistItemCompletedBy")
+
+  accountingPeriodChecklistsCompleted AccountingPeriodChecklist[] @relation("AccountingPeriodChecklistCompletedBy")
 
   accountingPeriodCloseLogs AccountingPeriodCloseLog[]
 
@@ -1540,21 +1576,28 @@ model RecurringJournalGeneration {
 model AccountingPeriod {
   id         String                 @id @default(uuid())
   tenantId   String
+  code       String?
   name       String
   startDate  DateTime
   endDate    DateTime
+  type       AccountingPeriodType   @default(NORMAL)
   status     AccountingPeriodStatus @default(OPEN)
+  createdById String?
   closedById String?
   closedAt   DateTime?
   createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @default(now()) @updatedAt
 
   tenant                     Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy                  User?                       @relation("AccountingPeriodCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   closedBy                   User?                       @relation("PeriodClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
   fixedAssetDepreciationRuns FixedAssetDepreciationRun[]
 
   periodCloseChecklist PeriodCloseChecklist?
 
   checklistItems AccountingPeriodChecklistItem[]
+
+  checklists AccountingPeriodChecklist[]
 
   closeLogs AccountingPeriodCloseLog[]
 
@@ -1566,10 +1609,12 @@ model AccountingPeriod {
 
   journals JournalEntry[]
 
-  @@unique([tenantId, name])
+  @@unique([tenantId, code])
   @@index([tenantId])
+  @@index([tenantId, type])
   @@index([tenantId, status])
   @@index([tenantId, startDate, endDate])
+  @@index([createdById])
 }
 
 model DisclosureNote {

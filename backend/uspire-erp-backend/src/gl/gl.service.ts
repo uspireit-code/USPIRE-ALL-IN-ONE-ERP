@@ -3104,6 +3104,60 @@ export class GlService {
     { code: 'TRIAL_BALANCE_REVIEWED', name: 'Trial balance reviewed' },
   ] as const;
 
+  private async ensureAccountingPeriodChecklistSeeded(params: {
+    tenantId: string;
+    periodId: string;
+  }) {
+    const existingCount = await (this.prisma.accountingPeriodChecklist as any).count({
+      where: {
+        tenantId: params.tenantId,
+        periodId: params.periodId,
+      },
+    });
+
+    if (existingCount > 0) return;
+
+    await (this.prisma.accountingPeriodChecklist as any).createMany({
+      data: this.DEFAULT_ACCOUNTING_PERIOD_CHECKLIST_ITEMS.map((i) => ({
+        tenantId: params.tenantId,
+        periodId: params.periodId,
+        checklistCode: i.checklistCode,
+        checklistName: i.checklistName,
+        required: i.required,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  private readonly DEFAULT_ACCOUNTING_PERIOD_CHECKLIST_ITEMS = [
+    {
+      checklistCode: 'BANK_RECONCILIATION',
+      checklistName: 'Bank reconciliations completed and reviewed',
+      required: true,
+    },
+    {
+      checklistCode: 'AP_RECONCILIATION',
+      checklistName: 'AP subledger reconciled to GL',
+      required: true,
+    },
+    {
+      checklistCode: 'AR_RECONCILIATION',
+      checklistName: 'AR subledger reconciled to GL',
+      required: true,
+    },
+    {
+      checklistCode: 'GL_REVIEW',
+      checklistName:
+        'General ledger review completed (journals, accruals, reclasses)',
+      required: true,
+    },
+    {
+      checklistCode: 'REPORTING_PACKAGE',
+      checklistName: 'Financial statements generated and reviewed',
+      required: true,
+    },
+  ] as const;
+
   private readonly JOURNAL_NUMBER_SEQUENCE_NAME = 'JOURNAL_ENTRY';
 
   private async ensureMinimalBalanceSheetCoaForTenant(tenantId: string) {
@@ -3221,8 +3275,23 @@ export class GlService {
 
   async createAccountingPeriod(req: Request, dto: CreateAccountingPeriodDto) {
     const tenant = req.tenant;
+    const user = req.user;
     if (!tenant) {
       throw new BadRequestException('Missing tenant context');
+    }
+
+    if (!user) {
+      throw new BadRequestException('Missing user context');
+    }
+
+    const code = String(dto.code ?? '').trim();
+    if (!code) {
+      throw new BadRequestException('Please enter a period code (e.g. JAN-2026).');
+    }
+
+    const type = dto.type;
+    if (type !== 'OPENING' && type !== 'NORMAL') {
+      throw new BadRequestException('Please select a valid period type.');
     }
 
     const startDate = new Date(dto.startDate);
@@ -3230,7 +3299,65 @@ export class GlService {
 
     if (startDate > endDate) {
       throw new BadRequestException(
-        'startDate must be less than or equal to endDate',
+        'Start date cannot be after the end date. Please correct the period dates.',
+      );
+    }
+
+    const existingCode = await (this.prisma.accountingPeriod as any).findFirst({
+      where: { tenantId: tenant.id, code },
+      select: { id: true },
+    });
+
+    if (existingCode) {
+      throw new BadRequestException(
+        'An accounting period with this code already exists. Please use a different code.',
+      );
+    }
+
+    // Opening period rules
+    if (type === 'OPENING') {
+      const isSingleDay =
+        startDate.toISOString().slice(0, 10) === endDate.toISOString().slice(0, 10);
+      if (!isSingleDay) {
+        throw new BadRequestException('Opening Balance period must be a single day.');
+      }
+
+      const existingOpening = await (this.prisma.accountingPeriod as any).findFirst({
+        where: { tenantId: tenant.id, type: 'OPENING' },
+        select: { id: true, code: true },
+      });
+      if (existingOpening) {
+        throw new BadRequestException(
+          'Only one Opening Balance period is allowed per organisation.',
+        );
+      }
+
+      const earliestExisting = await (this.prisma.accountingPeriod as any).findFirst({
+        where: { tenantId: tenant.id },
+        orderBy: [{ startDate: 'asc' }],
+        select: { id: true, startDate: true, endDate: true, code: true },
+      });
+      if (earliestExisting && earliestExisting.startDate < startDate) {
+        throw new BadRequestException(
+          'Opening Balance period must be the first accounting period.',
+        );
+      }
+    }
+
+    // If an OPENING period exists, it must be the first chronologically.
+    // Therefore, NORMAL periods cannot be earlier than the OPENING period date.
+    const opening = await (this.prisma.accountingPeriod as any).findFirst({
+      where: { tenantId: tenant.id, type: 'OPENING' },
+      select: { id: true, startDate: true, endDate: true, code: true },
+    });
+    if (type === 'NORMAL' && !opening) {
+      throw new BadRequestException(
+        'You must create an Opening Balance period before creating normal accounting periods.',
+      );
+    }
+    if (opening && startDate < opening.startDate) {
+      throw new BadRequestException(
+        'You must create an Opening Balance period before creating normal accounting periods.',
       );
     }
 
@@ -3244,24 +3371,21 @@ export class GlService {
     });
 
     if (overlap) {
-      throw new BadRequestException({
-        error: 'Accounting periods cannot overlap',
-        overlappingPeriod: {
-          id: overlap.id,
-          name: overlap.name,
-          startDate: overlap.startDate,
-          endDate: overlap.endDate,
-        },
-      });
+      throw new BadRequestException(
+        'This period overlaps with an existing accounting period. Adjust the dates to avoid overlap.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const period = await tx.accountingPeriod.create({
+      const period = await (tx.accountingPeriod as any).create({
         data: {
           tenantId: tenant.id,
-          name: dto.name,
+          code,
+          type,
+          name: String(dto.name ?? '').trim() || code,
           startDate,
           endDate,
+          createdById: user.id,
         },
       });
 
@@ -3283,40 +3407,14 @@ export class GlService {
         skipDuplicates: true,
       });
 
-      await tx.accountingPeriodChecklistItem.createMany({
-        data: [
-          {
-            tenantId: tenant.id,
-            periodId: period.id,
-            code: 'BANK_RECONCILIATION',
-            label: 'Bank reconciliations completed and reviewed',
-          },
-          {
-            tenantId: tenant.id,
-            periodId: period.id,
-            code: 'AP_RECONCILIATION',
-            label: 'AP subledger reconciled to GL',
-          },
-          {
-            tenantId: tenant.id,
-            periodId: period.id,
-            code: 'AR_RECONCILIATION',
-            label: 'AR subledger reconciled to GL',
-          },
-          {
-            tenantId: tenant.id,
-            periodId: period.id,
-            code: 'GL_REVIEW',
-            label:
-              'General ledger review completed (journals, accruals, reclasses)',
-          },
-          {
-            tenantId: tenant.id,
-            periodId: period.id,
-            code: 'REPORTING_PACKAGE',
-            label: 'Financial statements generated and reviewed',
-          },
-        ],
+      await (tx.accountingPeriodChecklist as any).createMany({
+        data: this.DEFAULT_ACCOUNTING_PERIOD_CHECKLIST_ITEMS.map((i) => ({
+          tenantId: tenant.id,
+          periodId: period.id,
+          checklistCode: i.checklistCode,
+          checklistName: i.checklistName,
+          required: i.required,
+        })),
         skipDuplicates: true,
       });
 
@@ -3343,13 +3441,19 @@ export class GlService {
 
     if (!period) throw new NotFoundException('Accounting period not found');
 
-    const items = await this.prisma.accountingPeriodChecklistItem.findMany({
+    await this.ensureAccountingPeriodChecklistSeeded({
+      tenantId: tenant.id,
+      periodId: period.id,
+    });
+
+    const items = await (this.prisma.accountingPeriodChecklist as any).findMany({
       where: { tenantId: tenant.id, periodId: period.id },
-      orderBy: [{ completed: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ required: 'desc' }, { completed: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
-        code: true,
-        label: true,
+        checklistCode: true,
+        checklistName: true,
+        required: true,
         completed: true,
         completedAt: true,
         completedBy: { select: { id: true, email: true } },
@@ -3357,7 +3461,30 @@ export class GlService {
       },
     });
 
-    return { period, items };
+    const requiredItems = items.filter((i: any) => Boolean(i.required));
+    const incompleteRequired = requiredItems.filter((i: any) => !i.completed);
+    const readyToClose =
+      requiredItems.length > 0 && incompleteRequired.length === 0;
+
+    return {
+      period,
+      items: items.map((i: any) => ({
+        id: i.id,
+        code: i.checklistCode,
+        label: i.checklistName,
+        required: Boolean(i.required),
+        completed: Boolean(i.completed),
+        completedAt: i.completedAt,
+        completedBy: i.completedBy,
+        createdAt: i.createdAt,
+      })),
+      summary: {
+        requiredTotal: requiredItems.length,
+        requiredCompleted: requiredItems.length - incompleteRequired.length,
+        requiredOutstanding: incompleteRequired.length,
+        readyToClose,
+      },
+    };
   }
 
   async completeAccountingPeriodChecklistItem(
@@ -3412,7 +3539,7 @@ export class GlService {
       });
     }
 
-    const item = await this.prisma.accountingPeriodChecklistItem.findFirst({
+    const item = await (this.prisma.accountingPeriodChecklist as any).findFirst({
       where: {
         id: params.itemId,
         tenantId: tenant.id,
@@ -3484,7 +3611,7 @@ export class GlService {
       throw new BadRequestException('Checklist item is already completed');
     }
 
-    const updated = await this.prisma.accountingPeriodChecklistItem.update({
+    const updated = await (this.prisma.accountingPeriodChecklist as any).update({
       where: { id: item.id },
       data: {
         completed: true,
@@ -3493,8 +3620,9 @@ export class GlService {
       },
       select: {
         id: true,
-        code: true,
-        label: true,
+        checklistCode: true,
+        checklistName: true,
+        required: true,
         completed: true,
         completedAt: true,
         completedBy: { select: { id: true, email: true } },
@@ -3528,7 +3656,16 @@ export class GlService {
       })
       .catch(() => undefined);
 
-    return updated;
+    return {
+      id: updated.id,
+      code: updated.checklistCode,
+      label: updated.checklistName,
+      required: Boolean(updated.required),
+      completed: Boolean(updated.completed),
+      completedAt: updated.completedAt,
+      completedBy: updated.completedBy,
+      createdAt: updated.createdAt,
+    };
   }
 
   async listAccountingPeriods(req: Request) {
@@ -3635,6 +3772,21 @@ export class GlService {
       throw new BadRequestException('Accounting period is already closed');
     }
 
+    const laterOpen = await (this.prisma.accountingPeriod as any).findFirst({
+      where: {
+        tenantId: tenant.id,
+        startDate: { gt: (await this.prisma.accountingPeriod.findUnique({ where: { id }, select: { startDate: true } }))?.startDate ?? undefined },
+        status: 'OPEN',
+      },
+      select: { id: true },
+    });
+
+    if (laterOpen) {
+      throw new BadRequestException(
+        'You must close later accounting periods before closing this one.',
+      );
+    }
+
     const journalCounts = await this.prisma.journalEntry.groupBy({
       by: ['status'],
       where: { tenantId: tenant.id, periodId: period.id },
@@ -3685,13 +3837,20 @@ export class GlService {
       });
     }
 
-    const items = await this.prisma.accountingPeriodChecklistItem.findMany({
-      where: { tenantId: tenant.id, periodId: period.id },
-      select: { id: true, completed: true, completedById: true },
+    await this.ensureAccountingPeriodChecklistSeeded({
+      tenantId: tenant.id,
+      periodId: period.id,
     });
 
-    const incomplete = items.filter((i) => !i.completed);
-    if (incomplete.length > 0) {
+    const items = await (this.prisma.accountingPeriodChecklist as any).findMany({
+      where: { tenantId: tenant.id, periodId: period.id },
+      select: { id: true, required: true, completed: true, completedById: true },
+    });
+
+    const requiredItems = items.filter((i: any) => Boolean(i.required));
+    if (requiredItems.length === 0) {
+      const reason = 'Period checklist has not been configured.';
+
       await this.prisma.accountingPeriodCloseLog.create({
         data: {
           tenantId: tenant.id,
@@ -3699,7 +3858,7 @@ export class GlService {
           userId: user.id,
           action: 'PERIOD_CLOSE',
           outcome: 'DENIED',
-          message: `Checklist incomplete: ${incomplete.length} item(s) not completed`,
+          message: reason,
         },
       });
 
@@ -3710,21 +3869,49 @@ export class GlService {
             eventType: 'PERIOD_CLOSE',
             entityType: 'ACCOUNTING_PERIOD',
             entityId: period.id,
-            action: 'FINANCE_PERIOD_CLOSE_APPROVE',
+            action: 'FINANCE_PERIOD_CLOSE',
             outcome: 'BLOCKED',
-            reason: `Checklist incomplete: ${incomplete.length} item(s) not completed`,
+            reason,
             userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CLOSE_APPROVE',
+            permissionUsed: 'FINANCE_PERIOD_CLOSE',
           },
         })
         .catch(() => undefined);
 
-      throw new ForbiddenException({
-        error: 'Period close blocked by checklist control',
-        reason:
-          'All checklist items must be completed before closing an accounting period',
-        incompleteCount: incomplete.length,
+      throw new ForbiddenException(reason);
+    }
+
+    const incompleteRequired = requiredItems.filter((i: any) => !i.completed);
+    if (incompleteRequired.length > 0) {
+      const reason = `Checklist incomplete (${requiredItems.length - incompleteRequired.length}/${requiredItems.length} completed).`;
+      await this.prisma.accountingPeriodCloseLog.create({
+        data: {
+          tenantId: tenant.id,
+          periodId: period.id,
+          userId: user.id,
+          action: 'PERIOD_CLOSE',
+          outcome: 'DENIED',
+          message: reason,
+        },
       });
+
+      await this.prisma.auditEvent
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventType: 'PERIOD_CLOSE',
+            entityType: 'ACCOUNTING_PERIOD',
+            entityId: period.id,
+            action: 'FINANCE_PERIOD_CLOSE',
+            outcome: 'BLOCKED',
+            reason,
+            userId: user.id,
+            permissionUsed: 'FINANCE_PERIOD_CLOSE',
+          },
+        })
+        .catch(() => undefined);
+
+      throw new ForbiddenException(reason);
     }
 
     const completedByThisUser = items.some((i) => i.completedById === user.id);
@@ -3893,14 +4080,17 @@ export class GlService {
       throw new BadRequestException('Accounting period is not closed');
     }
 
-    const latestClosed = await this.prisma.accountingPeriod.findFirst({
-      where: { tenantId: tenant.id, status: 'CLOSED' },
-      orderBy: [{ endDate: 'desc' }, { closedAt: 'desc' }],
+    const laterClosed = await (this.prisma.accountingPeriod as any).findFirst({
+      where: {
+        tenantId: tenant.id,
+        startDate: { gt: (await this.prisma.accountingPeriod.findUnique({ where: { id: period.id }, select: { startDate: true } }))?.startDate ?? undefined },
+        status: 'CLOSED',
+      },
       select: { id: true },
     });
 
-    if (!latestClosed || latestClosed.id !== period.id) {
-      const reason = 'Only the latest closed accounting period can be reopened';
+    if (laterClosed) {
+      const reason = 'Cannot reopen a period while a later period is CLOSED';
 
       await this.prisma.accountingPeriodCloseLog.create({
         data: {
@@ -4793,37 +4983,45 @@ export class GlService {
         );
       }
 
-      const period = await this.prisma.accountingPeriod.findFirst({
+      const period = await (this.prisma.accountingPeriod as any).findFirst({
         where: {
           tenantId: authz.tenantId,
           startDate: { lte: proposedDate },
           endDate: { gte: proposedDate },
         },
-        select: { id: true, status: true, name: true },
+        select: { id: true, status: true, name: true, type: true },
       });
-      if (!period || period.status !== 'OPEN') {
+      if (!period) {
         throw new BadRequestException(
-          'Journal date is not in an OPEN accounting period.',
+          'Journal date is not within an open accounting period. Please choose a date in an open period.',
+        );
+      }
+      const periodStatus = (period as any).status as string;
+      if (periodStatus === 'CLOSED') {
+        throw new BadRequestException(
+          'This accounting period is closed. Posting is not allowed.',
+        );
+      }
+      if (periodStatus === 'SOFT_CLOSED') {
+        throw new BadRequestException(
+          'This accounting period is soft-closed. Reopen the period to allow posting.',
+        );
+      }
+      if (periodStatus !== 'OPEN') {
+        throw new BadRequestException(
+          'Journal date is not within an open accounting period. Please choose a date in an open period.',
         );
       }
 
-      // Opening Balances control: reversal journals inherit opening/non-opening classification from the original journal.
-      if (period.name === this.OPENING_PERIOD_NAME) {
-        const original = await this.prisma.journalEntry.findFirst({
-          where: { id: (entry as any).reversalOfId, tenantId: authz.tenantId },
-          select: { reference: true, description: true },
+      if (period.type === 'OPENING') {
+        await this.assertOpeningBalanceAccountsAllowed({
+          tenantId: authz.tenantId,
+          lines: entry.lines.map((l) => ({
+            accountId: l.accountId,
+            debit: Number(l.debit),
+            credit: Number(l.credit),
+          })),
         });
-        const isOpening = original
-          ? this.isOpeningBalanceJournal(
-              original.reference,
-              original.description,
-            )
-          : false;
-        if (!isOpening) {
-          throw new BadRequestException(
-            'Only opening balance journals can be posted into the Opening Balances period',
-          );
-        }
       }
 
       // Reversal drafts are system-generated: allow header description + journal date only.
@@ -5045,9 +5243,25 @@ export class GlService {
       },
       select: { id: true, status: true, name: true },
     });
-    if (!period || period.status !== 'OPEN') {
+    if (!period) {
       throw new BadRequestException(
-        'Journal date is not in an OPEN accounting period.',
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
+      );
+    }
+    const periodStatus = (period as any).status as string;
+    if (periodStatus === 'CLOSED') {
+      throw new BadRequestException(
+        'This accounting period is closed. Posting is not allowed.',
+      );
+    }
+    if (periodStatus === 'SOFT_CLOSED') {
+      throw new BadRequestException(
+        'This accounting period is soft-closed. Reopen the period to allow posting.',
+      );
+    }
+    if (periodStatus !== 'OPEN') {
+      throw new BadRequestException(
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
       );
     }
 
@@ -5605,9 +5819,25 @@ export class GlService {
       },
       select: { id: true, status: true },
     });
-    if (!period || period.status !== 'OPEN') {
+    if (!period) {
       throw new BadRequestException(
-        'Journal date is not in an OPEN accounting period.',
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
+      );
+    }
+    const periodStatus = (period as any).status as string;
+    if (periodStatus === 'CLOSED') {
+      throw new BadRequestException(
+        'This accounting period is closed. Posting is not allowed.',
+      );
+    }
+    if (periodStatus === 'SOFT_CLOSED') {
+      throw new BadRequestException(
+        'This accounting period is soft-closed. Reopen the period to allow posting.',
+      );
+    }
+    if (periodStatus !== 'OPEN') {
+      throw new BadRequestException(
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
       );
     }
 
@@ -5972,30 +6202,39 @@ export class GlService {
       reversalDate = nextOpen.startDate;
     }
 
-    const effectivePeriod = await this.prisma.accountingPeriod.findFirst({
+    const effectivePeriod = await (this.prisma.accountingPeriod as any).findFirst({
       where: {
         tenantId: authz.tenantId,
         startDate: { lte: reversalDate },
         endDate: { gte: reversalDate },
       },
-      select: { id: true, status: true, name: true },
+      select: { id: true, status: true, name: true, type: true },
     });
     if (!effectivePeriod || effectivePeriod.status !== 'OPEN') {
-      throw new ForbiddenException({
-        error: 'Reversal blocked by accounting period control',
-        reason: 'Reversal journal date is not in an OPEN accounting period',
-      });
+      const effectiveStatus = (effectivePeriod as any)?.status as string | undefined;
+      if (effectiveStatus === 'CLOSED') {
+        throw new BadRequestException(
+          'This accounting period is closed. Posting is not allowed.',
+        );
+      }
+      if (effectiveStatus === 'SOFT_CLOSED') {
+        throw new BadRequestException(
+          'This accounting period is soft-closed. Reopen the period to allow posting.',
+        );
+      }
+      throw new BadRequestException(
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
+      );
     }
 
-    const isOpening = this.isOpeningBalanceJournal(
-      original.reference,
-      original.description,
-    );
-    if (effectivePeriod.name === this.OPENING_PERIOD_NAME && !isOpening) {
-      throw new ForbiddenException({
-        error: 'Reversal blocked by opening balances control period',
-        reason:
-          'Only opening balance journals can be posted into the Opening Balances period',
+    if (effectivePeriod.type === 'OPENING') {
+      await this.assertOpeningBalanceAccountsAllowed({
+        tenantId: authz.tenantId,
+        lines: original.lines.map((l) => ({
+          accountId: l.accountId,
+          debit: Number(l.debit),
+          credit: Number(l.credit),
+        })),
       });
     }
 
@@ -6259,13 +6498,13 @@ export class GlService {
       })),
     );
 
-    const period = await this.prisma.accountingPeriod.findFirst({
+    const period = await (this.prisma.accountingPeriod as any).findFirst({
       where: {
         tenantId: authz.tenantId,
         startDate: { lte: entry.journalDate },
         endDate: { gte: entry.journalDate },
       },
-      select: { id: true, status: true, name: true, endDate: true },
+      select: { id: true, status: true, name: true, endDate: true, type: true },
     });
 
     if (!period || period.status !== 'OPEN') {
@@ -6295,6 +6534,17 @@ export class GlService {
       });
     }
 
+    if (period.type === 'OPENING') {
+      await this.assertOpeningBalanceAccountsAllowed({
+        tenantId: authz.tenantId,
+        lines: entry.lines.map((l) => ({
+          accountId: l.accountId,
+          debit: Number(l.debit),
+          credit: Number(l.credit),
+        })),
+      });
+    }
+
     const cutover = await this.getCutoverDateIfLocked({
       tenantId: authz.tenantId,
     });
@@ -6321,15 +6571,14 @@ export class GlService {
       });
     }
 
-    const isOpening = this.isOpeningBalanceJournal(
-      entry.reference,
-      entry.description,
-    );
-    if (period.name === this.OPENING_PERIOD_NAME && !isOpening) {
-      throw new ForbiddenException({
-        error: 'Posting blocked by opening balances control period',
-        reason:
-          'Only opening balance journals can be posted into the Opening Balances period',
+    if (period.type === 'OPENING') {
+      await this.assertOpeningBalanceAccountsAllowed({
+        tenantId: authz.tenantId,
+        lines: entry.lines.map((l) => ({
+          accountId: l.accountId,
+          debit: Number(l.debit),
+          credit: Number(l.credit),
+        })),
       });
     }
 
@@ -6601,7 +6850,7 @@ export class GlService {
 
     const cutoverDate = this.parseCutoverDate(dto.cutoverDate);
 
-    const existingPeriod = await this.prisma.accountingPeriod.findFirst({
+    const existingPeriod = await (this.prisma.accountingPeriod as any).findFirst({
       where: {
         tenantId: tenant.id,
         name: this.OPENING_PERIOD_NAME,
@@ -6612,28 +6861,27 @@ export class GlService {
     });
 
     if (existingPeriod?.status === 'CLOSED') {
-      throw new ForbiddenException(
-        'Opening balances period is CLOSED; opening balances are locked',
+      throw new BadRequestException(
+        'This accounting period is closed. Posting is not allowed.',
       );
     }
 
     let period = existingPeriod;
     if (!period) {
       try {
-        period = await this.prisma.accountingPeriod.create({
+        period = await (this.prisma.accountingPeriod as any).create({
           data: {
             tenantId: tenant.id,
+            code: `OB-${dto.cutoverDate.slice(0, 4)}`,
             name: this.OPENING_PERIOD_NAME,
             startDate: cutoverDate,
             endDate: cutoverDate,
+            type: 'OPENING',
+            createdById: user.id,
           },
-          select: { id: true, status: true },
         });
-      } catch (e) {
-        if (
-          e instanceof Prisma.PrismaClientKnownRequestError &&
-          e.code === 'P2002'
-        ) {
+      } catch (e: any) {
+        if (e?.code === 'P2002') {
           throw new BadRequestException({
             error: 'Opening Balances period already exists for this tenant',
             reason:
@@ -6747,8 +6995,19 @@ export class GlService {
     }
 
     if (period.status !== 'OPEN') {
-      throw new ForbiddenException(
-        'Opening Balances accounting period is not OPEN',
+      const periodStatus = (period as any).status as string;
+      if (periodStatus === 'CLOSED') {
+        throw new BadRequestException(
+          'This accounting period is closed. Posting is not allowed.',
+        );
+      }
+      if (periodStatus === 'SOFT_CLOSED') {
+        throw new BadRequestException(
+          'This accounting period is soft-closed. Reopen the period to allow posting.',
+        );
+      }
+      throw new BadRequestException(
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
       );
     }
 
@@ -7217,10 +7476,10 @@ export class GlService {
   private async getCutoverDateIfLocked(params: {
     tenantId: string;
   }): Promise<Date | null> {
-    const closed = await this.prisma.accountingPeriod.findFirst({
+    const closed = await (this.prisma.accountingPeriod as any).findFirst({
       where: {
         tenantId: params.tenantId,
-        name: this.OPENING_PERIOD_NAME,
+        type: 'OPENING',
         status: 'CLOSED',
       },
       orderBy: { startDate: 'desc' },
@@ -7267,14 +7526,9 @@ export class GlService {
       const isBalanceSheet =
         a.type === 'ASSET' || a.type === 'LIABILITY' || a.type === 'EQUITY';
       if (!isBalanceSheet && !isRetainedEarnings) {
-        throw new BadRequestException({
-          error: 'Opening balance journal contains invalid account type',
-          accountId: a.id,
-          accountType: a.type,
-          accountCode: a.code,
-          reason:
-            'Only balance sheet accounts and retained earnings are allowed',
-        });
+        throw new BadRequestException(
+          'Opening Balance period only allows Balance Sheet accounts. Income and expenses must be posted in normal periods.',
+        );
       }
     }
   }

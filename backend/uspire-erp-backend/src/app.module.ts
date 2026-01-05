@@ -28,6 +28,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SettingsModule } from './settings/settings.module';
 import { TaxModule } from './tax/tax.module';
 import { ArReceiptsModule } from './ar-receipts/ar-receipts.module';
+import { PeriodsModule } from './periods/periods.module';
 import { CorrelationIdMiddleware } from './internal/correlation-id.middleware';
 import { RequestLoggerMiddleware } from './internal/request-logger.middleware';
 import { TenantMiddleware } from './tenant/tenant.middleware';
@@ -58,6 +59,7 @@ import { TenantMiddleware } from './tenant/tenant.middleware';
     BudgetsModule,
     ForecastsModule,
     SettingsModule,
+    PeriodsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

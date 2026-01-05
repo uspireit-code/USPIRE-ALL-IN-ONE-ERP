@@ -144,6 +144,7 @@ async function main() {
     { code: 'FINANCE_PERIOD_CREATE', description: 'Create accounting periods' },
     { code: 'FINANCE_PERIOD_VIEW', description: 'View accounting periods' },
     { code: 'FINANCE_PERIOD_REVIEW', description: 'Review month-end close checklist for accounting periods' },
+    { code: 'FINANCE_PERIOD_CHECKLIST_VIEW', description: 'View month-end close checklist for accounting periods' },
     { code: 'FINANCE_PERIOD_CHECKLIST_COMPLETE', description: 'Complete month-end close checklist items for accounting periods' },
     { code: 'FINANCE_PERIOD_CLOSE', description: 'Close accounting periods' },
     { code: 'FINANCE_PERIOD_CLOSE_APPROVE', description: 'Approve and execute accounting period close' },
@@ -350,6 +351,18 @@ async function main() {
   const glApprovePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_APPROVE' }, select: { id: true } });
   const glRecurringManagePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_RECURRING_MANAGE' }, select: { id: true } });
   const periodViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_VIEW' }, select: { id: true } });
+  const periodChecklistViewPerm = await prisma.permission.findUnique({
+    where: { code: 'FINANCE_PERIOD_CHECKLIST_VIEW' },
+    select: { id: true },
+  });
+  const periodChecklistCompletePerm = await prisma.permission.findUnique({
+    where: { code: 'FINANCE_PERIOD_CHECKLIST_COMPLETE' },
+    select: { id: true },
+  });
+  const periodClosePerm = await prisma.permission.findUnique({
+    where: { code: 'FINANCE_PERIOD_CLOSE' },
+    select: { id: true },
+  });
   const periodCloseApprovePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_CLOSE_APPROVE' }, select: { id: true } });
   const periodReopenPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_REOPEN' }, select: { id: true } });
   const disclosureGeneratePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_DISCLOSURE_GENERATE' }, select: { id: true } });
@@ -567,7 +580,14 @@ async function main() {
 
   if (financeOfficerRole?.id) {
     await prisma.rolePermission.createMany({
-      data: [glViewPerm?.id, glCreatePerm?.id, glRecurringGeneratePerm?.id, periodViewPerm?.id]
+      data: [
+        glViewPerm?.id,
+        glCreatePerm?.id,
+        glRecurringGeneratePerm?.id,
+        periodViewPerm?.id,
+        periodChecklistViewPerm?.id,
+        periodChecklistCompletePerm?.id,
+      ]
         .filter(Boolean)
         .map((permissionId) => ({
           roleId: financeOfficerRole.id,
@@ -585,6 +605,8 @@ async function main() {
         glRecurringManagePerm?.id,
         glRecurringGeneratePerm?.id,
         periodViewPerm?.id,
+        periodChecklistViewPerm?.id,
+        periodChecklistCompletePerm?.id,
         periodCloseApprovePerm?.id,
         periodReopenPerm?.id,
         financeBudgetViewPerm?.id,
@@ -598,9 +620,35 @@ async function main() {
     });
   }
 
+  // Backfill: ensure ADMIN can close periods (still checklist-gated by backend).
+  // Additive-only and safe to re-run.
+  if (periodClosePerm?.id) {
+    const adminRoles = await prisma.role.findMany({
+      where: { name: 'ADMIN' },
+      select: { id: true },
+    });
+
+    if (adminRoles.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: adminRoles.map((r) => ({
+          roleId: r.id,
+          permissionId: periodClosePerm.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
   if (financeControllerRole?.id) {
     await prisma.rolePermission.createMany({
-      data: [glViewPerm?.id, glFinalPostPerm?.id, periodViewPerm?.id]
+      data: [
+        glViewPerm?.id,
+        glFinalPostPerm?.id,
+        periodViewPerm?.id,
+        periodChecklistViewPerm?.id,
+        periodChecklistCompletePerm?.id,
+        periodClosePerm?.id,
+      ]
         .filter(Boolean)
         .map((permissionId) => ({
           roleId: financeControllerRole.id,

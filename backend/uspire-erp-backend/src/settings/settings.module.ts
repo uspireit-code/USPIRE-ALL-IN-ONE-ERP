@@ -12,5 +12,6 @@ import { SystemSettingsReadGuard } from './system-settings-read.guard';
   imports: [ConfigModule, JwtModule.register({}), PrismaModule, StorageModule],
   controllers: [SettingsController],
   providers: [SettingsService, AdminRoleGuard, SystemSettingsReadGuard],
+  exports: [AdminRoleGuard, SystemSettingsReadGuard],
 })
 export class SettingsModule {}
