@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
 import type {
   CreateCustomerInvoiceDto,
   BulkPostInvoicesDto,
@@ -224,23 +225,16 @@ export class FinanceArInvoicesService {
   private async assertOpenPeriodForInvoiceDate(params: {
     tenantId: string;
     invoiceDate: Date;
+    action: 'create' | 'post';
   }) {
-    const period = await this.prisma.accountingPeriod.findFirst({
-      where: {
-        tenantId: params.tenantId,
-        startDate: { lte: params.invoiceDate },
-        endDate: { gte: params.invoiceDate },
-      },
-      select: { id: true, status: true, name: true, startDate: true },
+    const period = await assertPeriodIsOpen({
+      prisma: this.prisma,
+      tenantId: params.tenantId,
+      date: params.invoiceDate,
+      action: params.action,
+      documentLabel: 'invoice',
+      dateLabel: 'invoice date',
     });
-
-    if (!period || period.status !== 'OPEN') {
-      throw new ForbiddenException(
-        !period
-          ? 'Invoice date must fall within an OPEN accounting period'
-          : `Invoice date period is not OPEN: ${period.name}`,
-      );
-    }
 
     if (period.name === this.OPENING_PERIOD_NAME) {
       throw new ForbiddenException(
@@ -423,6 +417,7 @@ export class FinanceArInvoicesService {
     await this.assertOpenPeriodForInvoiceDate({
       tenantId: tenant.id,
       invoiceDate,
+      action: 'create',
     });
 
     const currency = String(dto.currency ?? '').trim();
@@ -615,6 +610,7 @@ export class FinanceArInvoicesService {
     await this.assertOpenPeriodForInvoiceDate({
       tenantId: tenant.id,
       invoiceDate: (inv as any).invoiceDate,
+      action: 'post',
     });
 
     const arCode = String(opts?.arControlAccountCode ?? '1100');

@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type { CustomerInvoice } from '../../services/ar';
 import { downloadInvoiceExport, getInvoiceById, postInvoice } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
+import { listPeriods, type AccountingPeriod } from '../../services/periods';
 import { formatMoney } from '../../money';
 
 export function InvoiceDetailsPage() {
@@ -18,6 +19,8 @@ export function InvoiceDetailsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
+  const [periods, setPeriods] = useState<AccountingPeriod[] | null>(null);
+  const [periodsError, setPeriodsError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -50,6 +53,24 @@ export function InvoiceDetailsPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let mounted = true;
+    setPeriodsError(null);
+    listPeriods()
+      .then((p) => {
+        if (!mounted) return;
+        setPeriods(p ?? []);
+      })
+      .catch((err: any) => {
+        if (!mounted) return;
+        setPeriodsError(getApiErrorMessage(err, 'Failed to load accounting periods'));
+        setPeriods([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const allowed = useMemo(() => {
     const status = invoice?.status;
     return {
@@ -57,6 +78,34 @@ export function InvoiceDetailsPage() {
       export: Boolean(invoice) && status === 'POSTED',
     };
   }, [canPost, invoice]);
+
+  const periodForInvoiceDate = useMemo(() => {
+    const invDate = invoice?.invoiceDate ? new Date(invoice.invoiceDate) : null;
+    if (!invDate || Number.isNaN(invDate.getTime())) return null;
+    if (!periods) return null;
+
+    const hit = (periods ?? []).find((p) => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+      return start <= invDate && invDate <= end;
+    });
+    return hit ?? null;
+  }, [invoice?.invoiceDate, periods]);
+
+  const postBlockedReason = useMemo(() => {
+    if (!allowed.post) return null;
+    if (!periods) return 'Checking accounting period…';
+    if (!periodForInvoiceDate) {
+      const ymd = invoice?.invoiceDate?.slice(0, 10) ?? '';
+      return ymd ? `No accounting period exists for invoice date ${ymd}.` : 'No accounting period exists for invoice date.';
+    }
+    if (periodForInvoiceDate.status !== 'OPEN') {
+      const code = String(periodForInvoiceDate.code ?? periodForInvoiceDate.name ?? '').trim() || 'UNKNOWN';
+      return `Cannot post invoice. Accounting period ${code} is ${periodForInvoiceDate.status}.`;
+    }
+    return null;
+  }, [allowed.post, invoice?.invoiceDate, periodForInvoiceDate, periods]);
 
   const computed = useMemo(() => {
     const lines = invoice?.lines ?? [];
@@ -133,6 +182,10 @@ export function InvoiceDetailsPage() {
         <Link to="/finance/ar/invoices">Back to list</Link>
       </div>
 
+      {periodsError ? <div style={{ color: 'crimson', marginTop: 12 }}>{periodsError}</div> : null}
+
+      {postBlockedReason ? <div style={{ color: 'crimson', marginTop: 12 }}>{postBlockedReason}</div> : null}
+
       <div style={{ marginTop: 12 }}>
         <div>
           <b>Customer:</b> {invoice.customer?.name ?? '-'}
@@ -188,7 +241,7 @@ export function InvoiceDetailsPage() {
       </div>
 
       <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-        <button onClick={() => runAction()} disabled={!allowed.post || acting}>
+        <button onClick={() => runAction()} disabled={!allowed.post || acting || Boolean(postBlockedReason)}>
           Post
         </button>
         {allowed.export ? (

@@ -26,8 +26,8 @@ export function getApiErrorMessage(e: unknown, fallback = 'Request failed') {
               ? JSON.stringify(body)
               : '';
 
-  if (status && bodyMessage) return `${status}: ${bodyMessage}`;
-  if (status) return `${status}: ${fallback}`;
+  if (bodyMessage) return bodyMessage;
+  if (status) return fallback;
   if (bodyMessage) return bodyMessage;
   return fallback;
 }

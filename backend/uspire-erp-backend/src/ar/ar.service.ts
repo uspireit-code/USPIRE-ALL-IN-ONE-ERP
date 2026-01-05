@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertPeriodIsOpen } from '../finance/common/accounting-period.guard';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateCustomerInvoiceDto } from './dto/create-customer-invoice.dto';
 
@@ -97,6 +98,20 @@ export class ArService {
     );
     this.assertInvoiceLines(dto.lines, netAmount);
 
+    const invoiceDate = new Date(dto.invoiceDate);
+    if (Number.isNaN(invoiceDate.getTime())) {
+      throw new BadRequestException('Invalid invoiceDate');
+    }
+
+    await assertPeriodIsOpen({
+      prisma: this.prisma,
+      tenantId: tenant.id,
+      date: invoiceDate,
+      action: 'create',
+      documentLabel: 'invoice',
+      dateLabel: 'invoice date',
+    });
+
     const accounts = await this.prisma.account.findMany({
       where: {
         tenantId: tenant.id,
@@ -132,7 +147,7 @@ export class ArService {
         tenantId: tenant.id,
         customerId: dto.customerId,
         invoiceNumber: dto.invoiceNumber,
-        invoiceDate: new Date(dto.invoiceDate),
+        invoiceDate,
         dueDate: new Date(dto.dueDate),
         currency,
         subtotal,
@@ -189,16 +204,17 @@ export class ArService {
       inv.lines.reduce((s, l: any) => s + Number(l.lineTotal), 0),
     );
 
-    const period = await this.prisma.accountingPeriod.findFirst({
-      where: {
+    let period: any = null;
+    try {
+      period = await assertPeriodIsOpen({
+        prisma: this.prisma,
         tenantId: tenant.id,
-        startDate: { lte: inv.invoiceDate },
-        endDate: { gte: inv.invoiceDate },
-      },
-      select: { id: true, status: true, name: true },
-    });
-
-    if (!period || period.status !== 'OPEN') {
+        date: new Date(inv.invoiceDate),
+        action: 'post',
+        documentLabel: 'invoice',
+        dateLabel: 'invoice date',
+      });
+    } catch (e: any) {
       await this.prisma.auditEvent
         .create({
           data: {
@@ -208,21 +224,13 @@ export class ArService {
             entityId: inv.id,
             action: 'AR_INVOICE_POST',
             outcome: 'BLOCKED',
-            reason: !period
-              ? 'No accounting period exists for the invoice date'
-              : `Accounting period is not OPEN: ${period.name}`,
+            reason: String(e?.message ?? 'Posting blocked by accounting period control'),
             userId: user.id,
             permissionUsed: 'AR_INVOICE_POST',
           },
         })
         .catch(() => undefined);
-
-      throw new ForbiddenException({
-        error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the invoice date'
-          : `Accounting period is not OPEN: ${period.name}`,
-      });
+      throw e;
     }
 
     if (period.name === 'Opening Balances') {
