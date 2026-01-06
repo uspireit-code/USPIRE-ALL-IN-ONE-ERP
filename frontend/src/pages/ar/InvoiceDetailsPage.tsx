@@ -96,6 +96,17 @@ export function InvoiceDetailsPage() {
   const postBlockedReason = useMemo(() => {
     if (!allowed.post) return null;
     if (!periods) return 'Checking accounting period…';
+
+    const invoiceType = String((invoice as any)?.invoiceType ?? '').trim();
+    const requiresProject =
+      invoiceType === 'TRAINING' ||
+      invoiceType === 'CONSULTING' ||
+      invoiceType === 'SYSTEMS';
+    const headerProjectId = String((invoice as any)?.projectId ?? '').trim();
+    if (!invoiceType) return 'Invoice type is required before posting.';
+    if (requiresProject && !headerProjectId)
+      return 'Project is required for this invoice type before posting.';
+
     if (!periodForInvoiceDate) {
       const ymd = invoice?.invoiceDate?.slice(0, 10) ?? '';
       return ymd ? `No accounting period exists for invoice date ${ymd}.` : 'No accounting period exists for invoice date.';
@@ -190,6 +201,14 @@ export function InvoiceDetailsPage() {
         <div>
           <b>Customer:</b> {invoice.customer?.name ?? '-'}
         </div>
+        <div>
+          <b>Invoice Type:</b> {(invoice as any).invoiceType ?? '-'}
+        </div>
+        {(invoice as any).projectId ? (
+          <div>
+            <b>Project:</b> {(invoice as any).projectId}
+          </div>
+        ) : null}
         <div>
           <b>Invoice Date:</b> {invoice.invoiceDate?.slice(0, 10)}
         </div>

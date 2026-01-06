@@ -1,0 +1,35 @@
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { Permissions } from '../rbac/permissions.decorator';
+import { PermissionsGuard } from '../rbac/permissions.guard';
+import { DepartmentIdParamDto, CreateDepartmentDto, UpdateDepartmentDto } from './departments.dto';
+import { DepartmentsService } from './departments.service';
+
+@Controller('master-data/departments')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class DepartmentsController {
+  constructor(private readonly departments: DepartmentsService) {}
+
+  @Get()
+  @Permissions('MASTER_DATA_DEPARTMENT_VIEW')
+  async list(@Req() req: Request) {
+    return this.departments.list(req);
+  }
+
+  @Post()
+  @Permissions('MASTER_DATA_DEPARTMENT_CREATE')
+  async create(@Req() req: Request, @Body() dto: CreateDepartmentDto) {
+    return this.departments.create(req, dto);
+  }
+
+  @Patch(':id')
+  @Permissions('MASTER_DATA_DEPARTMENT_EDIT')
+  async update(
+    @Req() req: Request,
+    @Param() params: DepartmentIdParamDto,
+    @Body() dto: UpdateDepartmentDto,
+  ) {
+    return this.departments.update(req, params.id, dto);
+  }
+}

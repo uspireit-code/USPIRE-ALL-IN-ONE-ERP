@@ -52,6 +52,8 @@ export type CustomerInvoice = {
   dueDate: string;
   currency: string;
   exchangeRate: number;
+  invoiceType?: 'TRAINING' | 'CONSULTING' | 'SYSTEMS' | 'PUBLISHING' | 'DONATION' | 'OTHER' | null;
+  projectId?: string | null;
   reference?: string | null;
   invoiceNote?: string | null;
   customerNameSnapshot?: string | null;
@@ -328,6 +330,8 @@ export async function createInvoice(params: {
   exchangeRate?: number;
   reference?: string;
   invoiceNote?: string;
+  invoiceType?: 'TRAINING' | 'CONSULTING' | 'SYSTEMS' | 'PUBLISHING' | 'DONATION' | 'OTHER';
+  projectId?: string;
   lines: Array<{
     accountId: string;
     departmentId?: string;
@@ -350,6 +354,8 @@ export async function createInvoice(params: {
       exchangeRate: params.exchangeRate,
       reference: params.reference || undefined,
       invoiceNote: params.invoiceNote || undefined,
+      invoiceType: params.invoiceType || undefined,
+      projectId: params.projectId || undefined,
       lines: params.lines,
     }),
   });
@@ -361,10 +367,10 @@ export async function downloadInvoiceExport(id: string, format: 'html' | 'pdf' =
   return downloadBlob(`/finance/ar/invoices/${id}/export?${q.toString()}`);
 }
 
-export async function postInvoice(id: string, params?: { arControlAccountCode?: string }) {
+export async function postInvoice(id: string) {
   return apiFetch<any>(`/finance/ar/invoices/${id}/post`, {
     method: 'POST',
-    body: JSON.stringify({ arControlAccountCode: params?.arControlAccountCode || undefined }),
+    body: JSON.stringify({}),
   });
 }
 
@@ -387,7 +393,7 @@ export async function importInvoices(file: File, params: { importId: string }) {
   });
 }
 
-export async function bulkPostInvoices(params: { invoiceIds: string[]; arControlAccountCode?: string }) {
+export async function bulkPostInvoices(params: { invoiceIds: string[] }) {
   return apiFetch<{
     postedCount: number;
     failedCount: number;
@@ -397,7 +403,6 @@ export async function bulkPostInvoices(params: { invoiceIds: string[]; arControl
     method: 'POST',
     body: JSON.stringify({
       invoiceIds: params.invoiceIds,
-      arControlAccountCode: params.arControlAccountCode || undefined,
     }),
   });
 }

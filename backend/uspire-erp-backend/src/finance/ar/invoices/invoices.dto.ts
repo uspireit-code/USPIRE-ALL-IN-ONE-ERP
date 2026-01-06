@@ -75,6 +75,20 @@ export class CreateCustomerInvoiceDto {
   @IsString()
   invoiceNote?: string;
 
+  @IsOptional()
+  @IsString()
+  invoiceType?:
+    | 'TRAINING'
+    | 'CONSULTING'
+    | 'SYSTEMS'
+    | 'PUBLISHING'
+    | 'DONATION'
+    | 'OTHER';
+
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -107,9 +121,6 @@ export class ListInvoicesQueryDto {
 }
 
 export class PostInvoiceDto {
-  @IsOptional()
-  @IsString()
-  arControlAccountCode?: string;
 }
 
 export class ConfirmInvoicesImportDto {
@@ -122,8 +133,4 @@ export class BulkPostInvoicesDto {
   @ArrayMinSize(1)
   @IsString({ each: true })
   invoiceIds!: string[];
-
-  @IsOptional()
-  @IsString()
-  arControlAccountCode?: string;
 }

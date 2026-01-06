@@ -81,6 +81,10 @@ import { SettingsOrganisationPage } from './pages/settings/SettingsOrganisationP
 import { SettingsUsersPage } from './pages/settings/SettingsUsersPage';
 import { SettingsRolesPage } from './pages/settings/SettingsRolesPage';
 import { SettingsSystemPage } from './pages/settings/SettingsSystemPage';
+import { SettingsMasterDataPage } from './pages/settings/SettingsMasterDataPage';
+import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPage';
+import { SettingsProjectsPage } from './pages/settings/SettingsProjectsPage';
+import { SettingsFundsPage } from './pages/settings/SettingsFundsPage';
 
 function AdminOnlyRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -93,6 +97,14 @@ function PermissionOnlyRoute(props: { permission: string; children: React.ReactN
   const { state } = useAuth();
   const perms = (state.me?.permissions ?? []) as string[];
   const has = perms.includes(props.permission);
+  if (!has) return <AccessDeniedPage />;
+  return <>{props.children}</>;
+}
+
+function PermissionAnyRoute(props: { permissions: string[]; children: React.ReactNode }) {
+  const { state } = useAuth();
+  const perms = (state.me?.permissions ?? []) as string[];
+  const has = props.permissions.some((p) => perms.includes(p));
   if (!has) return <AccessDeniedPage />;
   return <>{props.children}</>;
 }
@@ -216,6 +228,44 @@ export default function App() {
                   <AdminOnlyRoute>
                     <SettingsSystemPage />
                   </AdminOnlyRoute>
+                }
+              />
+              <Route
+                path="settings/master-data"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      'MASTER_DATA_DEPARTMENT_VIEW',
+                      'MASTER_DATA_PROJECT_VIEW',
+                      'MASTER_DATA_FUND_VIEW',
+                    ]}
+                  >
+                    <SettingsMasterDataPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="settings/master-data/departments"
+                element={
+                  <PermissionOnlyRoute permission="MASTER_DATA_DEPARTMENT_VIEW">
+                    <SettingsDepartmentsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="settings/master-data/projects"
+                element={
+                  <PermissionOnlyRoute permission="MASTER_DATA_PROJECT_VIEW">
+                    <SettingsProjectsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="settings/master-data/funds"
+                element={
+                  <PermissionOnlyRoute permission="MASTER_DATA_FUND_VIEW">
+                    <SettingsFundsPage />
+                  </PermissionOnlyRoute>
                 }
               />
               <Route path="forecasts" element={<ForecastsListPage />} />

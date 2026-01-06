@@ -32,6 +32,7 @@ import { PeriodsModule } from './periods/periods.module';
 import { CorrelationIdMiddleware } from './internal/correlation-id.middleware';
 import { RequestLoggerMiddleware } from './internal/request-logger.middleware';
 import { TenantMiddleware } from './tenant/tenant.middleware';
+import { MasterDataModule } from './master-data/master-data.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { TenantMiddleware } from './tenant/tenant.middleware';
     ForecastsModule,
     SettingsModule,
     PeriodsModule,
+    MasterDataModule,
   ],
   controllers: [AppController],
   providers: [AppService],

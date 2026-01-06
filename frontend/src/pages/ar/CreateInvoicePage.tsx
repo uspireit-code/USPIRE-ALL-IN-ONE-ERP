@@ -63,6 +63,10 @@ export function CreateInvoicePage() {
   const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
   const [invoiceNote, setInvoiceNote] = useState('');
+  const [invoiceType, setInvoiceType] = useState<
+    '' | 'TRAINING' | 'CONSULTING' | 'SYSTEMS' | 'PUBLISHING' | 'DONATION' | 'OTHER'
+  >('');
+  const [headerProjectId, setHeaderProjectId] = useState<string>('');
   const [discountsEnabled, setDiscountsEnabled] = useState(false);
   const [lines, setLines] = useState<Line[]>([
     {
@@ -161,6 +165,10 @@ export function CreateInvoicePage() {
     return 'Exchange rate is required when invoice currency differs from base currency';
   }, [exchangeRateInvalid]);
 
+  const requiresHeaderProject = useMemo(() => {
+    return invoiceType === 'TRAINING' || invoiceType === 'CONSULTING' || invoiceType === 'SYSTEMS';
+  }, [invoiceType]);
+
   const isLineValid = useMemo(() => {
     return (l: Line) => {
       const qty = Number(l.quantity);
@@ -252,6 +260,16 @@ export function CreateInvoicePage() {
       return;
     }
 
+    if (!invoiceType) {
+      setError('Invoice type is required');
+      return;
+    }
+
+    if (requiresHeaderProject && !headerProjectId) {
+      setError('Project is required for this invoice type');
+      return;
+    }
+
     if (new Date(dueDate) < new Date(invoiceDate)) {
       setError('Due date cannot be earlier than invoice date');
       return;
@@ -270,20 +288,6 @@ export function CreateInvoicePage() {
     if (!allLinesValid) {
       setError('Each line requires revenue account, description, quantity and unit price');
       return;
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      const acct = accountById.get(l.accountId);
-      if (!acct) continue;
-      const missing: string[] = [];
-      if (acct.requiresDepartment && !l.departmentId) missing.push('department');
-      if (acct.requiresProject && !l.projectId) missing.push('project');
-      if (acct.requiresFund && !l.fundId) missing.push('fund');
-      if (missing.length > 0) {
-        setError(`Line ${i + 1} (${acct.code} – ${acct.name}) is missing: ${missing.join(', ')}`);
-        return;
-      }
     }
 
     for (const l of lines) {
@@ -322,10 +326,12 @@ export function CreateInvoicePage() {
         exchangeRate: isBaseCurrency ? 1 : Number(exchangeRate),
         reference: reference.trim() || undefined,
         invoiceNote: invoiceNote.trim() || undefined,
+        invoiceType: invoiceType || undefined,
+        projectId: headerProjectId || undefined,
         lines: lines.map((l) => ({
           accountId: l.accountId,
           departmentId: l.departmentId || undefined,
-          projectId: l.projectId || undefined,
+          projectId: (l.projectId || headerProjectId) || undefined,
           fundId: l.fundId || undefined,
           description: String(l.description ?? '').trim(),
           quantity: Number(l.quantity) || 1,
@@ -449,6 +455,51 @@ export function CreateInvoicePage() {
             Due Date
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required style={{ width: '100%' }} />
           </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <label style={{ flex: 1 }}>
+            Invoice Type
+            <select
+              value={invoiceType}
+              onChange={(e) => {
+                const v = e.target.value as any;
+                setInvoiceType(v);
+                if (v !== 'TRAINING' && v !== 'CONSULTING' && v !== 'SYSTEMS') {
+                  setHeaderProjectId('');
+                }
+              }}
+              required
+              style={{ width: '100%' }}
+            >
+              <option value="">Select...</option>
+              <option value="TRAINING">Training</option>
+              <option value="CONSULTING">Consulting</option>
+              <option value="SYSTEMS">Systems</option>
+              <option value="PUBLISHING">Publishing</option>
+              <option value="DONATION">Donation</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </label>
+
+          {requiresHeaderProject ? (
+            <label style={{ flex: 1 }}>
+              Project
+              <select
+                value={headerProjectId}
+                onChange={(e) => setHeaderProjectId(e.target.value)}
+                required
+                style={{ width: '100%' }}
+              >
+                <option value="">Select...</option>
+                {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} - {p.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         <div style={{ display: 'flex', gap: 12 }}>

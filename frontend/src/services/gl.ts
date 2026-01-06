@@ -78,6 +78,7 @@ export type ProjectLookup = {
   id: string;
   code: string;
   name: string;
+  status?: 'ACTIVE' | 'CLOSED';
   isRestricted: boolean;
 };
 
@@ -86,6 +87,7 @@ export type FundLookup = {
   code: string;
   name: string;
   projectId: string;
+  status?: 'ACTIVE' | 'INACTIVE';
 };
 
 export type LegalEntityLookup = {

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
@@ -172,7 +173,7 @@ export class PaymentsService {
   async postPayment(
     req: Request,
     id: string,
-    opts?: { apControlAccountCode?: string; arControlAccountCode?: string },
+    opts?: { apControlAccountCode?: string },
   ) {
     const tenant = req.tenant;
     const user = req.user;
@@ -303,7 +304,6 @@ export class PaymentsService {
     }
 
     const apCode = opts?.apControlAccountCode ?? '2000';
-    const arCode = opts?.arControlAccountCode ?? '1100';
 
     let journalLines: Array<{ accountId: string; debit: any; credit: any }>;
 
@@ -328,20 +328,7 @@ export class PaymentsService {
         { accountId: bankGl.id, debit: 0, credit: p.amount },
       ];
     } else if (p.type === 'CUSTOMER_RECEIPT') {
-      const arAccount = await this.prisma.account.findFirst({
-        where: {
-          tenantId: tenant.id,
-          code: arCode,
-          isActive: true,
-          type: 'ASSET',
-        },
-        select: { id: true },
-      });
-      if (!arAccount) {
-        throw new BadRequestException(
-          `AR control account not found or invalid: ${arCode}`,
-        );
-      }
+      const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
       journalLines = [
         { accountId: bankGl.id, debit: p.amount, credit: 0 },

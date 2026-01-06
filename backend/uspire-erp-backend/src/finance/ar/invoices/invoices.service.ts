@@ -14,6 +14,13 @@ import type {
   BulkPostInvoicesDto,
   ListInvoicesQueryDto,
 } from './invoices.dto';
+import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
+import {
+  AR_INVOICE_RULES_ERROR,
+  INVOICE_TYPE_REVENUE_ACCOUNT_CODE,
+  requiresProjectForInvoiceType,
+  type InvoiceType,
+} from './invoice-type.rules';
 
 @Injectable()
 export class FinanceArInvoicesService {
@@ -370,6 +377,8 @@ export class FinanceArInvoicesService {
       subtotal: Number((inv as any).subtotal),
       taxAmount: Number((inv as any).taxAmount),
       totalAmount: Number((inv as any).totalAmount),
+      projectId: (inv as any).projectId ?? null,
+      invoiceType: (inv as any).invoiceType ?? null,
       lines: ((inv as any).lines ?? []).map((l: any) => ({
         ...l,
         departmentId: (l as any).departmentId ?? null,
@@ -540,6 +549,8 @@ export class FinanceArInvoicesService {
           dueDate,
           currency,
           exchangeRate,
+          invoiceType: (dto as any).invoiceType ?? undefined,
+          projectId: (dto as any).projectId ?? undefined,
           reference: dto.reference ? String(dto.reference).trim() : undefined,
           invoiceNote: (dto as any).invoiceNote
             ? String((dto as any).invoiceNote).trim()
@@ -582,7 +593,6 @@ export class FinanceArInvoicesService {
   async post(
     req: Request,
     id: string,
-    opts?: { arControlAccountCode?: string },
   ) {
     const tenant = this.ensureTenant(req);
     const user = this.ensureUser(req);
@@ -613,27 +623,61 @@ export class FinanceArInvoicesService {
       action: 'post',
     });
 
-    const arCode = String(opts?.arControlAccountCode ?? '1100');
-    const arAccount = await this.prisma.account.findFirst({
+    const invoiceType = ((inv as any).invoiceType ?? null) as InvoiceType | null;
+    if (!invoiceType) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.invoiceTypeRequired);
+    }
+
+    const headerProjectId = ((inv as any).projectId ?? null) as string | null;
+    if (requiresProjectForInvoiceType(invoiceType) && !headerProjectId) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.projectRequired);
+    }
+
+    if (headerProjectId) {
+      const p = await this.prisma.project.findFirst({
+        where: {
+          tenantId: tenant.id,
+          id: headerProjectId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: (inv as any).invoiceDate },
+          OR: [
+            { effectiveTo: null },
+            { effectiveTo: { gte: (inv as any).invoiceDate } },
+          ],
+        } as any,
+        select: { id: true } as any,
+      } as any);
+      if (!p) {
+        throw new BadRequestException(
+          'Project is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+    }
+
+    const revenueAccountCode =
+      (INVOICE_TYPE_REVENUE_ACCOUNT_CODE as any)[invoiceType] ?? null;
+    if (!revenueAccountCode) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
+    }
+
+    const revenueAccount = await this.prisma.account.findFirst({
       where: {
         tenantId: tenant.id,
-        code: arCode,
+        code: String(revenueAccountCode),
         isActive: true,
-        type: 'ASSET',
+        type: 'INCOME',
       } as any,
-      select: { id: true, code: true, name: true },
+      select: { id: true },
     });
-    if (!arAccount) {
-      throw new BadRequestException(
-        `AR control account not found or invalid: ${arCode}`,
-      );
+    if (!revenueAccount) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
     }
+
+    const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
     const lines = ((inv as any).lines ?? []).map((l: any) => ({
       accountId: l.accountId,
-      departmentId: (l as any).departmentId ?? null,
-      projectId: (l as any).projectId ?? null,
-      fundId: (l as any).fundId ?? null,
       description: String(l.description ?? '').trim(),
       lineTotal: this.round2(Number(l.lineTotal)),
     }));
@@ -651,72 +695,6 @@ export class FinanceArInvoicesService {
       );
     }
 
-    const revenueAccountIds = [...new Set(lines.map((l) => l.accountId).filter(Boolean))] as string[];
-    const revenueAccounts = await this.prisma.account.findMany({
-      where: {
-        tenantId: tenant.id,
-        id: { in: revenueAccountIds },
-        isActive: true,
-      } as any,
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        requiresDepartment: true,
-        requiresProject: true,
-        requiresFund: true,
-      } as any,
-    });
-    const revenueAccountById = new Map(revenueAccounts.map((a: any) => [a.id, a] as const));
-
-    const tenantRules = await (this.prisma as any).tenant.findUnique({
-      where: { id: tenant.id },
-      select: {
-        requiresDepartmentOnInvoices: true,
-        requiresProjectOnInvoices: true,
-        requiresFundOnInvoices: true,
-      },
-    });
-
-    const issues: Array<{
-      lineNumber: number;
-      accountId: string;
-      accountCode: string | null;
-      accountName: string | null;
-      missing: Array<'department' | 'project' | 'fund'>;
-    }> = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      const acct = revenueAccountById.get(l.accountId) as any;
-      const missing: Array<'department' | 'project' | 'fund'> = [];
-
-      const needsDept = Boolean((acct?.requiresDepartment ?? false) || (tenantRules?.requiresDepartmentOnInvoices ?? false));
-      const needsProj = Boolean((acct?.requiresProject ?? false) || (tenantRules?.requiresProjectOnInvoices ?? false));
-      const needsFund = Boolean((acct?.requiresFund ?? false) || (tenantRules?.requiresFundOnInvoices ?? false));
-
-      if (needsDept && !l.departmentId) missing.push('department');
-      if (needsProj && !l.projectId) missing.push('project');
-      if (needsFund && !l.fundId) missing.push('fund');
-
-      if (missing.length > 0) {
-        issues.push({
-          lineNumber: i + 1,
-          accountId: l.accountId,
-          accountCode: acct?.code ?? null,
-          accountName: acct?.name ?? null,
-          missing,
-        });
-      }
-    }
-
-    if (issues.length > 0) {
-      throw new BadRequestException({
-        error: 'Missing required invoice dimensions',
-        issues,
-      });
-    }
-
     let postedJournal: any = null;
     try {
       const journal = await this.prisma.journalEntry.create({
@@ -732,18 +710,14 @@ export class FinanceArInvoicesService {
                 accountId: arAccount.id,
                 debit: (inv as any).totalAmount,
                 credit: 0,
-                departmentId: (lines as any)[0]?.departmentId ?? null,
-                projectId: (lines as any)[0]?.projectId ?? null,
-                fundId: (lines as any)[0]?.fundId ?? null,
+                projectId: headerProjectId,
               },
-              ...lines.map((l: any) => ({
-                accountId: l.accountId,
+              {
+                accountId: revenueAccount.id,
                 debit: 0,
-                credit: l.lineTotal,
-                departmentId: l.departmentId ?? null,
-                projectId: l.projectId ?? null,
-                fundId: l.fundId ?? null,
-              })),
+                credit: (inv as any).totalAmount,
+                projectId: headerProjectId,
+              },
             ],
           },
         } as any,
@@ -830,9 +804,7 @@ export class FinanceArInvoicesService {
 
     for (const invoiceId of ids) {
       try {
-        await this.post(req, invoiceId, {
-          arControlAccountCode: dto.arControlAccountCode,
-        });
+        await this.post(req, invoiceId);
         postedInvoiceIds.push(invoiceId);
       } catch (e: any) {
         failed.push({
@@ -1187,6 +1159,7 @@ export class FinanceArInvoicesService {
           await this.assertOpenPeriodForInvoiceDate({
             tenantId: tenant.id,
             invoiceDate: invDate,
+            action: 'create',
           });
         } catch (e: any) {
           p.errors.push(
@@ -1365,6 +1338,7 @@ export class FinanceArInvoicesService {
         await this.assertOpenPeriodForInvoiceDate({
           tenantId: tenant.id,
           invoiceDate,
+          action: 'create',
         });
 
         // Ensure the customer is ACTIVE and snapshot details are captured

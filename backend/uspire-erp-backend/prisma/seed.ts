@@ -205,6 +205,19 @@ async function main() {
     { code: 'HR_PAYROLL_RUN', description: 'Run Payroll' },
     { code: 'CRM_LEADS_VIEW', description: 'View Leads' },
     { code: 'CRM_LEADS_EDIT', description: 'Edit Leads' },
+
+    { code: 'MASTER_DATA_DEPARTMENT_VIEW', description: 'View Departments master data' },
+    { code: 'MASTER_DATA_DEPARTMENT_CREATE', description: 'Create Departments master data' },
+    { code: 'MASTER_DATA_DEPARTMENT_EDIT', description: 'Edit Departments master data' },
+
+    { code: 'MASTER_DATA_PROJECT_VIEW', description: 'View Projects master data' },
+    { code: 'MASTER_DATA_PROJECT_CREATE', description: 'Create Projects master data' },
+    { code: 'MASTER_DATA_PROJECT_EDIT', description: 'Edit Projects master data' },
+    { code: 'MASTER_DATA_PROJECT_CLOSE', description: 'Close Projects master data' },
+
+    { code: 'MASTER_DATA_FUND_VIEW', description: 'View Funds master data' },
+    { code: 'MASTER_DATA_FUND_CREATE', description: 'Create Funds master data' },
+    { code: 'MASTER_DATA_FUND_EDIT', description: 'Edit Funds master data' },
   ];
 
   await prisma.permission.createMany({
@@ -371,6 +384,19 @@ async function main() {
   const financeBudgetViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_BUDGET_VIEW' }, select: { id: true } });
   const reportGeneratePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_REPORT_GENERATE' }, select: { id: true } });
   const reportExportPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_REPORT_EXPORT' }, select: { id: true } });
+
+  const mdDepartmentViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_DEPARTMENT_VIEW' }, select: { id: true } });
+  const mdDepartmentCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_DEPARTMENT_CREATE' }, select: { id: true } });
+  const mdDepartmentEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_DEPARTMENT_EDIT' }, select: { id: true } });
+
+  const mdProjectViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_VIEW' }, select: { id: true } });
+  const mdProjectCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_CREATE' }, select: { id: true } });
+  const mdProjectEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_EDIT' }, select: { id: true } });
+  const mdProjectClosePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_CLOSE' }, select: { id: true } });
+
+  const mdFundViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_VIEW' }, select: { id: true } });
+  const mdFundCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_CREATE' }, select: { id: true } });
+  const mdFundEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_EDIT' }, select: { id: true } });
   const glRecurringGeneratePerm = await prisma.permission.upsert({
     where: { code: 'FINANCE_GL_RECURRING_GENERATE' },
     create: {
@@ -648,6 +674,17 @@ async function main() {
         periodChecklistViewPerm?.id,
         periodChecklistCompletePerm?.id,
         periodClosePerm?.id,
+
+        mdDepartmentViewPerm?.id,
+        mdDepartmentCreatePerm?.id,
+        mdDepartmentEditPerm?.id,
+        mdProjectViewPerm?.id,
+        mdProjectCreatePerm?.id,
+        mdProjectEditPerm?.id,
+        mdProjectClosePerm?.id,
+        mdFundViewPerm?.id,
+        mdFundCreatePerm?.id,
+        mdFundEditPerm?.id,
       ]
         .filter(Boolean)
         .map((permissionId) => ({

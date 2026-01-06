@@ -53,11 +53,9 @@ export class ArController {
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
-    @Body() dto: PostCustomerInvoiceDto,
+    @Body() _dto: PostCustomerInvoiceDto,
   ) {
-    return this.ar.postInvoice(req, id, {
-      arControlAccountCode: dto.arControlAccountCode,
-    });
+    return this.ar.postInvoice(req, id);
   }
 
   @Get('invoices')

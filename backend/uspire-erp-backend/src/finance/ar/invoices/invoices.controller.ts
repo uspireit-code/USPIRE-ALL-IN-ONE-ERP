@@ -127,11 +127,9 @@ export class FinanceArInvoicesController {
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
-    @Body() dto: PostInvoiceDto,
+    @Body() _dto: PostInvoiceDto,
   ) {
-    return this.invoices.post(req, id, {
-      arControlAccountCode: dto.arControlAccountCode,
-    });
+    return this.invoices.post(req, id);
   }
 
   @Post('post/bulk')

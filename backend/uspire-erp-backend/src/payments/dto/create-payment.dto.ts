@@ -47,8 +47,4 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   apControlAccountCode?: string;
-
-  @IsOptional()
-  @IsString()
-  arControlAccountCode?: string;
 }

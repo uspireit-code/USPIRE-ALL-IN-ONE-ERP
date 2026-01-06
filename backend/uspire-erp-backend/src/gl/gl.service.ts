@@ -1284,22 +1284,24 @@ export class GlService {
       throw new BadRequestException('Invalid effectiveOn date');
     }
 
-    return this.prisma.department.findMany({
+    return (this.prisma.department as any).findMany({
       where: {
         tenantId: tenant.id,
+        status: 'ACTIVE',
         isActive: true,
         effectiveFrom: { lte: effectiveOn },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveOn } }],
-      },
+      } as any,
       orderBy: [{ code: 'asc' }],
       select: {
         id: true,
         code: true,
         name: true,
+        status: true,
         isActive: true,
         effectiveFrom: true,
         effectiveTo: true,
-      },
+      } as any,
     });
   }
 
@@ -3177,13 +3179,6 @@ export class GlService {
         },
         {
           tenantId,
-          code: '1100',
-          name: 'Accounts Receivable Control',
-          type: 'ASSET',
-          isActive: true,
-        },
-        {
-          tenantId,
           code: '2000',
           name: 'Accounts Payable Control',
           type: 'LIABILITY',
@@ -3686,26 +3681,20 @@ export class GlService {
 
     const effectiveOn = params?.effectiveOn
       ? new Date(params.effectiveOn)
-      : null;
-    if (params?.effectiveOn && Number.isNaN(effectiveOn?.getTime())) {
+      : new Date();
+    if (Number.isNaN(effectiveOn.getTime())) {
       throw new BadRequestException('effectiveOn must be a valid date');
     }
 
-    return this.prisma.project.findMany({
+    return (this.prisma.project as any).findMany({
       where: {
         tenantId: tenant.id,
-        ...(effectiveOn
-          ? {
-              isActive: true,
-              effectiveFrom: { lte: effectiveOn },
-              OR: [
-                { effectiveTo: null },
-                { effectiveTo: { gte: effectiveOn } },
-              ],
-            }
-          : {}),
-      },
-      select: { id: true, code: true, name: true, isRestricted: true },
+        status: 'ACTIVE',
+        isActive: true,
+        effectiveFrom: { lte: effectiveOn },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveOn } }],
+      } as any,
+      select: { id: true, code: true, name: true, status: true, isRestricted: true } as any,
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
   }
@@ -3719,8 +3708,8 @@ export class GlService {
 
     const effectiveOn = params?.effectiveOn
       ? new Date(params.effectiveOn)
-      : null;
-    if (params?.effectiveOn && Number.isNaN(effectiveOn?.getTime())) {
+      : new Date();
+    if (Number.isNaN(effectiveOn.getTime())) {
       throw new BadRequestException('effectiveOn must be a valid date');
     }
 
@@ -3731,22 +3720,16 @@ export class GlService {
       throw new BadRequestException('projectId must not be empty');
     }
 
-    return this.prisma.fund.findMany({
+    return (this.prisma.fund as any).findMany({
       where: {
         tenantId: tenant.id,
         ...(projectId ? { projectId } : {}),
-        ...(effectiveOn
-          ? {
-              isActive: true,
-              effectiveFrom: { lte: effectiveOn },
-              OR: [
-                { effectiveTo: null },
-                { effectiveTo: { gte: effectiveOn } },
-              ],
-            }
-          : {}),
-      },
-      select: { id: true, code: true, name: true, projectId: true },
+        status: 'ACTIVE',
+        isActive: true,
+        effectiveFrom: { lte: effectiveOn },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveOn } }],
+      } as any,
+      select: { id: true, code: true, name: true, projectId: true, status: true } as any,
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
   }
@@ -5323,7 +5306,6 @@ export class GlService {
         where: { tenantId: authz.tenantId, id: { in: legalEntityIds } },
         select: {
           id: true,
-          tenantId: true,
           isActive: true,
           effectiveFrom: true,
           effectiveTo: true,
@@ -5333,8 +5315,8 @@ export class GlService {
         where: { tenantId: authz.tenantId, id: { in: departmentIds } },
         select: {
           id: true,
-          tenantId: true,
           isActive: true,
+          status: true,
           effectiveFrom: true,
           effectiveTo: true,
         },
@@ -5343,8 +5325,8 @@ export class GlService {
         where: { tenantId: authz.tenantId, id: { in: projectIds } },
         select: {
           id: true,
-          tenantId: true,
           isActive: true,
+          status: true,
           isRestricted: true,
           effectiveFrom: true,
           effectiveTo: true,
@@ -5354,9 +5336,9 @@ export class GlService {
         where: { tenantId: authz.tenantId, id: { in: fundIds } },
         select: {
           id: true,
-          tenantId: true,
           projectId: true,
           isActive: true,
+          status: true,
           effectiveFrom: true,
           effectiveTo: true,
         },
@@ -5454,6 +5436,14 @@ export class GlService {
           const effective =
             d.effectiveFrom <= journalDate &&
             (d.effectiveTo === null || d.effectiveTo >= journalDate);
+          if ((d as any).status && (d as any).status !== 'ACTIVE') {
+            submitErrors.push({
+              lineId: l.id,
+              lineNumber: l.lineNumber ?? null,
+              field: 'departmentId',
+              message: 'Department is inactive',
+            });
+          }
           if (!d.isActive) {
             submitErrors.push({
               lineId: l.id,
@@ -5527,6 +5517,14 @@ export class GlService {
           const effective =
             p.effectiveFrom <= journalDate &&
             (p.effectiveTo === null || p.effectiveTo >= journalDate);
+          if ((p as any).status === 'CLOSED') {
+            submitErrors.push({
+              lineId: l.id,
+              lineNumber: l.lineNumber ?? null,
+              field: 'projectId',
+              message: 'Project is closed',
+            });
+          }
           if (!p.isActive) {
             submitErrors.push({
               lineId: l.id,
@@ -5559,6 +5557,14 @@ export class GlService {
           const effective =
             f.effectiveFrom <= journalDate &&
             (f.effectiveTo === null || f.effectiveTo >= journalDate);
+          if ((f as any).status && (f as any).status !== 'ACTIVE') {
+            submitErrors.push({
+              lineId: l.id,
+              lineNumber: l.lineNumber ?? null,
+              field: 'fundId',
+              message: 'Fund is inactive',
+            });
+          }
           if (!f.isActive) {
             submitErrors.push({
               lineId: l.id,

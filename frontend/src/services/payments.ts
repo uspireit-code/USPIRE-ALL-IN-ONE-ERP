@@ -67,12 +67,11 @@ export async function approvePayment(id: string) {
   return apiFetch<Payment>(`/payments/${id}/approve`, { method: 'POST' });
 }
 
-export async function postPayment(id: string, params?: { apControlAccountCode?: string; arControlAccountCode?: string }) {
+export async function postPayment(id: string, params?: { apControlAccountCode?: string }) {
   return apiFetch<any>(`/payments/${id}/post`, {
     method: 'POST',
     body: JSON.stringify({
       apControlAccountCode: params?.apControlAccountCode || undefined,
-      arControlAccountCode: params?.arControlAccountCode || undefined,
     }),
   });
 }

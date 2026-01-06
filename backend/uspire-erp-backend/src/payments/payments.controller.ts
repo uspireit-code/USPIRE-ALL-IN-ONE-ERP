@@ -41,7 +41,6 @@ export class PaymentsController {
   ) {
     return this.payments.postPayment(req, id, {
       apControlAccountCode: dto.apControlAccountCode,
-      arControlAccountCode: dto.arControlAccountCode,
     });
   }
 

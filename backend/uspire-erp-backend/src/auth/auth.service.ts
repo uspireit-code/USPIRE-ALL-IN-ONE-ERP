@@ -304,6 +304,59 @@ export class AuthService {
 
     // Backfill permissions for existing tenants/roles where seeds may not have been re-run.
     // This is intentionally additive-only (no permission removals) to avoid unexpected RBAC changes.
+    const adminLikeRoleNames = new Set([
+      'ADMIN',
+      'SUPERADMIN',
+      'SUPER_ADMIN',
+      'SUPER ADMIN',
+      'SYSTEM_ADMIN',
+      'SYSTEMADMIN',
+      'SYSTEM ADMIN',
+      'SYSTEM ADMINISTRATOR',
+    ]);
+
+    const userAdminLikeRoles = await this.prisma.userRole.findMany({
+      where: {
+        userId: user.id,
+        role: {
+          tenantId: tenant.id,
+          name: { in: Array.from(adminLikeRoleNames) },
+        },
+      },
+      select: { roleId: true },
+    });
+
+    if (userAdminLikeRoles.length > 0) {
+      const requiredPermissionCodes = [
+        'MASTER_DATA_DEPARTMENT_VIEW',
+        'MASTER_DATA_DEPARTMENT_CREATE',
+        'MASTER_DATA_DEPARTMENT_EDIT',
+
+        'MASTER_DATA_PROJECT_VIEW',
+        'MASTER_DATA_PROJECT_CREATE',
+        'MASTER_DATA_PROJECT_EDIT',
+        'MASTER_DATA_PROJECT_CLOSE',
+
+        'MASTER_DATA_FUND_VIEW',
+        'MASTER_DATA_FUND_CREATE',
+        'MASTER_DATA_FUND_EDIT',
+      ] as const;
+
+      const perms = await this.prisma.permission.findMany({
+        where: { code: { in: [...requiredPermissionCodes] } },
+        select: { id: true },
+      });
+
+      if (perms.length > 0) {
+        await this.prisma.rolePermission.createMany({
+          data: userAdminLikeRoles.flatMap((r) =>
+            perms.map((p) => ({ roleId: r.roleId, permissionId: p.id })),
+          ),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     const financeOfficerRole = await this.prisma.role.findFirst({
       where: { tenantId: tenant.id, name: 'FINANCE_OFFICER' },
       select: { id: true },

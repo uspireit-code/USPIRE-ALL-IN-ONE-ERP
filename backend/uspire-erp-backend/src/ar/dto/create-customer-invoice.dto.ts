@@ -38,6 +38,20 @@ export class CreateCustomerInvoiceDto {
   @Min(0)
   totalAmount!: number;
 
+  @IsOptional()
+  @IsString()
+  invoiceType?:
+    | 'TRAINING'
+    | 'CONSULTING'
+    | 'SYSTEMS'
+    | 'PUBLISHING'
+    | 'DONATION'
+    | 'OTHER';
+
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -49,8 +63,4 @@ export class CreateCustomerInvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => InvoiceTaxLineDto)
   taxLines?: InvoiceTaxLineDto[];
-
-  @IsOptional()
-  @IsString()
-  arControlAccountCode?: string;
 }

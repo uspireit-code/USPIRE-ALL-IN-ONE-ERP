@@ -1,9 +1,11 @@
 import type React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
+import { useAuth } from '../../auth/AuthContext';
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
 
   const NAVY = '#020445';
 
@@ -67,6 +69,23 @@ export function SettingsPage() {
         </svg>
       ),
     },
+    ...(hasPermission('MASTER_DATA_DEPARTMENT_VIEW') ||
+    hasPermission('MASTER_DATA_PROJECT_VIEW') ||
+    hasPermission('MASTER_DATA_FUND_VIEW')
+      ? [
+          {
+            key: 'master-data',
+            title: 'Master Data',
+            description: 'Manage Departments, Projects, and Funds for this tenant.',
+            to: '/settings/master-data',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 7a2 2 0 0 1 2-2h5l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

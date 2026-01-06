@@ -694,7 +694,9 @@ export function Layout() {
               onToggle={() => setOpenL1((v) => (v === 'settings' ? null : 'settings'))}
             />
             {openL1 === 'settings' ? (
-              <Indent level={2}>{isAdmin ? <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} /> : null}</Indent>
+              <Indent level={2}>
+                {isAdmin ? <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} /> : null}
+              </Indent>
             ) : null}
           </Section>
         </nav>

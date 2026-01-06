@@ -116,6 +116,42 @@ export class SettingsService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
 
+  private async ensureAdminMasterDataPermissions(tenantId: string) {
+    const adminRole = await this.prisma.role.findFirst({
+      where: { tenantId, name: 'ADMIN' },
+      select: { id: true },
+    });
+
+    if (!adminRole) return;
+
+    const requiredPermissionCodes = [
+      'MASTER_DATA_DEPARTMENT_VIEW',
+      'MASTER_DATA_DEPARTMENT_CREATE',
+      'MASTER_DATA_DEPARTMENT_EDIT',
+
+      'MASTER_DATA_PROJECT_VIEW',
+      'MASTER_DATA_PROJECT_CREATE',
+      'MASTER_DATA_PROJECT_EDIT',
+      'MASTER_DATA_PROJECT_CLOSE',
+
+      'MASTER_DATA_FUND_VIEW',
+      'MASTER_DATA_FUND_CREATE',
+      'MASTER_DATA_FUND_EDIT',
+    ] as const;
+
+    const perms = await this.prisma.permission.findMany({
+      where: { code: { in: [...requiredPermissionCodes] } },
+      select: { id: true },
+    });
+
+    if (perms.length === 0) return;
+
+    await this.prisma.rolePermission.createMany({
+      data: perms.map((p) => ({ roleId: adminRole.id, permissionId: p.id })),
+      skipDuplicates: true,
+    });
+  }
+
   private async ensureAdminCoaPermissions(tenantId: string) {
     const adminRole = await this.prisma.role.findFirst({
       where: { tenantId, name: 'ADMIN' },
@@ -224,6 +260,19 @@ export class SettingsService {
       'FINANCE_COA_UPDATE',
       'FINANCE_BUDGET_VIEW',
 
+      'MASTER_DATA_DEPARTMENT_VIEW',
+      'MASTER_DATA_DEPARTMENT_CREATE',
+      'MASTER_DATA_DEPARTMENT_EDIT',
+
+      'MASTER_DATA_PROJECT_VIEW',
+      'MASTER_DATA_PROJECT_CREATE',
+      'MASTER_DATA_PROJECT_EDIT',
+      'MASTER_DATA_PROJECT_CLOSE',
+
+      'MASTER_DATA_FUND_VIEW',
+      'MASTER_DATA_FUND_CREATE',
+      'MASTER_DATA_FUND_EDIT',
+
       'FINANCE_TB_VIEW',
       'FINANCE_CASHFLOW_VIEW',
       'FINANCE_SOE_VIEW',
@@ -261,6 +310,7 @@ export class SettingsService {
 
     await this.ensureFinanceManagerRole(tenant.id);
     await this.ensureFinanceControllerRole(tenant.id);
+    await this.ensureAdminMasterDataPermissions(tenant.id);
     await this.ensureAdminCoaPermissions(tenant.id);
 
     const roles = await this.prisma.role.findMany({

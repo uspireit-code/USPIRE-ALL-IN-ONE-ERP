@@ -7,6 +7,13 @@ import {
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertPeriodIsOpen } from '../finance/common/accounting-period.guard';
+import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
+import {
+  AR_INVOICE_RULES_ERROR,
+  INVOICE_TYPE_REVENUE_ACCOUNT_CODE,
+  requiresProjectForInvoiceType,
+  type InvoiceType,
+} from '../finance/ar/invoices/invoice-type.rules';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateCustomerInvoiceDto } from './dto/create-customer-invoice.dto';
 
@@ -150,6 +157,8 @@ export class ArService {
         invoiceDate,
         dueDate: new Date(dto.dueDate),
         currency,
+        invoiceType: (dto as any).invoiceType ?? undefined,
+        projectId: (dto as any).projectId ?? undefined,
         subtotal,
         taxAmount,
         totalAmount,
@@ -174,7 +183,6 @@ export class ArService {
   async postInvoice(
     req: Request,
     id: string,
-    opts?: { arControlAccountCode?: string },
   ) {
     const tenant = req.tenant;
     const user = req.user;
@@ -258,6 +266,54 @@ export class ArService {
       });
     }
 
+    const invoiceType = ((inv as any).invoiceType ?? null) as InvoiceType | null;
+    if (!invoiceType) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.invoiceTypeRequired);
+    }
+
+    const headerProjectId = ((inv as any).projectId ?? null) as string | null;
+    if (requiresProjectForInvoiceType(invoiceType) && !headerProjectId) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.projectRequired);
+    }
+
+    if (headerProjectId) {
+      const p = await this.prisma.project.findFirst({
+        where: {
+          tenantId: tenant.id,
+          id: headerProjectId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: inv.invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: inv.invoiceDate } }],
+        } as any,
+        select: { id: true } as any,
+      } as any);
+      if (!p) {
+        throw new BadRequestException(
+          'Project is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+    }
+
+    const revenueAccountCode =
+      (INVOICE_TYPE_REVENUE_ACCOUNT_CODE as any)[invoiceType] ?? null;
+    if (!revenueAccountCode) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
+    }
+
+    const revenueAccount = await this.prisma.account.findFirst({
+      where: {
+        tenantId: tenant.id,
+        code: String(revenueAccountCode),
+        isActive: true,
+        type: 'INCOME',
+      } as any,
+      select: { id: true },
+    });
+    if (!revenueAccount) {
+      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
+    }
+
     const cutoverLocked = await this.prisma.accountingPeriod.findFirst({
       where: {
         tenantId: tenant.id,
@@ -291,22 +347,7 @@ export class ArService {
       });
     }
 
-    const arCode = opts?.arControlAccountCode ?? '1100';
-    const arAccount = await this.prisma.account.findFirst({
-      where: {
-        tenantId: tenant.id,
-        code: arCode,
-        isActive: true,
-        type: 'ASSET',
-      },
-      select: { id: true, code: true, name: true },
-    });
-
-    if (!arAccount) {
-      throw new BadRequestException(
-        `AR control account not found or invalid: ${arCode}`,
-      );
-    }
+    const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
     const journal = await this.prisma.journalEntry.create({
       data: {
@@ -321,12 +362,14 @@ export class ArService {
               accountId: arAccount.id,
               debit: inv.totalAmount,
               credit: 0,
+              projectId: headerProjectId,
             },
-            ...inv.lines.map((l: any) => ({
-              accountId: l.accountId,
+            {
+              accountId: revenueAccount.id,
               debit: 0,
-              credit: l.lineTotal,
-            })),
+              credit: inv.totalAmount,
+              projectId: headerProjectId,
+            },
           ],
         },
       },

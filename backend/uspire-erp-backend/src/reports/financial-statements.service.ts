@@ -1555,8 +1555,7 @@ export class FinancialStatementsService {
     if (
       a.type === 'ASSET' &&
       (n.includes('accounts receivable') ||
-        n.includes('receivable') ||
-        a.code === '1100')
+        n.includes('receivable'))
     ) {
       return { bucket: 'AR' as const, label: 'Change in Accounts Receivable' };
     }
