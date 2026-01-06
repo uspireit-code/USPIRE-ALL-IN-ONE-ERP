@@ -8,12 +8,6 @@ import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertPeriodIsOpen } from '../finance/common/accounting-period.guard';
 import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
-import {
-  AR_INVOICE_RULES_ERROR,
-  INVOICE_TYPE_REVENUE_ACCOUNT_CODE,
-  requiresProjectForInvoiceType,
-  type InvoiceType,
-} from '../finance/ar/invoices/invoice-type.rules';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateCustomerInvoiceDto } from './dto/create-customer-invoice.dto';
 
@@ -23,6 +17,118 @@ export class ArService {
 
   private round2(n: number) {
     return Math.round(n * 100) / 100;
+  }
+
+  private async loadInvoiceCategoryOrThrow(params: {
+    tenantId: string;
+    invoiceCategoryId: string | null;
+  }) {
+    if (!params.invoiceCategoryId) {
+      throw new BadRequestException('Invoice category is required before posting.');
+    }
+
+    const cat = await (this.prisma as any).invoiceCategory.findFirst({
+      where: { tenantId: params.tenantId, id: params.invoiceCategoryId } as any,
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        isActive: true,
+        revenueAccountId: true,
+        requiresProject: true,
+        requiresFund: true,
+        requiresDepartment: true,
+        revenueAccount: {
+          select: { id: true, type: true, isActive: true } as any,
+        },
+      } as any,
+    });
+
+    if (!cat) throw new BadRequestException('Invoice category is required before posting.');
+    if (!cat.isActive) {
+      throw new BadRequestException(`Invoice category ${cat.name} is inactive.`);
+    }
+
+    const ra = (cat as any).revenueAccount;
+    if (!ra || ra.isActive !== true || ra.type !== 'INCOME') {
+      throw new BadRequestException(
+        'Revenue account for invoice category is not configured or is invalid. Please check Chart of Accounts.',
+      );
+    }
+
+    return cat as any;
+  }
+
+  private async getActiveDimensionOrThrow(params: {
+    tenantId: string;
+    invoiceDate: Date;
+    projectId?: string | null;
+    fundId?: string | null;
+    departmentId?: string | null;
+  }) {
+    const invoiceDate = params.invoiceDate;
+
+    if (params.projectId) {
+      const p = await this.prisma.project.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          id: params.projectId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: invoiceDate } }],
+        } as any,
+        select: { id: true } as any,
+      } as any);
+      if (!p) {
+        throw new BadRequestException(
+          'Project is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+    }
+
+    if (params.fundId) {
+      const f = await (this.prisma.fund as any).findFirst({
+        where: {
+          tenantId: params.tenantId,
+          id: params.fundId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: invoiceDate } }],
+        } as any,
+        select: { id: true, projectId: true } as any,
+      } as any);
+      if (!f) {
+        throw new BadRequestException(
+          'Fund is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+      if (params.projectId && String((f as any).projectId) !== String(params.projectId)) {
+        throw new BadRequestException(
+          'Fund is not valid for the selected project. Posting is not allowed.',
+        );
+      }
+    }
+
+    if (params.departmentId) {
+      const d = await (this.prisma.department as any).findFirst({
+        where: {
+          tenantId: params.tenantId,
+          id: params.departmentId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: invoiceDate } }],
+        } as any,
+        select: { id: true } as any,
+      } as any);
+      if (!d) {
+        throw new BadRequestException(
+          'Department is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+    }
   }
 
   async createCustomer(req: Request, dto: CreateCustomerDto) {
@@ -157,8 +263,10 @@ export class ArService {
         invoiceDate,
         dueDate: new Date(dto.dueDate),
         currency,
-        invoiceType: (dto as any).invoiceType ?? undefined,
+        invoiceCategoryId: (dto as any).invoiceCategoryId ?? undefined,
         projectId: (dto as any).projectId ?? undefined,
+        fundId: (dto as any).fundId ?? undefined,
+        departmentId: (dto as any).departmentId ?? undefined,
         subtotal,
         taxAmount,
         totalAmount,
@@ -266,53 +374,35 @@ export class ArService {
       });
     }
 
-    const invoiceType = ((inv as any).invoiceType ?? null) as InvoiceType | null;
-    if (!invoiceType) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.invoiceTypeRequired);
-    }
-
-    const headerProjectId = ((inv as any).projectId ?? null) as string | null;
-    if (requiresProjectForInvoiceType(invoiceType) && !headerProjectId) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.projectRequired);
-    }
-
-    if (headerProjectId) {
-      const p = await this.prisma.project.findFirst({
-        where: {
-          tenantId: tenant.id,
-          id: headerProjectId,
-          status: 'ACTIVE' as any,
-          isActive: true,
-          effectiveFrom: { lte: inv.invoiceDate },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: inv.invoiceDate } }],
-        } as any,
-        select: { id: true } as any,
-      } as any);
-      if (!p) {
-        throw new BadRequestException(
-          'Project is inactive, closed, or not effective for invoice date. Posting is not allowed.',
-        );
-      }
-    }
-
-    const revenueAccountCode =
-      (INVOICE_TYPE_REVENUE_ACCOUNT_CODE as any)[invoiceType] ?? null;
-    if (!revenueAccountCode) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
-    }
-
-    const revenueAccount = await this.prisma.account.findFirst({
-      where: {
-        tenantId: tenant.id,
-        code: String(revenueAccountCode),
-        isActive: true,
-        type: 'INCOME',
-      } as any,
-      select: { id: true },
+    const invoiceCategoryId = String((inv as any).invoiceCategoryId ?? '').trim() || null;
+    const category = await this.loadInvoiceCategoryOrThrow({
+      tenantId: tenant.id,
+      invoiceCategoryId,
     });
-    if (!revenueAccount) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
+
+    const headerProjectId = String((inv as any).projectId ?? '').trim() || null;
+    const headerFundId = String((inv as any).fundId ?? '').trim() || null;
+    const headerDepartmentId = String((inv as any).departmentId ?? '').trim() || null;
+
+    if (category.requiresProject && !headerProjectId) {
+      throw new BadRequestException('Project is required for this invoice category before posting.');
     }
+    if (category.requiresFund && !headerFundId) {
+      throw new BadRequestException('Fund is required for this invoice category before posting.');
+    }
+    if (category.requiresDepartment && !headerDepartmentId) {
+      throw new BadRequestException('Department is required for this invoice category before posting.');
+    }
+
+    await this.getActiveDimensionOrThrow({
+      tenantId: tenant.id,
+      invoiceDate: new Date(inv.invoiceDate),
+      projectId: headerProjectId,
+      fundId: headerFundId,
+      departmentId: headerDepartmentId,
+    });
+
+    const revenueAccountId = String((category as any).revenueAccountId);
 
     const cutoverLocked = await this.prisma.accountingPeriod.findFirst({
       where: {
@@ -362,13 +452,17 @@ export class ArService {
               accountId: arAccount.id,
               debit: inv.totalAmount,
               credit: 0,
-              projectId: headerProjectId,
+              projectId: category.requiresProject ? headerProjectId : null,
+              fundId: category.requiresFund ? headerFundId : null,
+              departmentId: category.requiresDepartment ? headerDepartmentId : null,
             },
             {
-              accountId: revenueAccount.id,
+              accountId: revenueAccountId,
               debit: 0,
               credit: inv.totalAmount,
-              projectId: headerProjectId,
+              projectId: category.requiresProject ? headerProjectId : null,
+              fundId: category.requiresFund ? headerFundId : null,
+              departmentId: category.requiresDepartment ? headerDepartmentId : null,
             },
           ],
         },

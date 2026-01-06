@@ -85,6 +85,9 @@ import { SettingsMasterDataPage } from './pages/settings/SettingsMasterDataPage'
 import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPage';
 import { SettingsProjectsPage } from './pages/settings/SettingsProjectsPage';
 import { SettingsFundsPage } from './pages/settings/SettingsFundsPage';
+import { SettingsInvoiceCategoriesPage } from './pages/settings/SettingsInvoiceCategoriesPage';
+import { SettingsTaxRatesPage } from './pages/settings/SettingsTaxRatesPage';
+import { SettingsTaxConfigurationPage } from './pages/settings/SettingsTaxConfigurationPage';
 
 function AdminOnlyRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -231,6 +234,22 @@ export default function App() {
                 }
               />
               <Route
+                path="settings/tax-rates"
+                element={
+                  <PermissionOnlyRoute permission="TAX_RATE_VIEW">
+                    <SettingsTaxRatesPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="settings/tax-configuration"
+                element={
+                  <PermissionOnlyRoute permission="TAX_RATE_VIEW">
+                    <SettingsTaxConfigurationPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
                 path="settings/master-data"
                 element={
                   <PermissionAnyRoute
@@ -238,6 +257,7 @@ export default function App() {
                       'MASTER_DATA_DEPARTMENT_VIEW',
                       'MASTER_DATA_PROJECT_VIEW',
                       'MASTER_DATA_FUND_VIEW',
+                      'INVOICE_CATEGORY_VIEW',
                     ]}
                   >
                     <SettingsMasterDataPage />
@@ -265,6 +285,14 @@ export default function App() {
                 element={
                   <PermissionOnlyRoute permission="MASTER_DATA_FUND_VIEW">
                     <SettingsFundsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="settings/master-data/invoice-categories"
+                element={
+                  <PermissionOnlyRoute permission="INVOICE_CATEGORY_VIEW">
+                    <SettingsInvoiceCategoriesPage />
                   </PermissionOnlyRoute>
                 }
               />

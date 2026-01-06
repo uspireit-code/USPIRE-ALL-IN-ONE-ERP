@@ -2,9 +2,11 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useBranding } from '../../branding/BrandingContext';
-import type { AccountLookup, Customer } from '../../services/ar';
-import { createInvoice, listEligibleAccounts, listCustomers } from '../../services/ar';
+import type { AccountLookup, Customer, InvoiceCategory } from '../../services/ar';
+import { createInvoice, listEligibleAccounts, listCustomers, listInvoiceCategories } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
+import type { TaxRate } from '../../services/tax';
+import { listTaxRates } from '../../services/tax';
 import { formatMoney } from '../../money';
 import { listDepartments, listProjects, listFunds, type DepartmentLookup, type ProjectLookup, type FundLookup } from '../../services/gl';
 
@@ -12,6 +14,7 @@ type Line = {
   accountId: string;
   accountSearch: string;
   accountPickerOpen: boolean;
+  taxRateId?: string;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -39,6 +42,8 @@ export function CreateInvoicePage() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<AccountLookup[]>([]);
+  const [invoiceCategories, setInvoiceCategories] = useState<InvoiceCategory[]>([]);
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
   const [departments, setDepartments] = useState<DepartmentLookup[]>([]);
   const [projects, setProjects] = useState<ProjectLookup[]>([]);
   const [funds, setFunds] = useState<FundLookup[]>([]);
@@ -63,16 +68,17 @@ export function CreateInvoicePage() {
   const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
   const [invoiceNote, setInvoiceNote] = useState('');
-  const [invoiceType, setInvoiceType] = useState<
-    '' | 'TRAINING' | 'CONSULTING' | 'SYSTEMS' | 'PUBLISHING' | 'DONATION' | 'OTHER'
-  >('');
   const [headerProjectId, setHeaderProjectId] = useState<string>('');
+  const [headerFundId, setHeaderFundId] = useState<string>('');
+  const [headerDepartmentId, setHeaderDepartmentId] = useState<string>('');
+  const [invoiceCategoryId, setInvoiceCategoryId] = useState<string>('');
   const [discountsEnabled, setDiscountsEnabled] = useState(false);
   const [lines, setLines] = useState<Line[]>([
     {
       accountId: '',
       accountSearch: '',
       accountPickerOpen: false,
+      taxRateId: '',
       description: '',
       quantity: '1',
       unitPrice: '',
@@ -86,11 +92,13 @@ export function CreateInvoicePage() {
     setLoadingLookups(true);
     setError(null);
 
-    Promise.all([listCustomers(), listEligibleAccounts(), listDepartments(), listProjects(), listFunds()])
-      .then(([custs, accs, deps, projs, fnds]) => {
+    Promise.all([listCustomers(), listEligibleAccounts(), listInvoiceCategories(), listTaxRates(), listDepartments(), listProjects(), listFunds()])
+      .then(([custs, accs, cats, tax, deps, projs, fnds]) => {
         if (!mounted) return;
         setCustomers((custs.items ?? []).filter((c) => c.status === 'ACTIVE'));
         setAccounts(accs);
+        setInvoiceCategories((cats ?? []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))));
+        setTaxRates((tax ?? []).filter((t) => t.isActive && String(t.type) === 'OUTPUT'));
         setDepartments(deps);
         setProjects(projs);
         setFunds(fnds);
@@ -165,9 +173,17 @@ export function CreateInvoicePage() {
     return 'Exchange rate is required when invoice currency differs from base currency';
   }, [exchangeRateInvalid]);
 
-  const requiresHeaderProject = useMemo(() => {
-    return invoiceType === 'TRAINING' || invoiceType === 'CONSULTING' || invoiceType === 'SYSTEMS';
-  }, [invoiceType]);
+  const selectedInvoiceCategory = useMemo(() => {
+    return invoiceCategories.find((c) => c.id === invoiceCategoryId) ?? null;
+  }, [invoiceCategories, invoiceCategoryId]);
+
+  const selectableInvoiceCategories = useMemo(() => {
+    return (invoiceCategories ?? []).filter((c) => c.isActive);
+  }, [invoiceCategories]);
+
+  const requiresHeaderProject = useMemo(() => Boolean(selectedInvoiceCategory?.requiresProject), [selectedInvoiceCategory?.requiresProject]);
+  const requiresHeaderFund = useMemo(() => Boolean(selectedInvoiceCategory?.requiresFund), [selectedInvoiceCategory?.requiresFund]);
+  const requiresHeaderDepartment = useMemo(() => Boolean(selectedInvoiceCategory?.requiresDepartment), [selectedInvoiceCategory?.requiresDepartment]);
 
   const isLineValid = useMemo(() => {
     return (l: Line) => {
@@ -210,11 +226,19 @@ export function CreateInvoicePage() {
     const grossSubtotal = round2(grossTotals.reduce((s, v) => s + v, 0));
     const discountTotal = round2(discountTotals.reduce((s, v) => s + v, 0));
     const subtotal = round2(lineTotals.reduce((s, v) => s + v, 0));
-    const taxAmount = 0;
+    const rateById = new Map((taxRates ?? []).map((t) => [t.id, Number(t.rate ?? 0)] as const));
+    const lineTaxTotals = lines.map((l, idx) => {
+      const net = Number(lineTotals[idx] ?? 0);
+      const taxRateId = String((l as any).taxRateId ?? '').trim();
+      const rate = taxRateId ? Number(rateById.get(taxRateId) ?? 0) : 0;
+      return round2(net * (rate / 100));
+    });
+    const taxAmount = round2(lineTaxTotals.reduce((s, v) => s + (Number(v) || 0), 0));
     const totalAmount = round2(subtotal + taxAmount);
     const hasDiscount = discountTotal > 0;
-    return { grossTotals, discountTotals, lineTotals, grossSubtotal, discountTotal, subtotal, taxAmount, totalAmount, hasDiscount };
-  }, [lines]);
+    const isTaxable = lineTaxTotals.some((v) => Number(v) > 0) || lines.some((l: any) => Boolean(String(l.taxRateId ?? '').trim()));
+    return { grossTotals, discountTotals, lineTotals, lineTaxTotals, grossSubtotal, discountTotal, subtotal, taxAmount, totalAmount, hasDiscount, isTaxable };
+  }, [lines, taxRates]);
 
   const showDiscountUi = discountsEnabled || computed.hasDiscount;
 
@@ -232,6 +256,7 @@ export function CreateInvoicePage() {
           accountId: '',
           accountSearch: '',
           accountPickerOpen: false,
+          taxRateId: '',
           description: '',
           quantity: '1',
           unitPrice: '',
@@ -260,13 +285,28 @@ export function CreateInvoicePage() {
       return;
     }
 
-    if (!invoiceType) {
-      setError('Invoice type is required');
+    if (!invoiceCategoryId) {
+      setError('Invoice category is required');
+      return;
+    }
+
+    if (!selectedInvoiceCategory || !selectedInvoiceCategory.isActive) {
+      setError('Selected invoice category is inactive. Please choose an active category.');
       return;
     }
 
     if (requiresHeaderProject && !headerProjectId) {
-      setError('Project is required for this invoice type');
+      setError('Project is required for this invoice category');
+      return;
+    }
+
+    if (requiresHeaderFund && !headerFundId) {
+      setError('Fund is required for this invoice category');
+      return;
+    }
+
+    if (requiresHeaderDepartment && !headerDepartmentId) {
+      setError('Department is required for this invoice category');
       return;
     }
 
@@ -326,10 +366,13 @@ export function CreateInvoicePage() {
         exchangeRate: isBaseCurrency ? 1 : Number(exchangeRate),
         reference: reference.trim() || undefined,
         invoiceNote: invoiceNote.trim() || undefined,
-        invoiceType: invoiceType || undefined,
+        invoiceCategoryId: invoiceCategoryId || undefined,
         projectId: headerProjectId || undefined,
+        fundId: headerFundId || undefined,
+        departmentId: headerDepartmentId || undefined,
         lines: lines.map((l) => ({
           accountId: l.accountId,
+          taxRateId: String((l as any).taxRateId ?? '').trim() || undefined,
           departmentId: l.departmentId || undefined,
           projectId: (l.projectId || headerProjectId) || undefined,
           fundId: l.fundId || undefined,
@@ -459,26 +502,27 @@ export function CreateInvoicePage() {
 
         <div style={{ display: 'flex', gap: 12 }}>
           <label style={{ flex: 1 }}>
-            Invoice Type
+            Invoice Category
             <select
-              value={invoiceType}
+              value={invoiceCategoryId}
               onChange={(e) => {
-                const v = e.target.value as any;
-                setInvoiceType(v);
-                if (v !== 'TRAINING' && v !== 'CONSULTING' && v !== 'SYSTEMS') {
-                  setHeaderProjectId('');
-                }
+                const v = String(e.target.value || '');
+                setInvoiceCategoryId(v);
+
+                const next = invoiceCategories.find((c) => c.id === v) ?? null;
+                if (!next?.requiresProject) setHeaderProjectId('');
+                if (!next?.requiresFund) setHeaderFundId('');
+                if (!next?.requiresDepartment) setHeaderDepartmentId('');
               }}
               required
               style={{ width: '100%' }}
             >
               <option value="">Select...</option>
-              <option value="TRAINING">Training</option>
-              <option value="CONSULTING">Consulting</option>
-              <option value="SYSTEMS">Systems</option>
-              <option value="PUBLISHING">Publishing</option>
-              <option value="DONATION">Donation</option>
-              <option value="OTHER">Other</option>
+              {selectableInvoiceCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code} - {c.name}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -501,6 +545,48 @@ export function CreateInvoicePage() {
             </label>
           ) : null}
         </div>
+
+        {(requiresHeaderFund || requiresHeaderDepartment) ? (
+          <div style={{ display: 'flex', gap: 12 }}>
+            {requiresHeaderFund ? (
+              <label style={{ flex: 1 }}>
+                Fund
+                <select
+                  value={headerFundId}
+                  onChange={(e) => setHeaderFundId(e.target.value)}
+                  required
+                  style={{ width: '100%' }}
+                >
+                  <option value="">Select...</option>
+                  {(headerProjectId ? funds.filter((f) => f.projectId === headerProjectId) : funds).map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.code} - {f.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {requiresHeaderDepartment ? (
+              <label style={{ flex: 1 }}>
+                Department
+                <select
+                  value={headerDepartmentId}
+                  onChange={(e) => setHeaderDepartmentId(e.target.value)}
+                  required
+                  style={{ width: '100%' }}
+                >
+                  <option value="">Select...</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.code} - {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        ) : null}
 
         <div style={{ display: 'flex', gap: 12 }}>
           <label style={{ flex: 1 }}>
@@ -573,6 +659,7 @@ export function CreateInvoicePage() {
               <tr>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Account</th>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
+                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Tax</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
                 <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
                 {showDiscountUi ? <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Disc %</th> : null}
@@ -591,7 +678,7 @@ export function CreateInvoicePage() {
                   ? funds.filter((f) => f.projectId === l.projectId)
                   : funds;
 
-                const dimColSpan = showDiscountUi ? 8 : 6;
+                const dimColSpan = showDiscountUi ? 9 : 7;
 
                 return (
                   <Fragment key={`${idx}-block`}>
@@ -673,6 +760,20 @@ export function CreateInvoicePage() {
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                     <input value={l.description} onChange={(e) => updateLine(idx, { description: e.target.value })} required style={{ width: '100%' }} />
+                  </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                    <select
+                      value={String((l as any).taxRateId ?? '')}
+                      onChange={(e) => updateLine(idx, { taxRateId: e.currentTarget.value || undefined })}
+                      style={{ width: '100%', height: 34 }}
+                    >
+                      <option value="">(None)</option>
+                      {(taxRates ?? []).map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.code} ({Number(t.rate ?? 0).toFixed(2)}%)
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
                     <input

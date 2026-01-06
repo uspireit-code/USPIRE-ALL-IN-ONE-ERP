@@ -17,6 +17,10 @@ export class CreateCustomerInvoiceLineDto {
 
   @IsOptional()
   @IsUUID()
+  taxRateId?: string;
+
+  @IsOptional()
+  @IsUUID()
   departmentId?: string;
 
   @IsOptional()
@@ -76,18 +80,20 @@ export class CreateCustomerInvoiceDto {
   invoiceNote?: string;
 
   @IsOptional()
-  @IsString()
-  invoiceType?:
-    | 'TRAINING'
-    | 'CONSULTING'
-    | 'SYSTEMS'
-    | 'PUBLISHING'
-    | 'DONATION'
-    | 'OTHER';
+  @IsUUID()
+  invoiceCategoryId?: string;
 
   @IsOptional()
   @IsUUID()
   projectId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  fundId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
 
   @IsArray()
   @ArrayMinSize(1)

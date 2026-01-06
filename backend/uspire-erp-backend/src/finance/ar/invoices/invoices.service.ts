@@ -15,12 +15,6 @@ import type {
   ListInvoicesQueryDto,
 } from './invoices.dto';
 import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
-import {
-  AR_INVOICE_RULES_ERROR,
-  INVOICE_TYPE_REVENUE_ACCOUNT_CODE,
-  requiresProjectForInvoiceType,
-  type InvoiceType,
-} from './invoice-type.rules';
 
 @Injectable()
 export class FinanceArInvoicesService {
@@ -114,6 +108,127 @@ export class FinanceArInvoicesService {
     const user = req.user;
     if (!user) throw new BadRequestException('Missing user context');
     return user;
+  }
+
+  private async getActiveDimensionOrThrow(params: {
+    tenantId: string;
+    invoiceDate: Date;
+    projectId?: string | null;
+    fundId?: string | null;
+    departmentId?: string | null;
+  }) {
+    const invoiceDate = params.invoiceDate;
+
+    if (params.projectId) {
+      const p = await this.prisma.project.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          id: params.projectId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: invoiceDate } }],
+        } as any,
+        select: { id: true } as any,
+      } as any);
+      if (!p) {
+        throw new BadRequestException(
+          'Project is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+    }
+
+    if (params.fundId) {
+      const f = await (this.prisma.fund as any).findFirst({
+        where: {
+          tenantId: params.tenantId,
+          id: params.fundId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: invoiceDate } }],
+        } as any,
+        select: { id: true, projectId: true } as any,
+      } as any);
+      if (!f) {
+        throw new BadRequestException(
+          'Fund is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+      if (params.projectId && String((f as any).projectId) !== String(params.projectId)) {
+        throw new BadRequestException(
+          'Fund is not valid for the selected project. Posting is not allowed.',
+        );
+      }
+    }
+
+    if (params.departmentId) {
+      const d = await (this.prisma.department as any).findFirst({
+        where: {
+          tenantId: params.tenantId,
+          id: params.departmentId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+          effectiveFrom: { lte: invoiceDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: invoiceDate } }],
+        } as any,
+        select: { id: true } as any,
+      } as any);
+      if (!d) {
+        throw new BadRequestException(
+          'Department is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+        );
+      }
+    }
+  }
+
+  private async loadInvoiceCategoryOrThrow(params: {
+    tenantId: string;
+    invoiceCategoryId: string | null;
+  }) {
+    if (!params.invoiceCategoryId) {
+      throw new BadRequestException('Invoice category is required before posting.');
+    }
+
+    const cat = await (this.prisma as any).invoiceCategory.findFirst({
+      where: {
+        tenantId: params.tenantId,
+        id: params.invoiceCategoryId,
+      } as any,
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        isActive: true,
+        revenueAccountId: true,
+        requiresProject: true,
+        requiresFund: true,
+        requiresDepartment: true,
+        revenueAccount: {
+          select: {
+            id: true,
+            type: true,
+            isActive: true,
+            code: true,
+            name: true,
+          },
+        },
+      } as any,
+    });
+
+    if (!cat) throw new BadRequestException('Invoice category is required before posting.');
+    if (!cat.isActive) {
+      throw new BadRequestException(`Invoice category ${cat.name} is inactive.`);
+    }
+
+    const revenueAccount = (cat as any).revenueAccount;
+    if (!revenueAccount || revenueAccount.isActive !== true || revenueAccount.type !== 'INCOME') {
+      throw new BadRequestException(
+        'Revenue account for invoice category is not configured or is invalid. Please check Chart of Accounts.',
+      );
+    }
+
+    return cat as any;
   }
 
   private normalizeHeaderKey(v: any) {
@@ -367,7 +482,13 @@ export class FinanceArInvoicesService {
 
     const inv = await this.prisma.customerInvoice.findFirst({
       where: { id, tenantId: tenant.id } as any,
-      include: { customer: true, lines: true } as any,
+      include: {
+        customer: true,
+        lines: true,
+        invoiceCategory: {
+          include: { revenueAccount: true } as any,
+        } as any,
+      } as any,
     });
 
     if (!inv) throw new NotFoundException('Invoice not found');
@@ -378,7 +499,8 @@ export class FinanceArInvoicesService {
       taxAmount: Number((inv as any).taxAmount),
       totalAmount: Number((inv as any).totalAmount),
       projectId: (inv as any).projectId ?? null,
-      invoiceType: (inv as any).invoiceType ?? null,
+      fundId: (inv as any).fundId ?? null,
+      departmentId: (inv as any).departmentId ?? null,
       lines: ((inv as any).lines ?? []).map((l: any) => ({
         ...l,
         departmentId: (l as any).departmentId ?? null,
@@ -467,6 +589,34 @@ export class FinanceArInvoicesService {
       throw new BadRequestException('Invoice must have at least 1 line');
     }
 
+    const taxRateIds = [
+      ...new Set(
+        (dto.lines ?? [])
+          .map((l: any) => String(l.taxRateId ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
+    const taxRates =
+      taxRateIds.length > 0
+        ? await (this.prisma as any).taxRate.findMany({
+            where: {
+              tenantId: tenant.id,
+              id: { in: taxRateIds },
+              isActive: true,
+            },
+            select: { id: true, type: true, rate: true } as any,
+          })
+        : [];
+    const taxById = new Map((taxRates ?? []).map((t: any) => [t.id, t]));
+    if (taxRateIds.length > 0 && taxRates.length !== taxRateIds.length) {
+      throw new BadRequestException('One or more tax rates were not found or inactive');
+    }
+    for (const t of taxRates as any[]) {
+      if (String(t.type) !== 'OUTPUT') {
+        throw new BadRequestException('Only OUTPUT VAT is allowed on AR invoices');
+      }
+    }
+
     const accountIds = [...new Set(dto.lines.map((l) => l.accountId))];
     const accounts = await this.prisma.account.findMany({
       where: {
@@ -478,10 +628,13 @@ export class FinanceArInvoicesService {
     });
     const byId = new Map(accounts.map((a) => [a.id, a] as const));
 
-    const computedLines = dto.lines.map((l) => {
+    const computedLines = dto.lines.map((l: any) => {
       const qty = this.toNum(l.quantity ?? 1);
       const unitPrice = this.toNum(l.unitPrice);
       const description = String(l.description ?? '').trim();
+
+      const taxRateId = l.taxRateId ? String(l.taxRateId).trim() : null;
+      const taxRate = taxRateId ? taxById.get(taxRateId) : null;
 
       if (!l.accountId)
         throw new BadRequestException('Invoice line missing accountId');
@@ -511,8 +664,13 @@ export class FinanceArInvoicesService {
         discountAmount: (l as any).discountAmount,
       });
       const lineTotal = this.round2(gross - disc.discountTotal);
+
+      const lineTaxAmount = taxRate
+        ? this.round2(lineTotal * (this.toNum((taxRate as any).rate) / 100))
+        : 0;
       return {
         accountId: l.accountId,
+        taxRateId,
         departmentId: (l as any).departmentId ?? null,
         projectId: (l as any).projectId ?? null,
         fundId: (l as any).fundId ?? null,
@@ -523,6 +681,7 @@ export class FinanceArInvoicesService {
         discountAmount: disc.discountAmount,
         discountTotal: disc.discountTotal,
         lineTotal,
+        lineTaxAmount,
       };
     });
 
@@ -535,7 +694,10 @@ export class FinanceArInvoicesService {
         0,
       ),
     );
-    const taxAmount = 0;
+    const taxAmount = this.round2(
+      computedLines.reduce((s, l) => s + this.toNum((l as any).lineTaxAmount ?? 0), 0),
+    );
+    const isTaxable = computedLines.some((l) => Boolean((l as any).taxRateId));
     const totalAmount = this.round2(subtotal + taxAmount);
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -549,8 +711,10 @@ export class FinanceArInvoicesService {
           dueDate,
           currency,
           exchangeRate,
-          invoiceType: (dto as any).invoiceType ?? undefined,
+          invoiceCategoryId: (dto as any).invoiceCategoryId ?? undefined,
           projectId: (dto as any).projectId ?? undefined,
+          fundId: (dto as any).fundId ?? undefined,
+          departmentId: (dto as any).departmentId ?? undefined,
           reference: dto.reference ? String(dto.reference).trim() : undefined,
           invoiceNote: (dto as any).invoiceNote
             ? String((dto as any).invoiceNote).trim()
@@ -564,12 +728,14 @@ export class FinanceArInvoicesService {
             : undefined,
           subtotal,
           taxAmount,
+          isTaxable,
           totalAmount,
           status: 'DRAFT',
           createdById: user.id,
           lines: {
             create: computedLines.map((l) => ({
               accountId: l.accountId,
+              taxRateId: (l as any).taxRateId ?? undefined,
               departmentId: (l as any).departmentId ?? undefined,
               projectId: (l as any).projectId ?? undefined,
               fundId: (l as any).fundId ?? undefined,
@@ -623,58 +789,66 @@ export class FinanceArInvoicesService {
       action: 'post',
     });
 
-    const invoiceType = ((inv as any).invoiceType ?? null) as InvoiceType | null;
-    if (!invoiceType) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.invoiceTypeRequired);
+    const invoiceCategoryId = String((inv as any).invoiceCategoryId ?? '').trim() || null;
+    const category = await this.loadInvoiceCategoryOrThrow({
+      tenantId: tenant.id,
+      invoiceCategoryId,
+    });
+
+    const headerProjectId = String((inv as any).projectId ?? '').trim() || null;
+    const headerFundId = String((inv as any).fundId ?? '').trim() || null;
+    const headerDepartmentId = String((inv as any).departmentId ?? '').trim() || null;
+
+    if (category.requiresProject && !headerProjectId) {
+      throw new BadRequestException('Project is required for this invoice category before posting.');
+    }
+    if (category.requiresFund && !headerFundId) {
+      throw new BadRequestException('Fund is required for this invoice category before posting.');
+    }
+    if (category.requiresDepartment && !headerDepartmentId) {
+      throw new BadRequestException('Department is required for this invoice category before posting.');
     }
 
-    const headerProjectId = ((inv as any).projectId ?? null) as string | null;
-    if (requiresProjectForInvoiceType(invoiceType) && !headerProjectId) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.projectRequired);
+    await this.getActiveDimensionOrThrow({
+      tenantId: tenant.id,
+      invoiceDate: new Date((inv as any).invoiceDate),
+      projectId: headerProjectId,
+      fundId: headerFundId,
+      departmentId: headerDepartmentId,
+    });
+
+    const postingProjectId = category.requiresProject ? headerProjectId : null;
+    const postingFundId = category.requiresFund ? headerFundId : null;
+    const postingDepartmentId = category.requiresDepartment
+      ? headerDepartmentId
+      : null;
+
+    const revenueAccountId = String((category as any).revenueAccountId);
+
+    const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
+
+    const invSubtotal = this.round2(Number((inv as any).subtotal));
+    const invTaxAmount = this.round2(Number((inv as any).taxAmount ?? 0));
+    const invTotal = this.round2(Number((inv as any).totalAmount));
+
+    if (this.round2(invSubtotal + invTaxAmount) !== invTotal) {
+      throw new BadRequestException(
+        'Invoice totals failed validation before posting',
+      );
     }
 
-    if (headerProjectId) {
-      const p = await this.prisma.project.findFirst({
-        where: {
-          tenantId: tenant.id,
-          id: headerProjectId,
-          status: 'ACTIVE' as any,
-          isActive: true,
-          effectiveFrom: { lte: (inv as any).invoiceDate },
-          OR: [
-            { effectiveTo: null },
-            { effectiveTo: { gte: (inv as any).invoiceDate } },
-          ],
-        } as any,
-        select: { id: true } as any,
-      } as any);
-      if (!p) {
+    if (invTaxAmount > 0) {
+      const cfg = await (this.prisma as any).tenantTaxConfig.findFirst({
+        where: { tenantId: tenant.id },
+        select: { outputVatAccountId: true } as any,
+      });
+      const vatAccountId = String(cfg?.outputVatAccountId ?? '').trim();
+      if (!vatAccountId) {
         throw new BadRequestException(
-          'Project is inactive, closed, or not effective for invoice date. Posting is not allowed.',
+          'VAT accounts must be configured before posting taxable invoices',
         );
       }
     }
-
-    const revenueAccountCode =
-      (INVOICE_TYPE_REVENUE_ACCOUNT_CODE as any)[invoiceType] ?? null;
-    if (!revenueAccountCode) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
-    }
-
-    const revenueAccount = await this.prisma.account.findFirst({
-      where: {
-        tenantId: tenant.id,
-        code: String(revenueAccountCode),
-        isActive: true,
-        type: 'INCOME',
-      } as any,
-      select: { id: true },
-    });
-    if (!revenueAccount) {
-      throw new BadRequestException(AR_INVOICE_RULES_ERROR.revenueAccountInvalid);
-    }
-
-    const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
     const lines = ((inv as any).lines ?? []).map((l: any) => ({
       accountId: l.accountId,
@@ -685,14 +859,9 @@ export class FinanceArInvoicesService {
     if (lines.length < 1)
       throw new BadRequestException('Invoice must have at least 1 line');
 
-    const creditsTotal = this.round2(
-      lines.reduce((s, l) => s + l.lineTotal, 0),
-    );
-    const invTotal = this.round2(Number((inv as any).totalAmount));
-    if (creditsTotal !== invTotal) {
-      throw new BadRequestException(
-        'Invoice totals failed validation before posting',
-      );
+    const creditsSubtotal = this.round2(lines.reduce((s, l) => s + l.lineTotal, 0));
+    if (creditsSubtotal !== invSubtotal) {
+      throw new BadRequestException('Invoice totals failed validation before posting');
     }
 
     let postedJournal: any = null;
@@ -708,16 +877,39 @@ export class FinanceArInvoicesService {
             create: [
               {
                 accountId: arAccount.id,
-                debit: (inv as any).totalAmount,
+                debit: invTotal,
                 credit: 0,
-                projectId: headerProjectId,
+                projectId: postingProjectId,
+                fundId: postingFundId,
+                departmentId: postingDepartmentId,
               },
               {
-                accountId: revenueAccount.id,
+                accountId: revenueAccountId,
                 debit: 0,
-                credit: (inv as any).totalAmount,
-                projectId: headerProjectId,
+                credit: invSubtotal,
+                projectId: postingProjectId,
+                fundId: postingFundId,
+                departmentId: postingDepartmentId,
               },
+              ...(invTaxAmount > 0
+                ? [
+                    {
+                      accountId: String(
+                        (
+                          (await (this.prisma as any).tenantTaxConfig.findFirst({
+                            where: { tenantId: tenant.id },
+                            select: { outputVatAccountId: true } as any,
+                          })) as any
+                        )?.outputVatAccountId,
+                      ),
+                      debit: 0,
+                      credit: invTaxAmount,
+                      projectId: postingProjectId,
+                      fundId: postingFundId,
+                      departmentId: postingDepartmentId,
+                    },
+                  ]
+                : []),
             ],
           },
         } as any,
@@ -755,6 +947,10 @@ export class FinanceArInvoicesService {
             outcome: 'SUCCESS',
             reason: JSON.stringify({
               invoiceNumber: (inv as any).invoiceNumber,
+              invoiceCategoryId: (category as any).id,
+              invoiceCategoryCode: (category as any).code,
+              invoiceCategoryName: (category as any).name,
+              revenueAccountId,
             }),
             userId: user.id,
             permissionUsed: 'AR_INVOICE_POST',
@@ -1398,6 +1594,7 @@ export class FinanceArInvoicesService {
           computedLines.reduce((s, l) => s + l.lineTotal, 0),
         );
         const taxAmount = 0;
+        const isTaxable = false;
         const totalAmount = this.round2(subtotal + taxAmount);
 
         await this.prisma.$transaction(async (tx) => {
@@ -1420,6 +1617,7 @@ export class FinanceArInvoicesService {
                 : undefined,
               subtotal,
               taxAmount,
+              isTaxable,
               totalAmount,
               status: 'DRAFT',
               createdById: user.id,

@@ -13,38 +13,52 @@ export class TaxService {
       throw new BadRequestException('Missing tenant context');
     }
 
-    const glAccount = await this.prisma.account.findFirst({
-      where: { id: dto.glAccountId, tenantId: tenant.id, isActive: true },
-      select: { id: true, type: true },
-    });
+    const code = String(dto.code ?? '').trim().toUpperCase();
+    const name = String(dto.name ?? '').trim();
+    if (!code) throw new BadRequestException('code is required');
+    if (!name) throw new BadRequestException('name is required');
 
-    if (!glAccount) {
-      throw new BadRequestException(
-        'VAT control GL account not found or inactive',
-      );
+    const rate = Number(dto.rate);
+    if (!(rate >= 0 && rate <= 100)) {
+      throw new BadRequestException('rate must be between 0 and 100');
     }
 
-    if (dto.type === 'INPUT' && glAccount.type !== 'ASSET') {
-      throw new BadRequestException(
-        'INPUT VAT control account must be an ASSET',
-      );
+    const glAccountId = dto.glAccountId ? String(dto.glAccountId).trim() : undefined;
+    if (glAccountId) {
+      const glAccount = await this.prisma.account.findFirst({
+        where: { id: glAccountId, tenantId: tenant.id, isActive: true },
+        select: { id: true, type: true },
+      });
+
+      if (!glAccount) {
+        throw new BadRequestException(
+          'VAT control GL account not found or inactive',
+        );
+      }
+
+      if (dto.type === 'INPUT' && glAccount.type !== 'ASSET') {
+        throw new BadRequestException(
+          'INPUT VAT control account must be an ASSET',
+        );
+      }
+
+      if (dto.type === 'OUTPUT' && glAccount.type !== 'LIABILITY') {
+        throw new BadRequestException(
+          'OUTPUT VAT control account must be a LIABILITY',
+        );
+      }
     }
 
-    if (dto.type === 'OUTPUT' && glAccount.type !== 'LIABILITY') {
-      throw new BadRequestException(
-        'OUTPUT VAT control account must be a LIABILITY',
-      );
-    }
-
-    return this.prisma.taxRate.create({
+    return (this.prisma as any).taxRate.create({
       data: {
         tenantId: tenant.id,
-        name: dto.name,
-        rate: dto.rate,
+        code,
+        name,
+        rate,
         type: dto.type,
-        glAccountId: dto.glAccountId,
+        glAccountId,
         isActive: true,
-      },
+      } as any,
       include: { glAccount: true },
     });
   }

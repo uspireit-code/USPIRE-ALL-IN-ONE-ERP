@@ -862,7 +862,9 @@ export class CoaService {
     for (const r of recurringRefs)
       addBlocked(r.accountId, 'RecurringJournalTemplateLine');
     for (const r of bankRefs) addBlocked(r.glAccountId, 'BankAccount');
-    for (const r of taxRefs) addBlocked(r.glAccountId, 'TaxRate');
+    for (const r of taxRefs) {
+      if (r.glAccountId) addBlocked(r.glAccountId, 'TaxRate');
+    }
     for (const r of faCatRefs) {
       addBlocked(r.assetAccountId, 'FixedAssetCategory');
       addBlocked(r.accumDepAccountId, 'FixedAssetCategory');

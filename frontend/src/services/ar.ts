@@ -32,6 +32,7 @@ export type AccountLookup = {
 export type CustomerInvoiceLine = {
   id: string;
   accountId: string;
+  taxRateId?: string | null;
   departmentId?: string | null;
   projectId?: string | null;
   fundId?: string | null;
@@ -52,8 +53,10 @@ export type CustomerInvoice = {
   dueDate: string;
   currency: string;
   exchangeRate: number;
-  invoiceType?: 'TRAINING' | 'CONSULTING' | 'SYSTEMS' | 'PUBLISHING' | 'DONATION' | 'OTHER' | null;
+  invoiceCategoryId?: string | null;
   projectId?: string | null;
+  fundId?: string | null;
+  departmentId?: string | null;
   reference?: string | null;
   invoiceNote?: string | null;
   customerNameSnapshot?: string | null;
@@ -61,6 +64,7 @@ export type CustomerInvoice = {
   customerBillingAddressSnapshot?: string | null;
   subtotal: number;
   taxAmount: number;
+  isTaxable?: boolean;
   totalAmount: number;
   outstandingBalance?: number;
   status: 'DRAFT' | 'POSTED';
@@ -77,6 +81,20 @@ export type InvoicesListResponse = {
   pageSize: number;
   total: number;
   items: CustomerInvoice[];
+};
+
+export type InvoiceCategory = {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  isSystemDefault?: boolean;
+  revenueAccountId: string;
+  requiresProject: boolean;
+  requiresFund: boolean;
+  requiresDepartment: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type InvoicesImportPreviewRow = {
@@ -330,10 +348,13 @@ export async function createInvoice(params: {
   exchangeRate?: number;
   reference?: string;
   invoiceNote?: string;
-  invoiceType?: 'TRAINING' | 'CONSULTING' | 'SYSTEMS' | 'PUBLISHING' | 'DONATION' | 'OTHER';
   projectId?: string;
+  fundId?: string;
+  departmentId?: string;
+  invoiceCategoryId?: string;
   lines: Array<{
     accountId: string;
+    taxRateId?: string;
     departmentId?: string;
     projectId?: string;
     fundId?: string;
@@ -354,9 +375,80 @@ export async function createInvoice(params: {
       exchangeRate: params.exchangeRate,
       reference: params.reference || undefined,
       invoiceNote: params.invoiceNote || undefined,
-      invoiceType: params.invoiceType || undefined,
       projectId: params.projectId || undefined,
+      fundId: params.fundId || undefined,
+      departmentId: params.departmentId || undefined,
+      invoiceCategoryId: params.invoiceCategoryId || undefined,
       lines: params.lines,
+    }),
+  });
+}
+
+export async function listInvoiceCategories() {
+  const res = await apiFetch<{ items: InvoiceCategory[] }>('/finance/ar/invoice-categories', {
+    method: 'GET',
+  });
+  return res?.items ?? [];
+}
+
+export async function getInvoiceCategoryById(id: string) {
+  return apiFetch<InvoiceCategory>(`/finance/ar/invoice-categories/${id}`, {
+    method: 'GET',
+  });
+}
+
+export async function createInvoiceCategory(params: {
+  code: string;
+  name: string;
+  isActive?: boolean;
+  revenueAccountId: string;
+  requiresProject?: boolean;
+  requiresFund?: boolean;
+  requiresDepartment?: boolean;
+}) {
+  return apiFetch<InvoiceCategory>('/finance/ar/invoice-categories', {
+    method: 'POST',
+    body: JSON.stringify({
+      code: params.code,
+      name: params.name,
+      isActive: params.isActive,
+      revenueAccountId: params.revenueAccountId,
+      requiresProject: params.requiresProject,
+      requiresFund: params.requiresFund,
+      requiresDepartment: params.requiresDepartment,
+    }),
+  });
+}
+
+export async function updateInvoiceCategory(
+  id: string,
+  params: {
+    code?: string;
+    name?: string;
+    revenueAccountId?: string;
+    requiresProject?: boolean;
+    requiresFund?: boolean;
+    requiresDepartment?: boolean;
+  },
+) {
+  return apiFetch<InvoiceCategory>(`/finance/ar/invoice-categories/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      code: params.code,
+      name: params.name,
+      revenueAccountId: params.revenueAccountId,
+      requiresProject: params.requiresProject,
+      requiresFund: params.requiresFund,
+      requiresDepartment: params.requiresDepartment,
+    }),
+  });
+}
+
+export async function setInvoiceCategoryActive(id: string, isActive: boolean) {
+  return apiFetch<InvoiceCategory>(`/finance/ar/invoice-categories/${id}/active`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      isActive,
     }),
   });
 }

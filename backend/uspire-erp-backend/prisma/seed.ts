@@ -173,6 +173,8 @@ async function main() {
     { code: 'FINANCE_DISCLOSURE_VIEW', description: 'View disclosure notes' },
     { code: 'TAX_RATE_CREATE', description: 'Create tax / VAT rates' },
     { code: 'TAX_RATE_VIEW', description: 'View tax / VAT rates' },
+    { code: 'TAX_RATE_UPDATE', description: 'Update tax / VAT rates' },
+    { code: 'TAX_CONFIG_UPDATE', description: 'Update tax / VAT configuration' },
     { code: 'TAX_REPORT_VIEW', description: 'View VAT reports' },
     { code: 'AP_SUPPLIER_CREATE', description: 'Create suppliers' },
     { code: 'AP_INVOICE_CREATE', description: 'Create supplier invoices' },
@@ -218,6 +220,11 @@ async function main() {
     { code: 'MASTER_DATA_FUND_VIEW', description: 'View Funds master data' },
     { code: 'MASTER_DATA_FUND_CREATE', description: 'Create Funds master data' },
     { code: 'MASTER_DATA_FUND_EDIT', description: 'Edit Funds master data' },
+
+    { code: 'INVOICE_CATEGORY_VIEW', description: 'View invoice categories' },
+    { code: 'INVOICE_CATEGORY_CREATE', description: 'Create invoice categories' },
+    { code: 'INVOICE_CATEGORY_UPDATE', description: 'Update invoice categories' },
+    { code: 'INVOICE_CATEGORY_DISABLE', description: 'Disable invoice categories' },
   ];
 
   await prisma.permission.createMany({
@@ -238,6 +245,23 @@ async function main() {
       description: 'Tenant administrator',
     },
     update: {},
+  });
+
+  const systemAdminRole = await prisma.role.upsert({
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'SYSTEM_ADMIN',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'SYSTEM_ADMIN',
+      description: 'System administrator',
+    },
+    update: {
+      description: 'System administrator',
+    },
   });
 
   const superAdminRole = await prisma.role.upsert({
@@ -329,7 +353,11 @@ async function main() {
         (p) =>
           p.code !== 'FINANCE_GL_FINAL_POST' &&
           p.code !== 'FINANCE_GL_POST' &&
-          p.code !== 'FINANCE_COA_UNLOCK',
+          p.code !== 'FINANCE_COA_UNLOCK' &&
+          p.code !== 'INVOICE_CATEGORY_VIEW' &&
+          p.code !== 'INVOICE_CATEGORY_CREATE' &&
+          p.code !== 'INVOICE_CATEGORY_UPDATE' &&
+          p.code !== 'INVOICE_CATEGORY_DISABLE',
       )
       .map((p) => ({
         roleId: adminRole.id,
@@ -397,6 +425,73 @@ async function main() {
   const mdFundViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_VIEW' }, select: { id: true } });
   const mdFundCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_CREATE' }, select: { id: true } });
   const mdFundEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_EDIT' }, select: { id: true } });
+
+  const invoiceCategoryViewPerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_VIEW' }, select: { id: true } });
+  const invoiceCategoryCreatePerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_CREATE' }, select: { id: true } });
+  const invoiceCategoryUpdatePerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_UPDATE' }, select: { id: true } });
+  const invoiceCategoryDisablePerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_DISABLE' }, select: { id: true } });
+
+  const taxRateViewPerm = await prisma.permission.findUnique({ where: { code: 'TAX_RATE_VIEW' }, select: { id: true } });
+  const taxRateCreatePerm = await prisma.permission.findUnique({ where: { code: 'TAX_RATE_CREATE' }, select: { id: true } });
+  const taxRateUpdatePerm = await prisma.permission.findUnique({ where: { code: 'TAX_RATE_UPDATE' }, select: { id: true } });
+  const taxConfigUpdatePerm = await prisma.permission.findUnique({ where: { code: 'TAX_CONFIG_UPDATE' }, select: { id: true } });
+
+  // SYSTEM_ADMIN governance: allow managing invoice categories.
+  // Additive-only and safe to re-run.
+  const systemAdminInvoiceCategoryPermIds = [
+    invoiceCategoryViewPerm?.id,
+    invoiceCategoryCreatePerm?.id,
+    invoiceCategoryUpdatePerm?.id,
+    invoiceCategoryDisablePerm?.id,
+  ].filter(Boolean) as string[];
+  if (systemAdminRole?.id && systemAdminInvoiceCategoryPermIds.length > 0) {
+    await prisma.rolePermission.createMany({
+      data: systemAdminInvoiceCategoryPermIds.map((permissionId) => ({
+        roleId: systemAdminRole.id,
+        permissionId,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  // Tax governance: SYSTEM_ADMIN + FINANCE_CONTROLLER can manage tax rates and configuration.
+  // Additive-only and safe to re-run.
+  const taxPermIds = [
+    taxRateViewPerm?.id,
+    taxRateCreatePerm?.id,
+    taxRateUpdatePerm?.id,
+    taxConfigUpdatePerm?.id,
+  ].filter(Boolean) as string[];
+  if (taxPermIds.length > 0) {
+    await prisma.rolePermission.createMany({
+      data: taxPermIds
+        .map((permissionId) => [systemAdminRole?.id, financeControllerRole?.id]
+          .filter(Boolean)
+          .map((roleId) => ({ roleId: roleId as string, permissionId })))
+        .flat(),
+      skipDuplicates: true,
+    });
+  }
+
+  // Ensure TenantTaxConfig row exists (nullable VAT accounts; must be set via Settings before posting taxable invoices).
+  await (prisma as any).tenantTaxConfig.upsert({
+    where: { tenantId: tenant.id },
+    create: { tenantId: tenant.id },
+    update: {},
+  });
+
+  // Seed default OUTPUT tax rates if tenant has none.
+  const existingTaxRateCount = await prisma.taxRate.count({ where: { tenantId: tenant.id } });
+  if (existingTaxRateCount === 0) {
+    await prisma.taxRate.createMany({
+      data: [
+        { tenantId: tenant.id, code: 'VAT16', name: 'VAT16', rate: 16.0, type: 'OUTPUT', isActive: true },
+        { tenantId: tenant.id, code: 'VAT0', name: 'VAT0', rate: 0.0, type: 'OUTPUT', isActive: true },
+        { tenantId: tenant.id, code: 'EXEMPT', name: 'EXEMPT', rate: 0.0, type: 'OUTPUT', isActive: true },
+      ] as any,
+      skipDuplicates: true,
+    });
+  }
   const glRecurringGeneratePerm = await prisma.permission.upsert({
     where: { code: 'FINANCE_GL_RECURRING_GENERATE' },
     create: {
@@ -623,6 +718,107 @@ async function main() {
     });
   }
 
+  // Seed default invoice categories per tenant (only if tenant has none).
+  // These are defaults, but remain editable via RBAC.
+  const existingInvoiceCategoryCount = await (prisma as any).invoiceCategory.count({
+    where: { tenantId: tenant.id },
+  });
+
+  if (existingInvoiceCategoryCount === 0) {
+    const defaults: Array<{
+      code: string;
+      name: string;
+      revenueAccountCode: string;
+      requiresProject: boolean;
+      requiresFund: boolean;
+      requiresDepartment: boolean;
+    }> = [
+      {
+        code: 'TRAINING',
+        name: 'Training',
+        revenueAccountCode: '40160',
+        requiresProject: true,
+        requiresFund: false,
+        requiresDepartment: false,
+      },
+      {
+        code: 'CONSULTING',
+        name: 'Consulting',
+        revenueAccountCode: '40120',
+        requiresProject: true,
+        requiresFund: false,
+        requiresDepartment: false,
+      },
+      {
+        code: 'SYSTEMS',
+        name: 'Systems',
+        revenueAccountCode: '40180',
+        requiresProject: true,
+        requiresFund: false,
+        requiresDepartment: false,
+      },
+      {
+        code: 'PUBLISHING',
+        name: 'Publishing',
+        revenueAccountCode: '40200',
+        requiresProject: false,
+        requiresFund: false,
+        requiresDepartment: false,
+      },
+      {
+        code: 'DONATION',
+        name: 'Donation',
+        revenueAccountCode: '70140',
+        requiresProject: false,
+        requiresFund: false,
+        requiresDepartment: false,
+      },
+    ];
+
+    for (const c of defaults) {
+      const revenueAccount = await prisma.account.findFirst({
+        where: {
+          tenantId: tenant.id,
+          code: c.revenueAccountCode,
+          isActive: true,
+          type: 'INCOME' as any,
+        } as any,
+        select: { id: true } as any,
+      } as any);
+
+      if (!revenueAccount?.id) {
+        continue;
+      }
+
+      await (prisma as any).invoiceCategory.upsert({
+        where: {
+          tenantId_code: {
+            tenantId: tenant.id,
+            code: c.code,
+          },
+        },
+        create: {
+          tenantId: tenant.id,
+          code: c.code,
+          name: c.name,
+          isActive: true,
+          isSystemDefault: true,
+          revenueAccountId: revenueAccount.id,
+          requiresProject: c.requiresProject,
+          requiresFund: c.requiresFund,
+          requiresDepartment: c.requiresDepartment,
+        },
+        update: {
+          name: c.name,
+          revenueAccountId: revenueAccount.id,
+          requiresProject: c.requiresProject,
+          requiresFund: c.requiresFund,
+          requiresDepartment: c.requiresDepartment,
+        },
+      });
+    }
+  }
+
   if (financeManagerRole?.id) {
     await prisma.rolePermission.createMany({
       data: [
@@ -685,6 +881,11 @@ async function main() {
         mdFundViewPerm?.id,
         mdFundCreatePerm?.id,
         mdFundEditPerm?.id,
+
+        invoiceCategoryViewPerm?.id,
+        invoiceCategoryCreatePerm?.id,
+        invoiceCategoryUpdatePerm?.id,
+        invoiceCategoryDisablePerm?.id,
       ]
         .filter(Boolean)
         .map((permissionId) => ({

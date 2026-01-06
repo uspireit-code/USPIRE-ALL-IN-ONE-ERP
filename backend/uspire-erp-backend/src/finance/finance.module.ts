@@ -11,6 +11,10 @@ import { FinanceArCustomersController } from './ar/customers/customers.controlle
 import { FinanceArCustomersService } from './ar/customers/customers.service';
 import { FinanceArInvoicesController } from './ar/invoices/invoices.controller';
 import { FinanceArInvoicesService } from './ar/invoices/invoices.service';
+import { InvoiceCategoriesController } from './ar/invoice-categories/invoice-categories.controller';
+import { InvoiceCategoryService } from './ar/invoice-categories/invoice-category.service';
+import { FinanceTaxController } from './tax/tax.controller';
+import { FinanceTaxService } from './tax/tax.service';
 
 @Module({
   imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule],
@@ -18,11 +22,15 @@ import { FinanceArInvoicesService } from './ar/invoices/invoices.service';
     CoaController,
     FinanceArCustomersController,
     FinanceArInvoicesController,
+    InvoiceCategoriesController,
+    FinanceTaxController,
   ],
   providers: [
     CoaService,
     FinanceArCustomersService,
     FinanceArInvoicesService,
+    InvoiceCategoryService,
+    FinanceTaxService,
     JwtAuthGuard,
     PermissionsGuard,
   ],

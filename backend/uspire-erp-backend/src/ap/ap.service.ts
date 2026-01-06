@@ -530,11 +530,14 @@ export class ApService {
 
     const taxByAccountId = new Map<string, number>();
     for (const t of taxLines) {
-      const prev = taxByAccountId.get(t.taxRate.glAccountId) ?? 0;
-      taxByAccountId.set(
-        t.taxRate.glAccountId,
-        this.round2(prev + Number(t.taxAmount)),
-      );
+      const accountId = String(t.taxRate.glAccountId ?? '').trim();
+      if (!accountId) {
+        throw new BadRequestException(
+          'Tax rate is missing a VAT control account (glAccountId). Configure the tax rate before posting.',
+        );
+      }
+      const prev = taxByAccountId.get(accountId) ?? 0;
+      taxByAccountId.set(accountId, this.round2(prev + Number(t.taxAmount)));
     }
 
     const journal = await this.prisma.journalEntry.create({

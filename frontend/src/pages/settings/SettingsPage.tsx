@@ -69,9 +69,57 @@ export function SettingsPage() {
         </svg>
       ),
     },
+    ...(hasPermission('TAX_RATE_VIEW')
+      ? [
+          {
+            key: 'tax-rates',
+            title: 'Tax Rates',
+            description: 'Manage VAT / tax rates for this tenant.',
+            to: '/settings/tax-rates',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v20" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H7" />
+              </svg>
+            ),
+          },
+          {
+            key: 'tax-config',
+            title: 'Tax Configuration',
+            description: 'Configure VAT control accounts for posting.',
+            to: '/settings/tax-configuration',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v18" />
+                <path d="M19 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H5" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...(hasPermission('INVOICE_CATEGORY_VIEW')
+      ? [
+          {
+            key: 'invoice-categories',
+            title: 'Invoice Categories',
+            description: 'Manage invoice categories and revenue rules',
+            to: '/settings/master-data/invoice-categories',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M16 13H8" />
+                <path d="M16 17H8" />
+                <path d="M10 9H8" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
     ...(hasPermission('MASTER_DATA_DEPARTMENT_VIEW') ||
     hasPermission('MASTER_DATA_PROJECT_VIEW') ||
-    hasPermission('MASTER_DATA_FUND_VIEW')
+    hasPermission('MASTER_DATA_FUND_VIEW') ||
+    hasPermission('INVOICE_CATEGORY_VIEW')
       ? [
           {
             key: 'master-data',

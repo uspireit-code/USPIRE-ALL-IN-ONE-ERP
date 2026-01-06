@@ -39,18 +39,20 @@ export class CreateCustomerInvoiceDto {
   totalAmount!: number;
 
   @IsOptional()
-  @IsString()
-  invoiceType?:
-    | 'TRAINING'
-    | 'CONSULTING'
-    | 'SYSTEMS'
-    | 'PUBLISHING'
-    | 'DONATION'
-    | 'OTHER';
+  @IsUUID()
+  invoiceCategoryId?: string;
 
   @IsOptional()
   @IsUUID()
   projectId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  fundId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
 
   @IsArray()
   @ArrayMinSize(1)

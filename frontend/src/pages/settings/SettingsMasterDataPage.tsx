@@ -10,6 +10,7 @@ export function SettingsMasterDataPage() {
   const canDepartments = hasPermission('MASTER_DATA_DEPARTMENT_VIEW');
   const canProjects = hasPermission('MASTER_DATA_PROJECT_VIEW');
   const canFunds = hasPermission('MASTER_DATA_FUND_VIEW');
+  const canInvoiceCategories = hasPermission('INVOICE_CATEGORY_VIEW');
 
   const NAVY = '#020445';
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
@@ -57,6 +58,22 @@ export function SettingsMasterDataPage() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 1v22" />
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
+        </svg>
+      ),
+    },
+    {
+      key: 'invoice-categories',
+      title: 'Invoice Categories',
+      description: 'Configure invoice categories and posting dimension requirements.',
+      to: '/settings/master-data/invoice-categories',
+      show: canInvoiceCategories,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M16 13H8" />
+          <path d="M16 17H8" />
+          <path d="M10 9H8" />
         </svg>
       ),
     },

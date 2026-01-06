@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import type { CustomerInvoice } from '../../services/ar';
-import { downloadInvoiceExport, getInvoiceById, postInvoice } from '../../services/ar';
+import type { CustomerInvoice, InvoiceCategory } from '../../services/ar';
+import { downloadInvoiceExport, getInvoiceById, listInvoiceCategories, postInvoice } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
 import { listPeriods, type AccountingPeriod } from '../../services/periods';
+import type { TaxRate } from '../../services/tax';
+import { listTaxRates } from '../../services/tax';
 import { formatMoney } from '../../money';
 
 export function InvoiceDetailsPage() {
@@ -21,6 +23,8 @@ export function InvoiceDetailsPage() {
   const [exportBusy, setExportBusy] = useState(false);
   const [periods, setPeriods] = useState<AccountingPeriod[] | null>(null);
   const [periodsError, setPeriodsError] = useState<string | null>(null);
+  const [invoiceCategories, setInvoiceCategories] = useState<InvoiceCategory[] | null>(null);
+  const [taxRates, setTaxRates] = useState<TaxRate[] | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -71,6 +75,46 @@ export function InvoiceDetailsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    listInvoiceCategories()
+      .then((cats) => {
+        if (!mounted) return;
+        setInvoiceCategories(cats ?? []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setInvoiceCategories([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    listTaxRates()
+      .then((rates) => {
+        if (!mounted) return;
+        setTaxRates(rates ?? []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setTaxRates([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const taxRateLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of taxRates ?? []) {
+      map.set(t.id, `${t.code} (${Number(t.rate ?? 0).toFixed(2)}%)`);
+    }
+    return map;
+  }, [taxRates]);
+
   const allowed = useMemo(() => {
     const status = invoice?.status;
     return {
@@ -97,15 +141,8 @@ export function InvoiceDetailsPage() {
     if (!allowed.post) return null;
     if (!periods) return 'Checking accounting period…';
 
-    const invoiceType = String((invoice as any)?.invoiceType ?? '').trim();
-    const requiresProject =
-      invoiceType === 'TRAINING' ||
-      invoiceType === 'CONSULTING' ||
-      invoiceType === 'SYSTEMS';
-    const headerProjectId = String((invoice as any)?.projectId ?? '').trim();
-    if (!invoiceType) return 'Invoice type is required before posting.';
-    if (requiresProject && !headerProjectId)
-      return 'Project is required for this invoice type before posting.';
+    const invoiceCategoryId = String((invoice as any)?.invoiceCategoryId ?? '').trim();
+    if (!invoiceCategoryId) return 'Invoice category is required before posting.';
 
     if (!periodForInvoiceDate) {
       const ymd = invoice?.invoiceDate?.slice(0, 10) ?? '';
@@ -118,17 +155,30 @@ export function InvoiceDetailsPage() {
     return null;
   }, [allowed.post, invoice?.invoiceDate, periodForInvoiceDate, periods]);
 
+  const invoiceCategoryLabel = useMemo(() => {
+    const id = String((invoice as any)?.invoiceCategoryId ?? '').trim();
+    if (!id) return '-';
+    const cat = (invoiceCategories ?? []).find((c) => c.id === id) ?? null;
+    if (!cat) return id;
+    const suffix = cat.isActive ? '' : ' (inactive)';
+    return `${cat.code} - ${cat.name}${suffix}`;
+  }, [invoice, invoiceCategories]);
+
   const computed = useMemo(() => {
     const lines = invoice?.lines ?? [];
     const grossSubtotal = lines.reduce((s, l) => s + (Number(l.quantity ?? 0) * Number(l.unitPrice ?? 0)), 0);
     const discountTotal = lines.reduce((s, l) => s + Number(l.discountTotal ?? 0), 0);
     const hasDiscount = discountTotal > 0;
+    const taxAmount = Number((invoice as any)?.taxAmount ?? 0);
+    const isTaxable = Boolean((invoice as any)?.isTaxable) || taxAmount > 0 || lines.some((l: any) => Boolean(String(l.taxRateId ?? '').trim()));
     return {
       grossSubtotal,
       discountTotal,
       hasDiscount,
+      taxAmount,
+      isTaxable,
     };
-  }, [invoice?.lines]);
+  }, [invoice, invoice?.lines]);
 
   const balances = useMemo(() => {
     const total = Number(invoice?.totalAmount ?? 0);
@@ -202,11 +252,21 @@ export function InvoiceDetailsPage() {
           <b>Customer:</b> {invoice.customer?.name ?? '-'}
         </div>
         <div>
-          <b>Invoice Type:</b> {(invoice as any).invoiceType ?? '-'}
+          <b>Invoice Category:</b> {invoiceCategoryLabel}
         </div>
         {(invoice as any).projectId ? (
           <div>
             <b>Project:</b> {(invoice as any).projectId}
+          </div>
+        ) : null}
+        {(invoice as any).fundId ? (
+          <div>
+            <b>Fund:</b> {(invoice as any).fundId}
+          </div>
+        ) : null}
+        {(invoice as any).departmentId ? (
+          <div>
+            <b>Department:</b> {(invoice as any).departmentId}
           </div>
         ) : null}
         <div>
@@ -246,7 +306,11 @@ export function InvoiceDetailsPage() {
           )}
         </div>
         <div>
-          <b>Tax:</b> {formatMoney(invoice.taxAmount, invoice.currency)}
+          {computed.isTaxable ? (
+            <div>
+              <b>Tax:</b> {formatMoney(invoice.taxAmount, invoice.currency)}
+            </div>
+          ) : null}
         </div>
         <div>
           <b>Invoice Total:</b> {formatMoney(balances.total, invoice.currency)}
@@ -283,6 +347,7 @@ export function InvoiceDetailsPage() {
           <thead>
             <tr>
               <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
+              {computed.isTaxable ? <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Tax</th> : null}
               <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Qty</th>
               <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Unit Price</th>
               {computed.hasDiscount ? <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Discount</th> : null}
@@ -293,6 +358,14 @@ export function InvoiceDetailsPage() {
             {invoice.lines.map((l) => (
               <tr key={l.id}>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.description}</td>
+                {computed.isTaxable ? (
+                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                    {(() => {
+                      const id = String((l as any).taxRateId ?? '').trim();
+                      return id ? taxRateLabelById.get(id) ?? id : '';
+                    })()}
+                  </td>
+                ) : null}
                 <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.quantity ?? 0))}</td>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(Number(l.unitPrice ?? 0), invoice.currency)}</td>
                 {computed.hasDiscount ? (
