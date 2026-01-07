@@ -225,6 +225,19 @@ async function main() {
     { code: 'INVOICE_CATEGORY_CREATE', description: 'Create invoice categories' },
     { code: 'INVOICE_CATEGORY_UPDATE', description: 'Update invoice categories' },
     { code: 'INVOICE_CATEGORY_DISABLE', description: 'Disable invoice categories' },
+
+    { code: 'CREDIT_NOTE_CREATE', description: 'Create customer credit notes (draft)' },
+    { code: 'CREDIT_NOTE_APPROVE', description: 'Approve/post customer credit notes (controller)' },
+    { code: 'REFUND_CREATE', description: 'Create customer refunds (draft)' },
+    { code: 'REFUND_APPROVE', description: 'Approve/post customer refunds (controller)' },
+
+    { code: 'AR_CREDIT_NOTE_CREATE', description: 'Create customer credit notes (draft)' },
+    { code: 'AR_CREDIT_NOTE_APPROVE', description: 'Approve customer credit notes' },
+    { code: 'AR_CREDIT_NOTE_POST', description: 'Post customer credit notes' },
+
+    { code: 'AR_REFUND_CREATE', description: 'Create customer refunds (draft)' },
+    { code: 'AR_REFUND_APPROVE', description: 'Approve customer refunds' },
+    { code: 'AR_REFUND_POST', description: 'Post customer refunds' },
   ];
 
   await prisma.permission.createMany({
@@ -347,6 +360,36 @@ async function main() {
     select: { id: true, code: true },
   });
 
+  const permissionIdByCode = new Map(allPermissions.map((p) => [p.code, p.id] as const));
+
+  async function assignPermissionsByCode(roleId: string, permissionCodes: string[]) {
+    const permissionIds = permissionCodes
+      .map((c) => permissionIdByCode.get(c))
+      .filter(Boolean) as string[];
+
+    if (permissionIds.length === 0) return;
+
+    await prisma.rolePermission.createMany({
+      data: permissionIds.map((permissionId) => ({ roleId, permissionId })),
+      skipDuplicates: true,
+    });
+  }
+
+  async function removePermissionsByCode(roleIds: string[], permissionCodes: string[]) {
+    const permissionIds = permissionCodes
+      .map((c) => permissionIdByCode.get(c))
+      .filter(Boolean) as string[];
+
+    if (roleIds.length === 0 || permissionIds.length === 0) return;
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        roleId: { in: roleIds },
+        permissionId: { in: permissionIds },
+      },
+    });
+  }
+
   await prisma.rolePermission.createMany({
     data: allPermissions
       .filter(
@@ -354,6 +397,10 @@ async function main() {
           p.code !== 'FINANCE_GL_FINAL_POST' &&
           p.code !== 'FINANCE_GL_POST' &&
           p.code !== 'FINANCE_COA_UNLOCK' &&
+          p.code !== 'AR_INVOICE_POST' &&
+          p.code !== 'AP_INVOICE_POST' &&
+          p.code !== 'PAYMENT_POST' &&
+          p.code !== 'FINANCE_PERIOD_CLOSE_APPROVE' &&
           p.code !== 'INVOICE_CATEGORY_VIEW' &&
           p.code !== 'INVOICE_CATEGORY_CREATE' &&
           p.code !== 'INVOICE_CATEGORY_UPDATE' &&
@@ -366,13 +413,85 @@ async function main() {
     skipDuplicates: true,
   });
 
-  await prisma.rolePermission.createMany({
-    data: allPermissions.map((p) => ({
-      roleId: superAdminRole.id,
-      permissionId: p.id,
-    })),
-    skipDuplicates: true,
-  });
+  const forbiddenAdminBypassPermCodes = [
+    'FINANCE_GL_CREATE',
+    'FINANCE_GL_APPROVE',
+    'FINANCE_GL_POST',
+    'FINANCE_GL_FINAL_POST',
+    'FINANCE_GL_RECURRING_MANAGE',
+    'FINANCE_GL_RECURRING_GENERATE',
+
+    'AR_INVOICE_CREATE',
+    'AR_INVOICE_SUBMIT',
+    'AR_INVOICE_APPROVE',
+    'AR_INVOICE_POST',
+
+    'AP_INVOICE_CREATE',
+    'AP_INVOICE_SUBMIT',
+    'AP_INVOICE_APPROVE',
+    'AP_INVOICE_POST',
+
+    'PAYMENT_CREATE',
+    'PAYMENT_APPROVE',
+    'PAYMENT_POST',
+
+    'FINANCE_PERIOD_CLOSE',
+    'FINANCE_PERIOD_CLOSE_APPROVE',
+
+    'TAX_CONFIG_UPDATE',
+    'CREDIT_NOTE_APPROVE',
+    'REFUND_APPROVE',
+    'AR_CREDIT_NOTE_CREATE',
+    'AR_CREDIT_NOTE_APPROVE',
+    'AR_CREDIT_NOTE_POST',
+    'AR_REFUND_CREATE',
+    'AR_REFUND_APPROVE',
+    'AR_REFUND_POST',
+  ] as const;
+
+  await removePermissionsByCode([superAdminRole.id, systemAdminRole.id, adminRole.id], Array.from(forbiddenAdminBypassPermCodes));
+
+  await assignPermissionsByCode(superAdminRole.id, [
+    'AUDIT_VIEW',
+    'AUDIT_EVIDENCE_UPLOAD',
+    'AUDIT_EVIDENCE_VIEW',
+    'AUDIT_REVIEW_PACK_VIEW',
+    'AUDIT_REVIEW_PACK_GENERATE',
+    'dashboard.view',
+    'MASTER_DATA_DEPARTMENT_VIEW',
+    'MASTER_DATA_DEPARTMENT_CREATE',
+    'MASTER_DATA_DEPARTMENT_EDIT',
+    'MASTER_DATA_PROJECT_VIEW',
+    'MASTER_DATA_PROJECT_CREATE',
+    'MASTER_DATA_PROJECT_EDIT',
+    'MASTER_DATA_PROJECT_CLOSE',
+    'MASTER_DATA_FUND_VIEW',
+    'MASTER_DATA_FUND_CREATE',
+    'MASTER_DATA_FUND_EDIT',
+    'INVOICE_CATEGORY_VIEW',
+    'INVOICE_CATEGORY_CREATE',
+    'INVOICE_CATEGORY_UPDATE',
+    'INVOICE_CATEGORY_DISABLE',
+  ]);
+
+  await assignPermissionsByCode(systemAdminRole.id, [
+    'AUDIT_VIEW',
+    'dashboard.view',
+    'MASTER_DATA_DEPARTMENT_VIEW',
+    'MASTER_DATA_DEPARTMENT_CREATE',
+    'MASTER_DATA_DEPARTMENT_EDIT',
+    'MASTER_DATA_PROJECT_VIEW',
+    'MASTER_DATA_PROJECT_CREATE',
+    'MASTER_DATA_PROJECT_EDIT',
+    'MASTER_DATA_PROJECT_CLOSE',
+    'MASTER_DATA_FUND_VIEW',
+    'MASTER_DATA_FUND_CREATE',
+    'MASTER_DATA_FUND_EDIT',
+    'INVOICE_CATEGORY_VIEW',
+    'INVOICE_CATEGORY_CREATE',
+    'INVOICE_CATEGORY_UPDATE',
+    'INVOICE_CATEGORY_DISABLE',
+  ]);
 
   const forecastCreatePerm = await prisma.permission.findUnique({ where: { code: 'forecast.create' }, select: { id: true } });
   const forecastEditPerm = await prisma.permission.findUnique({ where: { code: 'forecast.edit' }, select: { id: true } });
@@ -718,6 +837,40 @@ async function main() {
     });
   }
 
+  if (financeOfficerRole?.id) {
+    await assignPermissionsByCode(financeOfficerRole.id, ['AR_INVOICE_CREATE', 'AP_INVOICE_CREATE', 'PAYMENT_CREATE', 'AR_CREDIT_NOTE_CREATE', 'AR_REFUND_CREATE']);
+  }
+  if (financeManagerRole?.id) {
+    await assignPermissionsByCode(financeManagerRole.id, [
+      'FINANCE_GL_APPROVE',
+      'AR_INVOICE_APPROVE',
+      'AP_INVOICE_APPROVE',
+      'PAYMENT_APPROVE',
+      'FINANCE_PERIOD_CLOSE',
+      'AR_CREDIT_NOTE_APPROVE',
+      'AR_REFUND_APPROVE',
+    ]);
+  }
+  if (financeControllerRole?.id) {
+    await assignPermissionsByCode(financeControllerRole.id, [
+      'FINANCE_GL_FINAL_POST',
+      'AR_INVOICE_POST',
+      'AP_INVOICE_POST',
+      'PAYMENT_POST',
+      'FINANCE_PERIOD_CLOSE_APPROVE',
+      'TAX_CONFIG_UPDATE',
+      'CREDIT_NOTE_APPROVE',
+      'REFUND_APPROVE',
+      'AR_CREDIT_NOTE_POST',
+      'AR_REFUND_POST',
+    ]);
+  }
+
+  await removePermissionsByCode(
+    [superAdminRole.id, systemAdminRole.id, adminRole.id],
+    ['AR_CREDIT_NOTE_CREATE', 'AR_CREDIT_NOTE_APPROVE', 'AR_CREDIT_NOTE_POST', 'AR_REFUND_CREATE', 'AR_REFUND_APPROVE', 'AR_REFUND_POST'],
+  );
+
   // Seed default invoice categories per tenant (only if tenant has none).
   // These are defaults, but remain editable via RBAC.
   const existingInvoiceCategoryCount = await (prisma as any).invoiceCategory.count({
@@ -829,7 +982,6 @@ async function main() {
         periodViewPerm?.id,
         periodChecklistViewPerm?.id,
         periodChecklistCompletePerm?.id,
-        periodCloseApprovePerm?.id,
         periodReopenPerm?.id,
         financeBudgetViewPerm?.id,
       ]
@@ -840,6 +992,22 @@ async function main() {
         })),
       skipDuplicates: true,
     });
+  }
+
+  if (periodCloseApprovePerm?.id) {
+    const financeManagerRoles = await prisma.role.findMany({
+      where: { name: 'FINANCE_MANAGER' },
+      select: { id: true },
+    });
+
+    if (financeManagerRoles.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: {
+          roleId: { in: financeManagerRoles.map((r) => r.id) },
+          permissionId: periodCloseApprovePerm.id,
+        },
+      });
+    }
   }
 
   // Backfill: ensure ADMIN can close periods (still checklist-gated by backend).
@@ -1257,15 +1425,18 @@ async function main() {
     });
   }
 
-  const adminEmail = 'admin@uspire.local';
   const superAdminEmail = 'superadmin@uspire.local';
-  const testAdminEmail = 'test@uspire.local';
-  const viewerEmail = 'viewer@uspire.local';
+  const sysAdminEmail = 'sysadmin@uspire.local';
+  const controllerEmail = 'controller@uspire.local';
+  const managerEmail = 'manager@uspire.local';
+  const officerEmail = 'officer@uspire.local';
 
   const rounds = 12;
-  const adminPasswordHash = await bcrypt.hash('Admin@123', rounds);
   const superAdminPasswordHash = await bcrypt.hash('Super123', rounds);
-  const viewerPasswordHash = await bcrypt.hash('Viewer123!', rounds);
+  const sysAdminPasswordHash = await bcrypt.hash('SysAdmin123', rounds);
+  const controllerPasswordHash = await bcrypt.hash('Controller123', rounds);
+  const managerPasswordHash = await bcrypt.hash('Manager123', rounds);
+  const officerPasswordHash = await bcrypt.hash('Officer123', rounds);
 
   const superAdminUser = await prisma.user.upsert({
     where: {
@@ -1288,86 +1459,99 @@ async function main() {
     },
   });
 
-  const adminUser = await prisma.user.upsert({
+  const sysAdminUser = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: tenant.id,
-        email: adminEmail,
+        email: sysAdminEmail,
       },
     },
     create: {
       tenantId: tenant.id,
-      name: 'Admin',
-      email: adminEmail,
-      passwordHash: adminPasswordHash,
+      name: 'System Admin',
+      email: sysAdminEmail,
+      passwordHash: sysAdminPasswordHash,
       isActive: true,
     },
     update: {
-      name: 'Admin',
-      passwordHash: adminPasswordHash,
+      name: 'System Admin',
+      passwordHash: sysAdminPasswordHash,
       isActive: true,
     },
   });
 
-  const testAdminUser = await prisma.user.upsert({
+  const controllerUser = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: tenant.id,
-        email: testAdminEmail,
+        email: controllerEmail,
       },
     },
     create: {
       tenantId: tenant.id,
-      name: 'Test User',
-      email: testAdminEmail,
-      passwordHash: adminPasswordHash,
+      name: 'Finance Controller',
+      email: controllerEmail,
+      passwordHash: controllerPasswordHash,
       isActive: true,
     },
     update: {
-      name: 'Test User',
-      passwordHash: adminPasswordHash,
+      name: 'Finance Controller',
+      passwordHash: controllerPasswordHash,
       isActive: true,
     },
   });
 
-  const viewerUser = await prisma.user.upsert({
+  const managerUser = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: tenant.id,
-        email: viewerEmail,
+        email: managerEmail,
       },
     },
     create: {
       tenantId: tenant.id,
-      name: 'Viewer',
-      email: viewerEmail,
-      passwordHash: viewerPasswordHash,
+      name: 'Finance Manager',
+      email: managerEmail,
+      passwordHash: managerPasswordHash,
       isActive: true,
     },
     update: {
-      name: 'Viewer',
-      passwordHash: viewerPasswordHash,
+      name: 'Finance Manager',
+      passwordHash: managerPasswordHash,
+      isActive: true,
+    },
+  });
+
+  const officerUser = await prisma.user.upsert({
+    where: {
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: officerEmail,
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'Finance Officer',
+      email: officerEmail,
+      passwordHash: officerPasswordHash,
+      isActive: true,
+    },
+    update: {
+      name: 'Finance Officer',
+      passwordHash: officerPasswordHash,
       isActive: true,
     },
   });
 
   await prisma.userRole.createMany({
     data: [
-      { userId: adminUser.id, roleId: adminRole.id },
       { userId: superAdminUser.id, roleId: superAdminRole.id },
-      { userId: superAdminUser.id, roleId: adminRole.id },
-      { userId: testAdminUser.id, roleId: forecastMakerRole.id },
-      { userId: viewerUser.id, roleId: viewerRole.id },
+      { userId: sysAdminUser.id, roleId: systemAdminRole.id },
+      { userId: controllerUser.id, roleId: financeControllerRole.id },
+      { userId: managerUser.id, roleId: financeManagerRole.id },
+      { userId: officerUser.id, roleId: financeOfficerRole?.id as string },
     ],
     skipDuplicates: true,
-  });
-
-  // Ensure test user does NOT retain ADMIN.
-  await prisma.userRole.deleteMany({
-    where: {
-      userId: testAdminUser.id,
-      roleId: adminRole.id,
-    },
   });
 
   await prisma.soDRule.upsert({

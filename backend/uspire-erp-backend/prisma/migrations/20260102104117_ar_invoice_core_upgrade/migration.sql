@@ -15,11 +15,11 @@
 -- AlterEnum
 BEGIN;
 CREATE TYPE "CustomerInvoiceStatus_new" AS ENUM ('DRAFT', 'POSTED');
-ALTER TABLE "public"."CustomerInvoice" ALTER COLUMN "status" DROP DEFAULT;
+ALTER TABLE "CustomerInvoice" ALTER COLUMN "status" DROP DEFAULT;
 ALTER TABLE "CustomerInvoice" ALTER COLUMN "status" TYPE "CustomerInvoiceStatus_new" USING ("status"::text::"CustomerInvoiceStatus_new");
 ALTER TYPE "CustomerInvoiceStatus" RENAME TO "CustomerInvoiceStatus_old";
 ALTER TYPE "CustomerInvoiceStatus_new" RENAME TO "CustomerInvoiceStatus";
-DROP TYPE "public"."CustomerInvoiceStatus_old";
+DROP TYPE "CustomerInvoiceStatus_old";
 ALTER TABLE "CustomerInvoice" ALTER COLUMN "status" SET DEFAULT 'DRAFT';
 COMMIT;
 

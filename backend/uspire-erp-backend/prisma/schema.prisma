@@ -146,6 +146,14 @@ enum CustomerInvoiceStatus {
   POSTED
 }
 
+enum DocumentStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  POSTED
+  VOID
+}
+
 enum InvoiceType {
   TRAINING
   CONSULTING
@@ -418,6 +426,8 @@ model Customer {
   tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   invoices CustomerInvoice[]
   receipts CustomerReceipt[]
+  creditNotes CustomerCreditNote[]
+  refunds CustomerRefund[]
 
   @@unique([tenantId, customerCode])
   @@index([tenantId])
@@ -464,6 +474,7 @@ model CustomerInvoice {
   department Department?           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   lines      CustomerInvoiceLine[]
   receiptLines CustomerReceiptLine[]
+  creditNotes CustomerCreditNote[] @relation("CustomerCreditNoteInvoice")
 
   @@unique([tenantId, customerId, invoiceNumber])
   @@index([tenantId])
@@ -472,6 +483,94 @@ model CustomerInvoice {
   @@index([projectId])
   @@index([fundId])
   @@index([departmentId])
+}
+
+model CustomerCreditNote {
+  id              String         @id @default(uuid())
+  tenantId         String
+  creditNoteNumber String
+  creditNoteDate   DateTime
+  customerId       String
+  invoiceId        String?
+  currency         String
+  exchangeRate     Decimal        @default(1.0) @db.Decimal(18, 6)
+  subtotal         Decimal        @db.Decimal(18, 2)
+  totalAmount      Decimal        @db.Decimal(18, 2)
+  status           DocumentStatus @default(DRAFT)
+  createdById      String
+  approvedById     String?
+  postedById       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoice    CustomerInvoice? @relation("CustomerCreditNoteInvoice", fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdBy  User            @relation("CustomerCreditNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?           @relation("CustomerCreditNoteApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  postedBy   User?           @relation("CustomerCreditNotePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  lines      CustomerCreditNoteLine[]
+  refunds    CustomerRefund[]
+
+  @@unique([tenantId, creditNoteNumber])
+  @@index([tenantId, creditNoteNumber])
+  @@index([tenantId, customerId])
+  @@index([tenantId, invoiceId])
+}
+
+model CustomerCreditNoteLine {
+  id              String  @id @default(uuid())
+  creditNoteId     String
+  description      String
+  quantity         Decimal @db.Decimal(18, 2)
+  unitPrice        Decimal @db.Decimal(18, 2)
+  lineAmount       Decimal @db.Decimal(18, 2)
+  revenueAccountId String
+  departmentId     String?
+  projectId        String?
+  fundId           String?
+
+  creditNote      CustomerCreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  revenueAccount  Account            @relation(fields: [revenueAccountId], references: [id], onDelete: Restrict)
+  department      Department?        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  project         Project?           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  fund            Fund?              @relation(fields: [fundId], references: [id], onDelete: Restrict)
+
+  @@index([creditNoteId])
+}
+
+model CustomerRefund {
+  /// Rules:
+  /// - At least one of receiptId or creditNoteId must be provided.
+  /// - Refund cannot exceed available unapplied/credit balance (enforced later in Step 4.2).
+  id           String         @id @default(uuid())
+  tenantId      String
+  refundNumber  String
+  refundDate    DateTime
+  customerId    String
+  receiptId     String?
+  creditNoteId  String?
+  currency      String
+  exchangeRate  Decimal        @default(1.0) @db.Decimal(18, 6)
+  amount        Decimal        @db.Decimal(18, 2)
+  status        DocumentStatus @default(DRAFT)
+  createdById   String
+  approvedById  String?
+  postedById    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer   Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  receipt    CustomerReceipt?   @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  creditNote CustomerCreditNote? @relation(fields: [creditNoteId], references: [id], onDelete: Restrict)
+  createdBy  User               @relation("CustomerRefundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?              @relation("CustomerRefundApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  postedBy   User?              @relation("CustomerRefundPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, refundNumber])
+  @@index([tenantId, refundNumber])
+  @@index([tenantId, customerId])
 }
 
 model AccountingPeriodChecklistItem {
@@ -751,6 +850,7 @@ model CustomerReceipt {
   voidedBy    User?        @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
   glJournal   JournalEntry? @relation("CustomerReceiptGlJournal", fields: [glJournalId], references: [id], onDelete: Restrict)
   lines       CustomerReceiptLine[]
+  refunds     CustomerRefund[]
 
   @@unique([tenantId, receiptNumber])
   @@index([tenantId])
@@ -1121,6 +1221,8 @@ model Tenant {
   customers           Customer[]
   customerInvoices    CustomerInvoice[]
   customerReceipts    CustomerReceipt[]
+  customerCreditNotes CustomerCreditNote[]
+  refunds             CustomerRefund[]
   customerReceiptLines CustomerReceiptLine[]
   customerInvoiceImportLogs CustomerInvoiceImportLog[]
   invoiceCategories   InvoiceCategory[]
@@ -1243,6 +1345,7 @@ model Project {
   funds        Fund[]
   invoiceLines CustomerInvoiceLine[]
   customerInvoices CustomerInvoice[] @relation("CustomerInvoiceProject")
+  customerCreditNoteLines CustomerCreditNoteLine[]
   journalLines JournalLine[]
   budgetLines  BudgetLine[]
 
@@ -1277,6 +1380,7 @@ model Fund {
   journalLines JournalLine[]
   invoiceLines CustomerInvoiceLine[]
   customerInvoices CustomerInvoice[]
+  customerCreditNoteLines CustomerCreditNoteLine[]
   budgetLines  BudgetLine[]
 
   @@unique([tenantId, code])
@@ -1308,6 +1412,7 @@ model Department {
   journalLines JournalLine[]
   invoiceLines CustomerInvoiceLine[]
   customerInvoices CustomerInvoice[]
+  customerCreditNoteLines CustomerCreditNoteLine[]
   budgetLines  BudgetLine[]
 
   @@unique([tenantId, code])
@@ -1346,10 +1451,16 @@ model User {
   supplierInvoicesPosted           SupplierInvoice[]           @relation("SupplierInvoicePostedBy")
   customerInvoicesCreated          CustomerInvoice[]           @relation("CustomerInvoiceCreatedBy")
   customerInvoicesPosted           CustomerInvoice[]           @relation("CustomerInvoicePostedBy")
+  customerCreditNotesCreated       CustomerCreditNote[]        @relation("CustomerCreditNoteCreatedBy")
+  customerCreditNotesPosted        CustomerCreditNote[]        @relation("CustomerCreditNotePostedBy")
+  customerCreditNotesApproved      CustomerCreditNote[]        @relation("CustomerCreditNoteApprovedBy")
   customerInvoiceImportsProcessed  CustomerInvoiceImportLog[]  @relation("CustomerInvoiceImportProcessedBy")
   customerReceiptsCreated          CustomerReceipt[]           @relation("CustomerReceiptCreatedBy")
   customerReceiptsPosted           CustomerReceipt[]           @relation("CustomerReceiptPostedBy")
   customerReceiptsVoided           CustomerReceipt[]           @relation("CustomerReceiptVoidedBy")
+  customerRefundsCreated           CustomerRefund[]            @relation("CustomerRefundCreatedBy")
+  customerRefundsApproved          CustomerRefund[]            @relation("CustomerRefundApprovedBy")
+  customerRefundsPosted            CustomerRefund[]            @relation("CustomerRefundPostedBy")
   paymentsCreated                  Payment[]                   @relation("PaymentCreatedBy")
   paymentsApproved                 Payment[]                   @relation("PaymentApprovedBy")
   paymentsPosted                   Payment[]                   @relation("PaymentPostedBy")
@@ -1518,6 +1629,8 @@ model Account {
 
   tenantTaxConfigsAsOutputVatAccount TenantTaxConfig[] @relation("TenantTaxConfigOutputVatAccount")
   tenantTaxConfigsAsInputVatAccount  TenantTaxConfig[] @relation("TenantTaxConfigInputVatAccount")
+
+  customerCreditNoteLinesAsRevenueAccount CustomerCreditNoteLine[]
 
   budgetLines BudgetLine[]
 
