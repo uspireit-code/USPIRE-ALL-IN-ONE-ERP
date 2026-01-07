@@ -209,6 +209,11 @@ enum ReceiptPaymentMethod {
   OTHER
 }
 
+enum RefundPaymentMethod {
+  BANK
+  CASH
+}
+
 enum PaymentType {
   SUPPLIER_PAYMENT
   CUSTOMER_RECEIPT
@@ -359,6 +364,7 @@ model BankAccount {
   tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   glAccount       Account              @relation(fields: [glAccountId], references: [id], onDelete: Restrict)
   payments        Payment[]
+  customerRefunds CustomerRefund[]
   statements      BankStatement[]
   reconciliations BankReconciliation[]
 
@@ -492,6 +498,7 @@ model CustomerCreditNote {
   creditNoteDate   DateTime
   customerId       String
   invoiceId        String?
+  memo             String?
   currency         String
   exchangeRate     Decimal        @default(1.0) @db.Decimal(18, 6)
   subtotal         Decimal        @db.Decimal(18, 2)
@@ -500,8 +507,15 @@ model CustomerCreditNote {
   createdById      String
   approvedById     String?
   postedById       String?
+  voidedById       String?
   createdAt        DateTime       @default(now())
+  approvedAt       DateTime?
+  postedAt         DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
   updatedAt        DateTime       @updatedAt
+
+  postedJournalId String?
 
   tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -509,6 +523,8 @@ model CustomerCreditNote {
   createdBy  User            @relation("CustomerCreditNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   approvedBy User?           @relation("CustomerCreditNoteApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   postedBy   User?           @relation("CustomerCreditNotePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  voidedBy   User?           @relation("CustomerCreditNoteVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  postedJournal JournalEntry? @relation("CustomerCreditNotePostedJournal", fields: [postedJournalId], references: [id], onDelete: Restrict)
   lines      CustomerCreditNoteLine[]
   refunds    CustomerRefund[]
 
@@ -516,6 +532,8 @@ model CustomerCreditNote {
   @@index([tenantId, creditNoteNumber])
   @@index([tenantId, customerId])
   @@index([tenantId, invoiceId])
+  @@index([tenantId, status])
+  @@unique([tenantId, postedJournalId])
 }
 
 model CustomerCreditNoteLine {
@@ -553,24 +571,38 @@ model CustomerRefund {
   currency      String
   exchangeRate  Decimal        @default(1.0) @db.Decimal(18, 6)
   amount        Decimal        @db.Decimal(18, 2)
+  paymentMethod RefundPaymentMethod
+  bankAccountId String?
   status        DocumentStatus @default(DRAFT)
   createdById   String
   approvedById  String?
   postedById    String?
+  voidedById    String?
   createdAt     DateTime       @default(now())
+  approvedAt    DateTime?
+  postedAt      DateTime?
+  voidedAt      DateTime?
+  voidReason    String?
+  postedJournalId String?
   updatedAt     DateTime       @updatedAt
 
   tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   customer   Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
   receipt    CustomerReceipt?   @relation(fields: [receiptId], references: [id], onDelete: Restrict)
   creditNote CustomerCreditNote? @relation(fields: [creditNoteId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount?      @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   createdBy  User               @relation("CustomerRefundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   approvedBy User?              @relation("CustomerRefundApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   postedBy   User?              @relation("CustomerRefundPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  voidedBy   User?              @relation("CustomerRefundVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+
+  postedJournal JournalEntry?   @relation("CustomerRefundPostedJournal", fields: [postedJournalId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, refundNumber])
   @@index([tenantId, refundNumber])
   @@index([tenantId, customerId])
+  @@index([tenantId, creditNoteId])
+  @@unique([tenantId, postedJournalId])
 }
 
 model AccountingPeriodChecklistItem {
@@ -1202,6 +1234,7 @@ model Tenant {
   arControlAccountId          String?
   defaultBankClearingAccountId String?
   unappliedReceiptsAccountId   String?
+  cashClearingAccountId        String?
   coaFrozen               Boolean  @default(false)
   coaLockedAt             DateTime?
   status    TenantStatus @default(ACTIVE)
@@ -1279,6 +1312,7 @@ model Tenant {
   arControlAccount           Account? @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
   defaultBankClearingAccount Account? @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
   unappliedReceiptsAccount   Account? @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
+  cashClearingAccount        Account? @relation("TenantCashClearingAccount", fields: [cashClearingAccountId], references: [id], onDelete: Restrict)
 
   @@unique([name])
   @@index([status])
@@ -1454,6 +1488,7 @@ model User {
   customerCreditNotesCreated       CustomerCreditNote[]        @relation("CustomerCreditNoteCreatedBy")
   customerCreditNotesPosted        CustomerCreditNote[]        @relation("CustomerCreditNotePostedBy")
   customerCreditNotesApproved      CustomerCreditNote[]        @relation("CustomerCreditNoteApprovedBy")
+  customerCreditNotesVoided        CustomerCreditNote[]        @relation("CustomerCreditNoteVoidedBy")
   customerInvoiceImportsProcessed  CustomerInvoiceImportLog[]  @relation("CustomerInvoiceImportProcessedBy")
   customerReceiptsCreated          CustomerReceipt[]           @relation("CustomerReceiptCreatedBy")
   customerReceiptsPosted           CustomerReceipt[]           @relation("CustomerReceiptPostedBy")
@@ -1461,6 +1496,7 @@ model User {
   customerRefundsCreated           CustomerRefund[]            @relation("CustomerRefundCreatedBy")
   customerRefundsApproved          CustomerRefund[]            @relation("CustomerRefundApprovedBy")
   customerRefundsPosted            CustomerRefund[]            @relation("CustomerRefundPostedBy")
+  customerRefundsVoided            CustomerRefund[]            @relation("CustomerRefundVoidedBy")
   paymentsCreated                  Payment[]                   @relation("PaymentCreatedBy")
   paymentsApproved                 Payment[]                   @relation("PaymentApprovedBy")
   paymentsPosted                   Payment[]                   @relation("PaymentPostedBy")
@@ -1641,6 +1677,7 @@ model Account {
   tenantsAsArControlAccount            Tenant[] @relation("TenantArControlAccount")
   tenantsAsDefaultBankClearingAccount  Tenant[] @relation("TenantDefaultBankClearingAccount")
   tenantsAsUnappliedReceiptsAccount    Tenant[] @relation("TenantUnappliedReceiptsAccount")
+  tenantsAsCashClearingAccount         Tenant[] @relation("TenantCashClearingAccount")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1672,6 +1709,8 @@ model JournalEntry {
   journalNumber Int?
   journalType  JournalType  @default(STANDARD)
   periodId     String?
+  sourceType  String?
+  sourceId    String?
   reference   String?
   description String?
   journalDate DateTime      @default(now())
@@ -1728,6 +1767,10 @@ model JournalEntry {
 
   customerReceiptsGl CustomerReceipt[] @relation("CustomerReceiptGlJournal")
 
+  customerCreditNotesPosted CustomerCreditNote[] @relation("CustomerCreditNotePostedJournal")
+
+  customerRefundsPosted CustomerRefund[] @relation("CustomerRefundPostedJournal")
+
   recurringGenerations RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
 
   @@index([tenantId])
@@ -1736,6 +1779,7 @@ model JournalEntry {
   @@index([tenantId, periodId])
   @@index([tenantId, status])
   @@index([tenantId, status, journalDate])
+  @@index([tenantId, sourceType, sourceId])
 }
 
 model RecurringJournalTemplate {

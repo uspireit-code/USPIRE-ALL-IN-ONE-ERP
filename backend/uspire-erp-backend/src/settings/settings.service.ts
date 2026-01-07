@@ -1023,6 +1023,7 @@ export class SettingsService {
         requiresFundOnInvoices: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
+        cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
         updatedAt: true,
       },
@@ -1075,6 +1076,7 @@ export class SettingsService {
         requiresFundOnInvoices: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
+        cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
         faviconUrl: true,
         logoUrl: true,
@@ -1274,6 +1276,13 @@ export class SettingsService {
               : String((dto as any).defaultBankClearingAccountId).trim() ||
                 null,
 
+        cashClearingAccountId:
+          (dto as any).cashClearingAccountId === undefined
+            ? undefined
+            : (dto as any).cashClearingAccountId === null
+              ? null
+              : String((dto as any).cashClearingAccountId).trim() || null,
+
         unappliedReceiptsAccountId:
           (dto as any).unappliedReceiptsAccountId === undefined
             ? undefined
@@ -1315,6 +1324,7 @@ export class SettingsService {
         requiresFundOnInvoices: true,
         arControlAccountId: true,
         defaultBankClearingAccountId: true,
+        cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
         updatedAt: true,
       },
@@ -1351,6 +1361,7 @@ export class SettingsService {
       arControlAccountId: (updated as any).arControlAccountId ?? null,
       defaultBankClearingAccountId:
         (updated as any).defaultBankClearingAccountId ?? null,
+      cashClearingAccountId: (updated as any).cashClearingAccountId ?? null,
       unappliedReceiptsAccountId:
         (updated as any).unappliedReceiptsAccountId ?? null,
       faviconUrl: updated.faviconUrl,

@@ -184,7 +184,7 @@ async function main() {
 
   const forbiddenManager = ['FINANCE_GL_FINAL_POST', 'FINANCE_PERIOD_CLOSE_APPROVE', 'AR_INVOICE_POST', 'AP_INVOICE_POST', 'PAYMENT_POST'];
 
-  const expectedOfficer = ['FINANCE_GL_CREATE', 'AR_INVOICE_CREATE', 'AP_INVOICE_CREATE', 'PAYMENT_CREATE', 'CREDIT_NOTE_CREATE'];
+  const expectedOfficer = ['FINANCE_GL_CREATE', 'AR_INVOICE_CREATE', 'AP_INVOICE_CREATE', 'PAYMENT_CREATE', 'AR_CREDIT_NOTE_CREATE'];
 
   const forbiddenOfficer = [
     'FINANCE_GL_APPROVE',
@@ -254,21 +254,24 @@ async function main() {
 
   const creditRefundForbiddenAdmin = [
     'AR_CREDIT_NOTE_CREATE',
+    'AR_CREDIT_NOTE_VIEW',
     'AR_CREDIT_NOTE_APPROVE',
     'AR_CREDIT_NOTE_POST',
+    'AR_CREDIT_NOTE_VOID',
     'AR_REFUND_CREATE',
     'AR_REFUND_APPROVE',
     'AR_REFUND_POST',
+    'AR_REFUND_VOID',
   ];
 
-  const expectedOfficerCreditNote = ['AR_CREDIT_NOTE_CREATE'];
+  const expectedOfficerCreditNote = ['AR_CREDIT_NOTE_CREATE', 'AR_CREDIT_NOTE_VIEW'];
   const expectedOfficerRefund = ['AR_REFUND_CREATE'];
 
-  const expectedManagerCreditNote = ['AR_CREDIT_NOTE_APPROVE'];
+  const expectedManagerCreditNote = ['AR_CREDIT_NOTE_APPROVE', 'AR_CREDIT_NOTE_VIEW'];
   const expectedManagerRefund = ['AR_REFUND_APPROVE'];
 
-  const expectedControllerCreditNote = ['AR_CREDIT_NOTE_POST'];
-  const expectedControllerRefund = ['AR_REFUND_POST'];
+  const expectedControllerCreditNote = ['AR_CREDIT_NOTE_POST', 'AR_CREDIT_NOTE_VOID', 'AR_CREDIT_NOTE_VIEW'];
+  const expectedControllerRefund = ['AR_REFUND_POST', 'AR_REFUND_VOID'];
 
   let hasCreditRefundFailure = false;
 

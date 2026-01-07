@@ -19,87 +19,169 @@
 
 */
 -- CreateEnum
-CREATE TYPE "DocumentStatus" AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'POSTED', 'VOID');
+DO $$ BEGIN
+  CREATE TYPE "DocumentStatus" AS ENUM ('DRAFT', 'SUBMITTED', 'APPROVED', 'POSTED', 'VOID');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "CustomerCreditNote" DROP CONSTRAINT "CustomerCreditNote_originalInvoiceId_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."CustomerCreditNote"') IS NOT NULL THEN
+    ALTER TABLE "CustomerCreditNote" DROP CONSTRAINT IF EXISTS "CustomerCreditNote_originalInvoiceId_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "CustomerCreditNoteLine" DROP CONSTRAINT "CustomerCreditNoteLine_taxRateId_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."CustomerCreditNoteLine"') IS NOT NULL THEN
+    ALTER TABLE "CustomerCreditNoteLine" DROP CONSTRAINT IF EXISTS "CustomerCreditNoteLine_taxRateId_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "Refund" DROP CONSTRAINT "Refund_createdById_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."Refund"') IS NOT NULL THEN
+    ALTER TABLE "Refund" DROP CONSTRAINT IF EXISTS "Refund_createdById_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "Refund" DROP CONSTRAINT "Refund_creditNoteId_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."Refund"') IS NOT NULL THEN
+    ALTER TABLE "Refund" DROP CONSTRAINT IF EXISTS "Refund_creditNoteId_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "Refund" DROP CONSTRAINT "Refund_customerId_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."Refund"') IS NOT NULL THEN
+    ALTER TABLE "Refund" DROP CONSTRAINT IF EXISTS "Refund_customerId_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "Refund" DROP CONSTRAINT "Refund_postedById_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."Refund"') IS NOT NULL THEN
+    ALTER TABLE "Refund" DROP CONSTRAINT IF EXISTS "Refund_postedById_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "Refund" DROP CONSTRAINT "Refund_receiptId_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."Refund"') IS NOT NULL THEN
+    ALTER TABLE "Refund" DROP CONSTRAINT IF EXISTS "Refund_receiptId_fkey";
+  END IF;
+END $$;
 
 -- DropForeignKey
-ALTER TABLE "Refund" DROP CONSTRAINT "Refund_tenantId_fkey";
+DO $$ BEGIN
+  IF to_regclass('public."Refund"') IS NOT NULL THEN
+    ALTER TABLE "Refund" DROP CONSTRAINT IF EXISTS "Refund_tenantId_fkey";
+  END IF;
+END $$;
 
 -- DropIndex
-DROP INDEX "CustomerCreditNote_customerId_idx";
+DROP INDEX IF EXISTS "CustomerCreditNote_customerId_idx";
 
 -- DropIndex
-DROP INDEX "CustomerCreditNote_originalInvoiceId_idx";
+DROP INDEX IF EXISTS "CustomerCreditNote_originalInvoiceId_idx";
 
 -- DropIndex
-DROP INDEX "CustomerCreditNote_tenantId_customerId_creditNoteNumber_key";
+DROP INDEX IF EXISTS "CustomerCreditNote_tenantId_customerId_creditNoteNumber_key";
 
 -- DropIndex
-DROP INDEX "CustomerCreditNote_tenantId_idx";
+DROP INDEX IF EXISTS "CustomerCreditNote_tenantId_idx";
 
 -- DropIndex
-DROP INDEX "CustomerCreditNote_tenantId_status_idx";
+DROP INDEX IF EXISTS "CustomerCreditNote_tenantId_status_idx";
 
 -- DropIndex
-DROP INDEX "CustomerCreditNoteLine_taxRateId_idx";
+DROP INDEX IF EXISTS "CustomerCreditNoteLine_taxRateId_idx";
 
--- AlterTable
-ALTER TABLE "CustomerCreditNote" DROP COLUMN "originalInvoiceId",
-DROP COLUMN "postedAt",
-DROP COLUMN "reason",
-DROP COLUMN "vatAmount",
-ADD COLUMN     "approvedById" TEXT,
-ADD COLUMN     "invoiceId" TEXT,
-ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL,
-DROP COLUMN "status",
-ADD COLUMN     "status" "DocumentStatus" NOT NULL DEFAULT 'DRAFT';
+-- Ensure CustomerCreditNote table exists for shadow DB replays
+CREATE TABLE IF NOT EXISTS "CustomerCreditNote" (
+  "id" TEXT NOT NULL,
+  "tenantId" TEXT NOT NULL,
+  "creditNoteNumber" TEXT NOT NULL,
+  "creditNoteDate" TIMESTAMP(3) NOT NULL,
+  "customerId" TEXT NOT NULL,
+  "invoiceId" TEXT,
+  "currency" TEXT NOT NULL,
+  "exchangeRate" DECIMAL(18,6) NOT NULL DEFAULT 1.0,
+  "subtotal" DECIMAL(18,2) NOT NULL,
+  "totalAmount" DECIMAL(18,2) NOT NULL,
+  "status" "DocumentStatus" NOT NULL DEFAULT 'DRAFT',
+  "createdById" TEXT NOT NULL,
+  "approvedById" TEXT,
+  "postedById" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "CustomerCreditNote_pkey" PRIMARY KEY ("id")
+);
 
--- AlterTable
-ALTER TABLE "CustomerCreditNoteLine" DROP COLUMN "netAmount",
-DROP COLUMN "taxRateId",
-DROP COLUMN "vatAmount",
-ADD COLUMN     "departmentId" TEXT,
-ADD COLUMN     "fundId" TEXT,
-ADD COLUMN     "lineAmount" DECIMAL(18,2) NOT NULL,
-ADD COLUMN     "projectId" TEXT,
-ADD COLUMN     "revenueAccountId" TEXT NOT NULL,
-ALTER COLUMN "quantity" SET DATA TYPE DECIMAL(18,2),
-ALTER COLUMN "unitPrice" SET DATA TYPE DECIMAL(18,2);
+-- Best-effort reshape for existing DBs
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "approvedById" TEXT;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "invoiceId" TEXT;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "createdById" TEXT;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "creditNoteNumber" TEXT;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "creditNoteDate" TIMESTAMP(3);
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "customerId" TEXT;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "currency" TEXT;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "exchangeRate" DECIMAL(18,6) NOT NULL DEFAULT 1.0;
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "subtotal" DECIMAL(18,2);
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "totalAmount" DECIMAL(18,2);
+ALTER TABLE "CustomerCreditNote" ADD COLUMN IF NOT EXISTS "status" "DocumentStatus" NOT NULL DEFAULT 'DRAFT';
+
+ALTER TABLE "CustomerCreditNote" DROP COLUMN IF EXISTS "originalInvoiceId";
+ALTER TABLE "CustomerCreditNote" DROP COLUMN IF EXISTS "postedAt";
+ALTER TABLE "CustomerCreditNote" DROP COLUMN IF EXISTS "reason";
+ALTER TABLE "CustomerCreditNote" DROP COLUMN IF EXISTS "vatAmount";
+
+-- Ensure CustomerCreditNoteLine table exists for shadow DB replays
+CREATE TABLE IF NOT EXISTS "CustomerCreditNoteLine" (
+  "id" TEXT NOT NULL,
+  "creditNoteId" TEXT NOT NULL,
+  "description" TEXT NOT NULL,
+  "quantity" DECIMAL(18,2) NOT NULL,
+  "unitPrice" DECIMAL(18,2) NOT NULL,
+  "lineAmount" DECIMAL(18,2) NOT NULL,
+  "revenueAccountId" TEXT NOT NULL,
+  "departmentId" TEXT,
+  "projectId" TEXT,
+  "fundId" TEXT,
+  CONSTRAINT "CustomerCreditNoteLine_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "CustomerCreditNoteLine" ADD COLUMN IF NOT EXISTS "departmentId" TEXT;
+ALTER TABLE "CustomerCreditNoteLine" ADD COLUMN IF NOT EXISTS "fundId" TEXT;
+ALTER TABLE "CustomerCreditNoteLine" ADD COLUMN IF NOT EXISTS "lineAmount" DECIMAL(18,2);
+ALTER TABLE "CustomerCreditNoteLine" ADD COLUMN IF NOT EXISTS "projectId" TEXT;
+ALTER TABLE "CustomerCreditNoteLine" ADD COLUMN IF NOT EXISTS "revenueAccountId" TEXT;
+
+ALTER TABLE "CustomerCreditNoteLine" DROP COLUMN IF EXISTS "netAmount";
+ALTER TABLE "CustomerCreditNoteLine" DROP COLUMN IF EXISTS "taxRateId";
+ALTER TABLE "CustomerCreditNoteLine" DROP COLUMN IF EXISTS "vatAmount";
+
+ALTER TABLE "CustomerCreditNoteLine" ALTER COLUMN "quantity" TYPE DECIMAL(18,2);
+ALTER TABLE "CustomerCreditNoteLine" ALTER COLUMN "unitPrice" TYPE DECIMAL(18,2);
 
 -- AlterTable
 ALTER TABLE "JournalEntry" ALTER COLUMN "riskFlags" SET DEFAULT '[]'::jsonb;
 
 -- DropTable
-DROP TABLE "Refund";
+DROP TABLE IF EXISTS "Refund";
 
 -- DropEnum
-DROP TYPE "CustomerCreditNoteStatus";
+DROP TYPE IF EXISTS "CustomerCreditNoteStatus";
 
 -- DropEnum
-DROP TYPE "RefundStatus";
+DROP TYPE IF EXISTS "RefundStatus";
 
 -- CreateTable
-CREATE TABLE "CustomerRefund" (
+CREATE TABLE IF NOT EXISTS "CustomerRefund" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "refundNumber" TEXT NOT NULL,
@@ -121,61 +203,113 @@ CREATE TABLE "CustomerRefund" (
 );
 
 -- CreateIndex
-CREATE INDEX "CustomerRefund_tenantId_refundNumber_idx" ON "CustomerRefund"("tenantId", "refundNumber");
+CREATE INDEX IF NOT EXISTS "CustomerRefund_tenantId_refundNumber_idx" ON "CustomerRefund"("tenantId", "refundNumber");
 
 -- CreateIndex
-CREATE INDEX "CustomerRefund_tenantId_customerId_idx" ON "CustomerRefund"("tenantId", "customerId");
+CREATE INDEX IF NOT EXISTS "CustomerRefund_tenantId_customerId_idx" ON "CustomerRefund"("tenantId", "customerId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CustomerRefund_tenantId_refundNumber_key" ON "CustomerRefund"("tenantId", "refundNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "CustomerRefund_tenantId_refundNumber_key" ON "CustomerRefund"("tenantId", "refundNumber");
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_tenantId_creditNoteNumber_idx" ON "CustomerCreditNote"("tenantId", "creditNoteNumber");
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_creditNoteNumber_idx" ON "CustomerCreditNote"("tenantId", "creditNoteNumber");
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_tenantId_customerId_idx" ON "CustomerCreditNote"("tenantId", "customerId");
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_customerId_idx" ON "CustomerCreditNote"("tenantId", "customerId");
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_tenantId_invoiceId_idx" ON "CustomerCreditNote"("tenantId", "invoiceId");
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_invoiceId_idx" ON "CustomerCreditNote"("tenantId", "invoiceId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CustomerCreditNote_tenantId_creditNoteNumber_key" ON "CustomerCreditNote"("tenantId", "creditNoteNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_creditNoteNumber_key" ON "CustomerCreditNote"("tenantId", "creditNoteNumber");
 
 -- AddForeignKey
-ALTER TABLE "CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "CustomerInvoice"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "CustomerInvoice"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_revenueAccountId_fkey" FOREIGN KEY ("revenueAccountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_revenueAccountId_fkey" FOREIGN KEY ("revenueAccountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "Department"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "Department"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_fundId_fkey" FOREIGN KEY ("fundId") REFERENCES "Fund"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_fundId_fkey" FOREIGN KEY ("fundId") REFERENCES "Fund"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_receiptId_fkey" FOREIGN KEY ("receiptId") REFERENCES "CustomerReceipt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_receiptId_fkey" FOREIGN KEY ("receiptId") REFERENCES "CustomerReceipt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_creditNoteId_fkey" FOREIGN KEY ("creditNoteId") REFERENCES "CustomerCreditNote"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_creditNoteId_fkey" FOREIGN KEY ("creditNoteId") REFERENCES "CustomerCreditNote"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CustomerRefund" ADD CONSTRAINT "CustomerRefund_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;

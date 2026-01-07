@@ -1,16 +1,36 @@
-CREATE TYPE "public"."CustomerCreditNoteStatus" AS ENUM ('DRAFT', 'POSTED', 'VOID');
+DO $$ BEGIN
+  CREATE TYPE "public"."CustomerCreditNoteStatus" AS ENUM ('DRAFT', 'POSTED', 'VOID');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "public"."InvoiceType" AS ENUM ('TRAINING', 'CONSULTING', 'SYSTEMS', 'PUBLISHING', 'DONATION', 'OTHER');
+DO $$ BEGIN
+  CREATE TYPE "public"."InvoiceType" AS ENUM ('TRAINING', 'CONSULTING', 'SYSTEMS', 'PUBLISHING', 'DONATION', 'OTHER');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "public"."MasterStatus" AS ENUM ('ACTIVE', 'INACTIVE');
+DO $$ BEGIN
+  CREATE TYPE "public"."MasterStatus" AS ENUM ('ACTIVE', 'INACTIVE');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "public"."ProjectStatus" AS ENUM ('ACTIVE', 'CLOSED');
+DO $$ BEGIN
+  CREATE TYPE "public"."ProjectStatus" AS ENUM ('ACTIVE', 'CLOSED');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "public"."RefundStatus" AS ENUM ('DRAFT', 'POSTED');
+DO $$ BEGIN
+  CREATE TYPE "public"."RefundStatus" AS ENUM ('DRAFT', 'POSTED');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AlterEnum
 -- This migration adds more than one value to an enum.
@@ -20,12 +40,12 @@ CREATE TYPE "public"."RefundStatus" AS ENUM ('DRAFT', 'POSTED');
 -- the enum.
 
 
-ALTER TYPE "public"."AuditEntityType" ADD VALUE 'INVOICE_CATEGORY';
-ALTER TYPE "public"."AuditEntityType" ADD VALUE 'TAX_RATE';
-ALTER TYPE "public"."AuditEntityType" ADD VALUE 'TENANT_TAX_CONFIG';
-ALTER TYPE "public"."AuditEntityType" ADD VALUE 'DEPARTMENT';
-ALTER TYPE "public"."AuditEntityType" ADD VALUE 'PROJECT';
-ALTER TYPE "public"."AuditEntityType" ADD VALUE 'FUND';
+DO $$ BEGIN ALTER TYPE "public"."AuditEntityType" ADD VALUE 'INVOICE_CATEGORY'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEntityType" ADD VALUE 'TAX_RATE'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEntityType" ADD VALUE 'TENANT_TAX_CONFIG'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEntityType" ADD VALUE 'DEPARTMENT'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEntityType" ADD VALUE 'PROJECT'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEntityType" ADD VALUE 'FUND'; EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- AlterEnum
 -- This migration adds more than one value to an enum.
@@ -35,20 +55,20 @@ ALTER TYPE "public"."AuditEntityType" ADD VALUE 'FUND';
 -- the enum.
 
 
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'DEPARTMENT_CREATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'DEPARTMENT_UPDATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'PROJECT_CREATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'PROJECT_UPDATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'PROJECT_CLOSED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'FUND_CREATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'FUND_UPDATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'INVOICE_CATEGORY_CREATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'INVOICE_CATEGORY_UPDATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'INVOICE_CATEGORY_STATUS_CHANGE';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_RATE_CREATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_RATE_UPDATED';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_RATE_STATUS_CHANGE';
-ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_CONFIG_UPDATED';
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'DEPARTMENT_CREATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'DEPARTMENT_UPDATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'PROJECT_CREATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'PROJECT_UPDATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'PROJECT_CLOSED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'FUND_CREATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'FUND_UPDATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'INVOICE_CATEGORY_CREATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'INVOICE_CATEGORY_UPDATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'INVOICE_CATEGORY_STATUS_CHANGE'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_RATE_CREATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_RATE_UPDATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_RATE_STATUS_CHANGE'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER TYPE "public"."AuditEventType" ADD VALUE 'TAX_CONFIG_UPDATED'; EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- AlterTable
 ALTER TABLE "public"."CustomerInvoice" ADD COLUMN     "invoiceType" "public"."InvoiceType",
@@ -67,7 +87,7 @@ ALTER TABLE "public"."Project" ADD COLUMN     "status" "public"."ProjectStatus" 
 ALTER TABLE "public"."TaxRate" ALTER COLUMN "glAccountId" DROP NOT NULL;
 
 -- CreateTable
-CREATE TABLE "public"."AccountingPeriodChecklist" (
+CREATE TABLE IF NOT EXISTS "public"."AccountingPeriodChecklist" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "periodId" TEXT NOT NULL,
@@ -83,7 +103,7 @@ CREATE TABLE "public"."AccountingPeriodChecklist" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."CustomerCreditNote" (
+CREATE TABLE IF NOT EXISTS "public"."CustomerCreditNote" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "creditNoteNumber" TEXT NOT NULL,
@@ -105,8 +125,12 @@ CREATE TABLE "public"."CustomerCreditNote" (
     CONSTRAINT "CustomerCreditNote_pkey" PRIMARY KEY ("id")
 );
 
+-- In newer schema versions, this table may exist without legacy columns.
+-- Ensure legacy column exists for indexes/constraints below when replaying into a shadow DB.
+ALTER TABLE "public"."CustomerCreditNote" ADD COLUMN IF NOT EXISTS "originalInvoiceId" TEXT;
+
 -- CreateTable
-CREATE TABLE "public"."CustomerCreditNoteLine" (
+CREATE TABLE IF NOT EXISTS "public"."CustomerCreditNoteLine" (
     "id" TEXT NOT NULL,
     "creditNoteId" TEXT NOT NULL,
     "description" TEXT NOT NULL,
@@ -119,8 +143,12 @@ CREATE TABLE "public"."CustomerCreditNoteLine" (
     CONSTRAINT "CustomerCreditNoteLine_pkey" PRIMARY KEY ("id")
 );
 
+-- In newer schema versions, this table may exist without legacy columns.
+-- Ensure legacy column exists for indexes/constraints below when replaying into a shadow DB.
+ALTER TABLE "public"."CustomerCreditNoteLine" ADD COLUMN IF NOT EXISTS "taxRateId" TEXT;
+
 -- CreateTable
-CREATE TABLE "public"."Refund" (
+CREATE TABLE IF NOT EXISTS "public"."Refund" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "refundNumber" TEXT NOT NULL,
@@ -141,113 +169,181 @@ CREATE TABLE "public"."Refund" (
 );
 
 -- CreateIndex
-CREATE INDEX "AccountingPeriodChecklist_completedById_idx" ON "public"."AccountingPeriodChecklist"("completedById" ASC);
+CREATE INDEX IF NOT EXISTS "AccountingPeriodChecklist_completedById_idx" ON "public"."AccountingPeriodChecklist"("completedById" ASC);
 
 -- CreateIndex
-CREATE INDEX "AccountingPeriodChecklist_periodId_idx" ON "public"."AccountingPeriodChecklist"("periodId" ASC);
+CREATE INDEX IF NOT EXISTS "AccountingPeriodChecklist_periodId_idx" ON "public"."AccountingPeriodChecklist"("periodId" ASC);
 
 -- CreateIndex
-CREATE INDEX "AccountingPeriodChecklist_tenantId_idx" ON "public"."AccountingPeriodChecklist"("tenantId" ASC);
+CREATE INDEX IF NOT EXISTS "AccountingPeriodChecklist_tenantId_idx" ON "public"."AccountingPeriodChecklist"("tenantId" ASC);
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AccountingPeriodChecklist_tenantId_periodId_checklistCode_key" ON "public"."AccountingPeriodChecklist"("tenantId" ASC, "periodId" ASC, "checklistCode" ASC);
+CREATE UNIQUE INDEX IF NOT EXISTS "AccountingPeriodChecklist_tenantId_periodId_checklistCode_key" ON "public"."AccountingPeriodChecklist"("tenantId" ASC, "periodId" ASC, "checklistCode" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_customerId_idx" ON "public"."CustomerCreditNote"("customerId" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_customerId_idx" ON "public"."CustomerCreditNote"("customerId" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_originalInvoiceId_idx" ON "public"."CustomerCreditNote"("originalInvoiceId" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_originalInvoiceId_idx" ON "public"."CustomerCreditNote"("originalInvoiceId" ASC);
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CustomerCreditNote_tenantId_customerId_creditNoteNumber_key" ON "public"."CustomerCreditNote"("tenantId" ASC, "customerId" ASC, "creditNoteNumber" ASC);
+CREATE UNIQUE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_customerId_creditNoteNumber_key" ON "public"."CustomerCreditNote"("tenantId" ASC, "customerId" ASC, "creditNoteNumber" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_tenantId_idx" ON "public"."CustomerCreditNote"("tenantId" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_idx" ON "public"."CustomerCreditNote"("tenantId" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNote_tenantId_status_idx" ON "public"."CustomerCreditNote"("tenantId" ASC, "status" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerCreditNote_tenantId_status_idx" ON "public"."CustomerCreditNote"("tenantId" ASC, "status" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNoteLine_creditNoteId_idx" ON "public"."CustomerCreditNoteLine"("creditNoteId" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerCreditNoteLine_creditNoteId_idx" ON "public"."CustomerCreditNoteLine"("creditNoteId" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerCreditNoteLine_taxRateId_idx" ON "public"."CustomerCreditNoteLine"("taxRateId" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerCreditNoteLine_taxRateId_idx" ON "public"."CustomerCreditNoteLine"("taxRateId" ASC);
 
 -- CreateIndex
-CREATE INDEX "Refund_creditNoteId_idx" ON "public"."Refund"("creditNoteId" ASC);
+CREATE INDEX IF NOT EXISTS "Refund_creditNoteId_idx" ON "public"."Refund"("creditNoteId" ASC);
 
 -- CreateIndex
-CREATE INDEX "Refund_customerId_idx" ON "public"."Refund"("customerId" ASC);
+CREATE INDEX IF NOT EXISTS "Refund_customerId_idx" ON "public"."Refund"("customerId" ASC);
 
 -- CreateIndex
-CREATE INDEX "Refund_receiptId_idx" ON "public"."Refund"("receiptId" ASC);
+CREATE INDEX IF NOT EXISTS "Refund_receiptId_idx" ON "public"."Refund"("receiptId" ASC);
 
 -- CreateIndex
-CREATE INDEX "Refund_tenantId_idx" ON "public"."Refund"("tenantId" ASC);
+CREATE INDEX IF NOT EXISTS "Refund_tenantId_idx" ON "public"."Refund"("tenantId" ASC);
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Refund_tenantId_refundNumber_key" ON "public"."Refund"("tenantId" ASC, "refundNumber" ASC);
+CREATE UNIQUE INDEX IF NOT EXISTS "Refund_tenantId_refundNumber_key" ON "public"."Refund"("tenantId" ASC, "refundNumber" ASC);
 
 -- CreateIndex
-CREATE INDEX "Refund_tenantId_status_idx" ON "public"."Refund"("tenantId" ASC, "status" ASC);
+CREATE INDEX IF NOT EXISTS "Refund_tenantId_status_idx" ON "public"."Refund"("tenantId" ASC, "status" ASC);
 
 -- CreateIndex
-CREATE INDEX "CustomerInvoice_projectId_idx" ON "public"."CustomerInvoice"("projectId" ASC);
+CREATE INDEX IF NOT EXISTS "CustomerInvoice_projectId_idx" ON "public"."CustomerInvoice"("projectId" ASC);
 
 -- CreateIndex
-CREATE INDEX "Fund_tenantId_status_idx" ON "public"."Fund"("tenantId" ASC, "status" ASC);
+CREATE INDEX IF NOT EXISTS "Fund_tenantId_status_idx" ON "public"."Fund"("tenantId" ASC, "status" ASC);
 
 -- CreateIndex
-CREATE INDEX "Project_tenantId_status_idx" ON "public"."Project"("tenantId" ASC, "status" ASC);
+CREATE INDEX IF NOT EXISTS "Project_tenantId_status_idx" ON "public"."Project"("tenantId" ASC, "status" ASC);
 
 -- AddForeignKey
-ALTER TABLE "public"."AccountingPeriodChecklist" ADD CONSTRAINT "AccountingPeriodChecklist_completedById_fkey" FOREIGN KEY ("completedById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."AccountingPeriodChecklist" ADD CONSTRAINT "AccountingPeriodChecklist_completedById_fkey" FOREIGN KEY ("completedById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."AccountingPeriodChecklist" ADD CONSTRAINT "AccountingPeriodChecklist_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "public"."AccountingPeriod"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."AccountingPeriodChecklist" ADD CONSTRAINT "AccountingPeriodChecklist_periodId_fkey" FOREIGN KEY ("periodId") REFERENCES "public"."AccountingPeriod"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."AccountingPeriodChecklist" ADD CONSTRAINT "AccountingPeriodChecklist_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "public"."Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."AccountingPeriodChecklist" ADD CONSTRAINT "AccountingPeriodChecklist_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "public"."Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "public"."Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "public"."Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_originalInvoiceId_fkey" FOREIGN KEY ("originalInvoiceId") REFERENCES "public"."CustomerInvoice"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_originalInvoiceId_fkey" FOREIGN KEY ("originalInvoiceId") REFERENCES "public"."CustomerInvoice"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "public"."Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNote" ADD CONSTRAINT "CustomerCreditNote_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "public"."Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_creditNoteId_fkey" FOREIGN KEY ("creditNoteId") REFERENCES "public"."CustomerCreditNote"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_creditNoteId_fkey" FOREIGN KEY ("creditNoteId") REFERENCES "public"."CustomerCreditNote"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_taxRateId_fkey" FOREIGN KEY ("taxRateId") REFERENCES "public"."TaxRate"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerCreditNoteLine" ADD CONSTRAINT "CustomerCreditNoteLine_taxRateId_fkey" FOREIGN KEY ("taxRateId") REFERENCES "public"."TaxRate"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."CustomerInvoice" ADD CONSTRAINT "CustomerInvoice_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."Project"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."CustomerInvoice" ADD CONSTRAINT "CustomerInvoice_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."Project"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_creditNoteId_fkey" FOREIGN KEY ("creditNoteId") REFERENCES "public"."CustomerCreditNote"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_creditNoteId_fkey" FOREIGN KEY ("creditNoteId") REFERENCES "public"."CustomerCreditNote"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "public"."Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "public"."Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_postedById_fkey" FOREIGN KEY ("postedById") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_receiptId_fkey" FOREIGN KEY ("receiptId") REFERENCES "public"."CustomerReceipt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_receiptId_fkey" FOREIGN KEY ("receiptId") REFERENCES "public"."CustomerReceipt"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "public"."Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "public"."Refund" ADD CONSTRAINT "Refund_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "public"."Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
