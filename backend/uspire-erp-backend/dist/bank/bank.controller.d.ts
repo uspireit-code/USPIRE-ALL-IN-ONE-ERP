@@ -11,12 +11,13 @@ export declare class BankController {
     constructor(bank: BankService);
     createBankAccount(req: Request, dto: CreateBankAccountDto): Promise<{
         glAccount: {
-            name: string;
             id: string;
+            tenantId: string;
+            name: string;
+            createdById: string | null;
             createdAt: Date;
             updatedAt: Date;
-            tenantId: string;
-            createdById: string | null;
+            isActive: boolean;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             subCategory: string | null;
@@ -28,7 +29,6 @@ export declare class BankController {
             requiresFund: boolean;
             isBudgetRelevant: boolean;
             budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-            isActive: boolean;
             parentAccountId: string | null;
             isPosting: boolean;
             isPostingAllowed: boolean;
@@ -39,24 +39,25 @@ export declare class BankController {
             ifrsMappingCode: string | null;
         };
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         currency: string;
         isActive: boolean;
+        glAccountId: string;
         bankName: string;
         accountNumber: string;
-        glAccountId: string;
     }>;
     listBankAccounts(req: Request): Promise<({
         glAccount: {
-            name: string;
             id: string;
+            tenantId: string;
+            name: string;
+            createdById: string | null;
             createdAt: Date;
             updatedAt: Date;
-            tenantId: string;
-            createdById: string | null;
+            isActive: boolean;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             subCategory: string | null;
@@ -68,7 +69,6 @@ export declare class BankController {
             requiresFund: boolean;
             isBudgetRelevant: boolean;
             budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-            isActive: boolean;
             parentAccountId: string | null;
             isPosting: boolean;
             isPostingAllowed: boolean;
@@ -79,15 +79,15 @@ export declare class BankController {
             ifrsMappingCode: string | null;
         };
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         currency: string;
         isActive: boolean;
+        glAccountId: string;
         bankName: string;
         accountNumber: string;
-        glAccountId: string;
     })[]>;
     createStatement(req: Request, dto: CreateBankStatementDto): Promise<any>;
     listStatements(req: Request, dto: ListBankStatementsQueryDto): Promise<any>;

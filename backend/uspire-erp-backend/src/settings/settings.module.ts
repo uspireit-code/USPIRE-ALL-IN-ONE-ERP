@@ -5,13 +5,11 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { SettingsController } from './settings.controller';
 import { SettingsService } from './settings.service';
-import { AdminRoleGuard } from './admin-role.guard';
-import { SystemSettingsReadGuard } from './system-settings-read.guard';
 
 @Module({
   imports: [ConfigModule, JwtModule.register({}), PrismaModule, StorageModule],
   controllers: [SettingsController],
-  providers: [SettingsService, AdminRoleGuard, SystemSettingsReadGuard],
-  exports: [AdminRoleGuard, SystemSettingsReadGuard],
+  providers: [SettingsService],
+  exports: [],
 })
 export class SettingsModule {}

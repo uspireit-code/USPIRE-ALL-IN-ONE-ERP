@@ -11,8 +11,7 @@ export declare class SettingsService {
     private readonly prisma;
     private readonly storage;
     constructor(prisma: PrismaService, storage: StorageProvider);
-    private ensureAdminMasterDataPermissions;
-    private ensureAdminCoaPermissions;
+    private ensureFinanceOfficerRole;
     private ensureFinanceManagerRole;
     private ensureFinanceControllerRole;
     listRolesWithPermissions(req: Request): Promise<{
@@ -61,8 +60,8 @@ export declare class SettingsService {
         createdAt: Date;
     }[]>;
     listRoles(req: Request): Promise<{
-        name: string;
         id: string;
+        name: string;
         createdAt: Date;
         description: string | null;
     }[]>;

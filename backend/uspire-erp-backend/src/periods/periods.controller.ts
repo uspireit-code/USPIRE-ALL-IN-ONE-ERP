@@ -1,12 +1,12 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
-import { AdminRoleGuard } from '../settings/admin-role.guard';
 import { CreateAccountingPeriodDto } from '../gl/dto/create-accounting-period.dto';
 import { ReopenPeriodDto } from '../gl/dto/reopen-period.dto';
 import { PeriodsService } from './periods.service';
+import { CorrectPeriodDto } from './dto/correct-period.dto';
 
 @Controller('periods')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -54,12 +54,21 @@ export class PeriodsController {
 
   @Post(':id/reopen')
   @Permissions('FINANCE_PERIOD_REOPEN')
-  @UseGuards(AdminRoleGuard)
   async reopen(
     @Req() req: Request,
     @Param('id') id: string,
     @Body() dto: ReopenPeriodDto,
   ) {
     return this.periods.reopenPeriod(req, id, dto);
+  }
+
+  @Patch(':id/correct')
+  @Permissions('FINANCE_PERIOD_CORRECT')
+  async correct(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: CorrectPeriodDto,
+  ) {
+    return this.periods.correctPeriod(req, id, dto);
   }
 }

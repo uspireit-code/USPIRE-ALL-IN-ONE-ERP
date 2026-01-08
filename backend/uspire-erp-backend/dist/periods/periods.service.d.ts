@@ -2,18 +2,20 @@ import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { GlService } from '../gl/gl.service';
 import type { CreateAccountingPeriodDto } from '../gl/dto/create-accounting-period.dto';
+import type { CorrectPeriodDto } from './dto/correct-period.dto';
 export declare class PeriodsService {
     private readonly prisma;
     private readonly gl;
     constructor(prisma: PrismaService, gl: GlService);
+    private auditPeriodCorrection;
     listPeriods(req: Request): Promise<{
-        name: string;
         id: string;
-        status: import("@prisma/client").$Enums.AccountingPeriodStatus;
-        createdAt: Date;
-        updatedAt: Date;
         tenantId: string;
+        name: string;
         createdById: string | null;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.AccountingPeriodStatus;
+        updatedAt: Date;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -24,8 +26,8 @@ export declare class PeriodsService {
     createPeriod(req: Request, dto: CreateAccountingPeriodDto): Promise<any>;
     getChecklist(req: Request, id: string): Promise<{
         period: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
@@ -57,13 +59,13 @@ export declare class PeriodsService {
         createdAt: any;
     }>;
     closePeriod(req: Request, id: string): Promise<{
-        name: string;
         id: string;
-        status: import("@prisma/client").$Enums.AccountingPeriodStatus;
-        createdAt: Date;
-        updatedAt: Date;
         tenantId: string;
+        name: string;
         createdById: string | null;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.AccountingPeriodStatus;
+        updatedAt: Date;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -74,13 +76,13 @@ export declare class PeriodsService {
     reopenPeriod(req: Request, id: string, dto: {
         reason?: string;
     }): Promise<{
-        name: string;
         id: string;
-        status: import("@prisma/client").$Enums.AccountingPeriodStatus;
-        createdAt: Date;
-        updatedAt: Date;
         tenantId: string;
+        name: string;
         createdById: string | null;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.AccountingPeriodStatus;
+        updatedAt: Date;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -88,4 +90,5 @@ export declare class PeriodsService {
         closedById: string | null;
         closedAt: Date | null;
     }>;
+    correctPeriod(req: Request, id: string, dto: CorrectPeriodDto): Promise<any>;
 }

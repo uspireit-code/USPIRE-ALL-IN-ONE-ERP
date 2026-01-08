@@ -1,4 +1,4 @@
-import { PrismaClient, TenantStatus } from '@prisma/client';
+import { Prisma, PrismaClient, TenantStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -104,6 +104,12 @@ async function main() {
   });
 
   const permissions = [
+    { code: 'SYSTEM_VIEW_ALL', description: 'System-wide visibility across all modules' },
+    { code: 'FINANCE_VIEW_ALL', description: 'View all finance modules and screens (visibility only)' },
+    { code: 'SETTINGS_VIEW', description: 'View system and finance settings' },
+    { code: 'SYSTEM_CONFIG_CHANGE', description: 'Change system configuration (non-finance)' },
+    { code: 'FINANCE_CONFIG_CHANGE', description: 'Change finance configuration (governed)' },
+
     { code: 'FINANCE_GL_VIEW', description: 'View General Ledger' },
     { code: 'FINANCE_GL_CREATE', description: 'Create draft journal entries and accounts' },
     { code: 'FINANCE_GL_POST', description: 'Post General Ledger entries' },
@@ -149,6 +155,7 @@ async function main() {
     { code: 'FINANCE_PERIOD_CLOSE', description: 'Close accounting periods' },
     { code: 'FINANCE_PERIOD_CLOSE_APPROVE', description: 'Approve and execute accounting period close' },
     { code: 'FINANCE_PERIOD_REOPEN', description: 'Re-open (unlock) an accounting period' },
+    { code: 'FINANCE_PERIOD_CORRECT', description: 'Correct accounting period dates (governed)' },
     { code: 'FINANCE_TB_VIEW', description: 'View Trial Balance' },
     { code: 'FINANCE_PL_VIEW', description: 'View Profit & Loss statement' },
     { code: 'FINANCE_BS_VIEW', description: 'View Balance Sheet' },
@@ -191,6 +198,14 @@ async function main() {
     { code: 'AR_RECEIPTS_VIEW', description: 'View customer receipts' },
     { code: 'AR_RECEIPTS_CREATE', description: 'Create customer receipts' },
     { code: 'AR_RECEIPT_VOID', description: 'Void customer receipts' },
+
+    { code: 'AR_AGING_VIEW', description: 'View Accounts Receivable aging report' },
+
+    { code: 'AR_STATEMENT_VIEW', description: 'View customer statements (Accounts Receivable)' },
+
+    { code: 'AR_REMINDER_VIEW', description: 'View Accounts Receivable reminder rules, templates, and logs' },
+    { code: 'AR_REMINDER_CONFIGURE', description: 'Configure Accounts Receivable reminder rules and templates' },
+    { code: 'AR_REMINDER_TRIGGER', description: 'Trigger Accounts Receivable reminders manually' },
     { code: 'CUSTOMERS_VIEW', description: 'View customer master data' },
     { code: 'CUSTOMERS_CREATE', description: 'Create customers (master)' },
     { code: 'CUSTOMERS_EDIT', description: 'Edit customers (master)' },
@@ -291,7 +306,7 @@ async function main() {
     update: {},
   });
 
-  await prisma.role.upsert({
+  const financeOfficerRole = await prisma.role.upsert({
     where: {
       tenantId_name: {
         tenantId: tenant.id,
@@ -434,8 +449,13 @@ async function main() {
     'PAYMENT_APPROVE',
     'PAYMENT_POST',
 
+    'FINANCE_PERIOD_CREATE',
     'FINANCE_PERIOD_CLOSE',
     'FINANCE_PERIOD_CLOSE_APPROVE',
+    'FINANCE_PERIOD_REOPEN',
+    'FINANCE_PERIOD_CORRECT',
+
+    'FINANCE_CONFIG_CHANGE',
 
     'TAX_CONFIG_UPDATE',
     'CREDIT_NOTE_APPROVE',
@@ -453,6 +473,38 @@ async function main() {
   ] as const;
 
   await removePermissionsByCode([superAdminRole.id, systemAdminRole.id, adminRole.id], Array.from(forbiddenAdminBypassPermCodes));
+
+  await assignPermissionsByCode(superAdminRole.id, [
+    'SYSTEM_VIEW_ALL',
+    'FINANCE_VIEW_ALL',
+    'SETTINGS_VIEW',
+  ]);
+
+  await assignPermissionsByCode(systemAdminRole.id, [
+    'SYSTEM_VIEW_ALL',
+    'FINANCE_VIEW_ALL',
+    'SETTINGS_VIEW',
+  ]);
+
+  // AR Aging (AR-1) RBAC backfill (idempotent):
+  // Allow view-only AR aging report access for governed roles.
+  await assignPermissionsByCode(superAdminRole.id, ['AR_AGING_VIEW']);
+  await assignPermissionsByCode(systemAdminRole.id, ['AR_AGING_VIEW']);
+  await assignPermissionsByCode(financeManagerRole.id, ['AR_AGING_VIEW']);
+  await assignPermissionsByCode(financeControllerRole.id, ['AR_AGING_VIEW']);
+
+  // AR Statements (AR-STATEMENTS) RBAC backfill (idempotent):
+  // Allow view-only customer statement access for governed finance roles.
+  // Do NOT auto-grant to ADMIN; admins rely on FINANCE_VIEW_ALL / SYSTEM_VIEW_ALL visibility only.
+  await assignPermissionsByCode(financeOfficerRole.id, ['AR_STATEMENT_VIEW']);
+  await assignPermissionsByCode(financeManagerRole.id, ['AR_STATEMENT_VIEW']);
+  await assignPermissionsByCode(financeControllerRole.id, ['AR_STATEMENT_VIEW']);
+
+  // AR Reminders (AR-REMINDERS) RBAC backfill (idempotent):
+  // Permission-based governance only.
+  await assignPermissionsByCode(financeOfficerRole.id, ['AR_REMINDER_VIEW', 'AR_REMINDER_TRIGGER']);
+  await assignPermissionsByCode(financeManagerRole.id, ['AR_REMINDER_VIEW', 'AR_REMINDER_TRIGGER', 'AR_REMINDER_CONFIGURE']);
+  await assignPermissionsByCode(financeControllerRole.id, ['AR_REMINDER_VIEW', 'AR_REMINDER_TRIGGER', 'AR_REMINDER_CONFIGURE']);
 
   await assignPermissionsByCode(superAdminRole.id, [
     'AUDIT_VIEW',
@@ -502,7 +554,7 @@ async function main() {
   const forecastApprovePerm = await prisma.permission.findUnique({ where: { code: 'forecast.approve' }, select: { id: true } });
   const forecastViewPerm = await prisma.permission.findUnique({ where: { code: 'forecast.view' }, select: { id: true } });
 
-  const financeOfficerRole = await prisma.role.findFirst({
+  const financeOfficerRoleFound = await prisma.role.findFirst({
     where: { tenantId: tenant.id, name: 'FINANCE_OFFICER' },
     select: { id: true },
   });
@@ -514,6 +566,24 @@ async function main() {
   const glApprovePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_APPROVE' }, select: { id: true } });
   const glRecurringManagePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_RECURRING_MANAGE' }, select: { id: true } });
   const periodViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_VIEW' }, select: { id: true } });
+
+  // Governance: FINANCE_OFFICER must not have FINANCE_GL_APPROVE. This is additive-only cleanup for past seeds.
+  if (glApprovePerm?.id) {
+    const financeOfficerRoles = await prisma.role.findMany({
+      where: { name: 'FINANCE_OFFICER' },
+      select: { id: true },
+    });
+
+    if (financeOfficerRoles.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: {
+          roleId: { in: financeOfficerRoles.map((r) => r.id) },
+          permissionId: glApprovePerm.id,
+        },
+      });
+    }
+  }
+
   const periodChecklistViewPerm = await prisma.permission.findUnique({
     where: { code: 'FINANCE_PERIOD_CHECKLIST_VIEW' },
     select: { id: true },
@@ -821,35 +891,29 @@ async function main() {
     }
   }
 
-  if (financeOfficerRole?.id) {
+  if (financeOfficerRoleFound?.id) {
     await prisma.rolePermission.createMany({
       data: [
         glViewPerm?.id,
         glCreatePerm?.id,
-        glRecurringGeneratePerm?.id,
         periodViewPerm?.id,
-        periodChecklistViewPerm?.id,
-        periodChecklistCompletePerm?.id,
       ]
         .filter(Boolean)
         .map((permissionId) => ({
-          roleId: financeOfficerRole.id,
+          roleId: financeOfficerRoleFound.id,
           permissionId: permissionId as string,
         })),
       skipDuplicates: true,
     });
 
-    await assignPermissionsByCode(financeOfficerRole.id, [
+    await assignPermissionsByCode(financeOfficerRoleFound.id, [
       'AR_INVOICE_CREATE',
       'AR_INVOICE_VIEW',
       'AR_RECEIPTS_CREATE',
       'AR_RECEIPTS_VIEW',
-      'PAYMENT_CREATE',
-      'AP_INVOICE_CREATE',
-      'AR_CREDIT_NOTE_CREATE',
+      'CUSTOMERS_VIEW',
       'AR_CREDIT_NOTE_VIEW',
       'AR_REFUND_VIEW',
-      'AR_REFUND_CREATE',
     ]);
   }
 
@@ -867,6 +931,13 @@ async function main() {
   }
   if (financeControllerRole?.id) {
     await assignPermissionsByCode(financeControllerRole.id, [
+      'FINANCE_PERIOD_CREATE',
+      'FINANCE_PERIOD_VIEW',
+      'FINANCE_PERIOD_REVIEW',
+      'FINANCE_PERIOD_CHECKLIST_VIEW',
+      'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+      'FINANCE_PERIOD_CLOSE',
+      'FINANCE_PERIOD_CORRECT',
       'FINANCE_GL_FINAL_POST',
       'AR_INVOICE_POST',
       'AP_INVOICE_POST',
@@ -879,6 +950,7 @@ async function main() {
       'AR_REFUND_VIEW',
       'AR_REFUND_POST',
       'AR_REFUND_VOID',
+      'FINANCE_PERIOD_REOPEN',
     ]);
   }
 
@@ -1580,6 +1652,205 @@ async function main() {
     ],
     skipDuplicates: true,
   });
+
+  await prisma.arReminderTemplate.upsert({
+    where: {
+      tenantId_level: {
+        tenantId: tenant.id,
+        level: 'NORMAL' as any,
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      level: 'NORMAL' as any,
+      subject: 'Payment Reminder: Invoice overdue',
+      body: 'Dear Customer,\n\nThis is a friendly reminder that you have an overdue invoice. Please arrange payment at your earliest convenience.\n\nRegards,\nFinance Team',
+      active: true,
+      lastUpdatedById: managerUser.id,
+    },
+    update: {
+      subject: 'Payment Reminder: Invoice overdue',
+      body: 'Dear Customer,\n\nThis is a friendly reminder that you have an overdue invoice. Please arrange payment at your earliest convenience.\n\nRegards,\nFinance Team',
+      active: true,
+      lastUpdatedById: managerUser.id,
+    },
+  });
+
+  await prisma.arReminderTemplate.upsert({
+    where: {
+      tenantId_level: {
+        tenantId: tenant.id,
+        level: 'ESCALATED' as any,
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      level: 'ESCALATED' as any,
+      subject: 'Second Notice: Overdue Invoice',
+      body: 'Dear Customer,\n\nOur records show your invoice remains unpaid. Please settle the outstanding amount as soon as possible to avoid further escalation.\n\nRegards,\nFinance Team',
+      active: true,
+      lastUpdatedById: managerUser.id,
+    },
+    update: {
+      subject: 'Second Notice: Overdue Invoice',
+      body: 'Dear Customer,\n\nOur records show your invoice remains unpaid. Please settle the outstanding amount as soon as possible to avoid further escalation.\n\nRegards,\nFinance Team',
+      active: true,
+      lastUpdatedById: managerUser.id,
+    },
+  });
+
+  await prisma.arReminderTemplate.upsert({
+    where: {
+      tenantId_level: {
+        tenantId: tenant.id,
+        level: 'FINAL' as any,
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      level: 'FINAL' as any,
+      subject: 'Final Notice: Immediate Payment Required',
+      body: 'Dear Customer,\n\nThis is a final notice that your invoice is significantly overdue. Please make payment immediately or contact us to resolve this matter.\n\nRegards,\nFinance Team',
+      active: true,
+      lastUpdatedById: managerUser.id,
+    },
+    update: {
+      subject: 'Final Notice: Immediate Payment Required',
+      body: 'Dear Customer,\n\nThis is a final notice that your invoice is significantly overdue. Please make payment immediately or contact us to resolve this matter.\n\nRegards,\nFinance Team',
+      active: true,
+      lastUpdatedById: managerUser.id,
+    },
+  });
+
+  await prisma.arReminderRule.upsert({
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'Overdue +7 days (NORMAL)',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      name: 'Overdue +7 days (NORMAL)',
+      triggerType: 'AFTER_DUE' as any,
+      daysOffset: 7,
+      active: true,
+      escalationLevel: 'NORMAL' as any,
+      createdById: managerUser.id,
+    },
+    update: {
+      triggerType: 'AFTER_DUE' as any,
+      daysOffset: 7,
+      active: true,
+      escalationLevel: 'NORMAL' as any,
+    },
+  });
+
+  const demoCustomer = await prisma.customer.upsert({
+    where: {
+      tenantId_customerCode: {
+        tenantId: tenant.id,
+        customerCode: 'DEMO-AR',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      customerCode: 'DEMO-AR',
+      name: 'Demo AR Customer',
+      email: 'ar.customer@example.com',
+      status: 'ACTIVE' as any,
+    },
+    update: {
+      name: 'Demo AR Customer',
+      email: 'ar.customer@example.com',
+      status: 'ACTIVE' as any,
+    },
+  });
+
+  const incomeAccount = await prisma.account.findFirst({
+    where: {
+      tenantId: tenant.id,
+      type: 'INCOME' as any,
+      isActive: true,
+      isPosting: true,
+    },
+    select: { id: true },
+    orderBy: { code: 'asc' },
+  });
+
+  if (incomeAccount?.id) {
+    const now = new Date();
+    const invoiceDate = new Date(now);
+    invoiceDate.setDate(invoiceDate.getDate() - 40);
+    const dueDate = new Date(now);
+    dueDate.setDate(dueDate.getDate() - 35);
+
+    const demoInvoice = await prisma.customerInvoice.upsert({
+      where: {
+        tenantId_customerId_invoiceNumber: {
+          tenantId: tenant.id,
+          customerId: demoCustomer.id,
+          invoiceNumber: 'INV-DEMO-AR-0001',
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        customerId: demoCustomer.id,
+        invoiceNumber: 'INV-DEMO-AR-0001',
+        invoiceDate,
+        dueDate,
+        currency: tenant.defaultCurrency ?? 'KES',
+        exchangeRate: new Prisma.Decimal('1.0'),
+        invoiceType: 'OTHER' as any,
+        reference: 'AR Reminder Demo',
+        invoiceNote: 'Seeded invoice for AR reminders verification.',
+        customerNameSnapshot: demoCustomer.name,
+        customerEmailSnapshot: demoCustomer.email,
+        customerBillingAddressSnapshot: null,
+        subtotal: new Prisma.Decimal('1000.00'),
+        taxAmount: new Prisma.Decimal('0.00'),
+        isTaxable: false,
+        totalAmount: new Prisma.Decimal('1000.00'),
+        status: 'POSTED' as any,
+        createdById: managerUser.id,
+        postedById: managerUser.id,
+        postedAt: new Date(invoiceDate.getTime() + 60 * 60 * 1000),
+      } as any,
+      update: {
+        invoiceDate,
+        dueDate,
+        currency: tenant.defaultCurrency ?? 'KES',
+        exchangeRate: new Prisma.Decimal('1.0'),
+        customerNameSnapshot: demoCustomer.name,
+        customerEmailSnapshot: demoCustomer.email,
+        subtotal: new Prisma.Decimal('1000.00'),
+        taxAmount: new Prisma.Decimal('0.00'),
+        isTaxable: false,
+        totalAmount: new Prisma.Decimal('1000.00'),
+        status: 'POSTED' as any,
+        postedById: managerUser.id,
+        postedAt: new Date(invoiceDate.getTime() + 60 * 60 * 1000),
+      } as any,
+    });
+
+    await prisma.customerInvoiceLine.deleteMany({
+      where: {
+        customerInvoiceId: demoInvoice.id,
+      },
+    });
+
+    await prisma.customerInvoiceLine.create({
+      data: {
+        customerInvoiceId: demoInvoice.id,
+        accountId: incomeAccount.id,
+        description: 'AR Reminder Demo Line',
+        quantity: new Prisma.Decimal('1.000000'),
+        unitPrice: new Prisma.Decimal('1000.000000'),
+        discountTotal: new Prisma.Decimal('0.00'),
+        lineTotal: new Prisma.Decimal('1000.00'),
+      },
+    });
+  }
 
   await prisma.soDRule.upsert({
     where: {

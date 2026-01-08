@@ -79,6 +79,16 @@ export async function reopenPeriod(id: string, payload: { reason: string }) {
   });
 }
 
+export async function correctPeriod(
+  id: string,
+  payload: { newStartDate?: string; newEndDate?: string; reason: string },
+) {
+  return apiFetch<AccountingPeriod>(`/periods/${id}/correct`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getPeriodChecklist(id: string) {
   return apiFetch<AccountingPeriodChecklistResponse>(`/periods/${id}/checklist`, {
     method: 'GET',

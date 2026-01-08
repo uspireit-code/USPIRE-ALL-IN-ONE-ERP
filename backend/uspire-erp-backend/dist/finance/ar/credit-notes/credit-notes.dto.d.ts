@@ -21,6 +21,8 @@ export declare class ListCreditNotesQueryDto {
     customerId?: string;
     invoiceId?: string;
     search?: string;
+    dateFrom?: string;
+    dateTo?: string;
     page?: number;
     pageSize?: number;
 }

@@ -16,8 +16,8 @@ export declare class ReviewPackService {
     private toSafeFileName;
     listReviewPacks(req: Request, periodId: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         periodId: string;
         storageKey: string;
         generatedById: string;
@@ -31,8 +31,8 @@ export declare class ReviewPackService {
     }[]>;
     generateReviewPack(req: Request, periodId: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         periodId: string;
         storageKey: string;
         generatedBy: {

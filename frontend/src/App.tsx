@@ -59,7 +59,6 @@ import { BudgetVsActualPage } from './pages/BudgetVsActualPage';
 import {
   CashPositionPage,
   FinanceApPaymentProposalsPage,
-  FinanceArStatementsPage,
   FinanceTaxCompliancePage,
   PettyCashPage,
 } from './pages/finance/FinancePlaceholders';
@@ -97,11 +96,16 @@ import { CreditNoteDetailsPage } from './pages/ar/CreditNoteDetailsPage';
 import { RefundsListPage } from './pages/ar/RefundsListPage';
 import { RefundCreatePage } from './pages/ar/RefundCreatePage';
 import { RefundDetailsPage } from './pages/ar/RefundDetailsPage';
+import { ArAgingPage as ArAgingReportPage } from './pages/ar/ArAgingPage';
+import { ArStatementsPage } from './pages/ar/ArStatementsPage';
+import { ArRemindersManualTriggerPage } from './pages/ar/ArRemindersManualTriggerPage';
+import { ArRemindersRulesPage } from './pages/ar/ArRemindersRulesPage';
+import { ArRemindersTemplatesPage } from './pages/ar/ArRemindersTemplatesPage';
 
-function AdminOnlyRoute(props: { children: React.ReactNode }) {
+function SettingsVisibleRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
-  const isAdmin = Boolean(state.me?.user?.roles?.includes('ADMIN'));
-  if (!isAdmin) return <AccessDeniedPage />;
+  const has = canAny(state.me, ['SETTINGS_VIEW', 'SYSTEM_VIEW_ALL']);
+  if (!has) return <AccessDeniedPage />;
   return <>{props.children}</>;
 }
 
@@ -152,6 +156,50 @@ export default function App() {
               <Route path="ar/receipts" element={<ReceiptsPage />} />
               <Route path="ar/receipts/new" element={<CreateReceiptPage />} />
               <Route path="ar/receipts/:id" element={<ReceiptDetailsPage />} />
+              <Route
+                path="ar/aging"
+                element={
+                  <PermissionAnyRoute permissions={['AR_AGING_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                    <ArAgingReportPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="ar/statements"
+                element={
+                  <PermissionAnyRoute permissions={['AR_STATEMENT_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                    <ArStatementsPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="ar/reminders"
+                element={
+                  <PermissionAnyRoute permissions={['AR_REMINDER_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                    <ArRemindersManualTriggerPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="ar/reminders/rules"
+                element={
+                  <PermissionAnyRoute permissions={['AR_REMINDER_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                    <ArRemindersRulesPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="ar/reminders/templates"
+                element={
+                  <PermissionAnyRoute permissions={['AR_REMINDER_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                    <ArRemindersTemplatesPage />
+                  </PermissionAnyRoute>
+                }
+              />
 
               <Route
                 path="ar/credit-notes"
@@ -253,41 +301,41 @@ export default function App() {
               <Route
                 path="settings"
                 element={
-                  <AdminOnlyRoute>
+                  <SettingsVisibleRoute>
                     <SettingsPage />
-                  </AdminOnlyRoute>
+                  </SettingsVisibleRoute>
                 }
               />
               <Route
                 path="settings/organisation"
                 element={
-                  <AdminOnlyRoute>
+                  <SettingsVisibleRoute>
                     <SettingsOrganisationPage />
-                  </AdminOnlyRoute>
+                  </SettingsVisibleRoute>
                 }
               />
               <Route
                 path="settings/users"
                 element={
-                  <AdminOnlyRoute>
+                  <SettingsVisibleRoute>
                     <SettingsUsersPage />
-                  </AdminOnlyRoute>
+                  </SettingsVisibleRoute>
                 }
               />
               <Route
                 path="settings/roles"
                 element={
-                  <AdminOnlyRoute>
+                  <SettingsVisibleRoute>
                     <SettingsRolesPage />
-                  </AdminOnlyRoute>
+                  </SettingsVisibleRoute>
                 }
               />
               <Route
                 path="settings/system"
                 element={
-                  <AdminOnlyRoute>
+                  <SettingsVisibleRoute>
                     <SettingsSystemPage />
-                  </AdminOnlyRoute>
+                  </SettingsVisibleRoute>
                 }
               />
               <Route
@@ -457,8 +505,7 @@ export default function App() {
                   </PermissionOnlyRoute>
                 }
               />
-              <Route path="finance/ar/aging" element={<ArAgingPage />} />
-              <Route path="finance/ar/statements" element={<FinanceArStatementsPage />} />
+              {/* AR Aging now lives at /ar/aging under Accounts Receivable and is permission-gated */}
               <Route path="finance/ap/suppliers" element={<SuppliersListPage />} />
               <Route path="finance/ap/invoices" element={<InvoicesListPage />} />
               <Route path="finance/ap/aging" element={<ApAgingPage />} />

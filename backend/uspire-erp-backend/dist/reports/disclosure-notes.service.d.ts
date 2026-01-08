@@ -16,8 +16,8 @@ export declare class DisclosureNotesService {
         }[];
     } & {
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         accountingPeriodId: string;
         noteType: import("@prisma/client").$Enums.DisclosureNoteType;
         generatedAt: Date;
@@ -46,8 +46,8 @@ export declare class DisclosureNotesService {
         }[];
     } & {
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         accountingPeriodId: string;
         noteType: import("@prisma/client").$Enums.DisclosureNoteType;
         generatedAt: Date;

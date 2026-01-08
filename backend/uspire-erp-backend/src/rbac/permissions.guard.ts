@@ -16,6 +16,10 @@ type PermissionRequirement =
       permissions: string[];
     };
 
+function permissionIsView(code: string): boolean {
+  return (code || '').toUpperCase().endsWith('_VIEW');
+}
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(
@@ -75,8 +79,18 @@ export class PermissionsGuard implements CanActivate {
       }
     }
 
+    const hasSystemViewAll = codes.has('SYSTEM_VIEW_ALL');
+    const satisfiedBySystemView = new Set<string>();
+    if (hasSystemViewAll) {
+      for (const p of required) {
+        if (permissionIsView(p)) satisfiedBySystemView.add(p);
+      }
+    }
+
     if (mode === 'all') {
-      const missing = required.filter((p) => !codes.has(p));
+      const missing = required.filter(
+        (p) => !codes.has(p) && !satisfiedBySystemView.has(p),
+      );
       if (missing.length > 0) {
         throw new ForbiddenException({
           error: 'Access denied',
@@ -84,7 +98,9 @@ export class PermissionsGuard implements CanActivate {
         });
       }
     } else {
-      const hasAny = required.some((p) => codes.has(p));
+      const hasAny = required.some(
+        (p) => codes.has(p) || satisfiedBySystemView.has(p),
+      );
       if (!hasAny) {
         throw new ForbiddenException({
           error: 'Access denied',
@@ -93,10 +109,12 @@ export class PermissionsGuard implements CanActivate {
       }
     }
 
+    const requiredForSoD = required.filter((p) => !satisfiedBySystemView.has(p));
+
     const conflict = await this.findSoDConflict({
       tenantId: tenant.id,
       userId: user.id,
-      requiredPermissions: required,
+      requiredPermissions: requiredForSoD,
       userPermissionCodes: codes,
     });
 

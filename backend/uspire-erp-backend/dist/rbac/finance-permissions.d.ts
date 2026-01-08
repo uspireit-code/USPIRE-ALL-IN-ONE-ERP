@@ -32,6 +32,7 @@ export declare const FINANCE_PERMISSIONS: {
         readonly CREDIT_NOTE_APPROVE: "AR_CREDIT_NOTE_APPROVE";
         readonly CREDIT_NOTE_POST: "AR_CREDIT_NOTE_POST";
         readonly CREDIT_NOTE_VOID: "AR_CREDIT_NOTE_VOID";
+        readonly REFUND_VIEW: "AR_REFUND_VIEW";
         readonly REFUND_CREATE: "AR_REFUND_CREATE";
         readonly REFUND_APPROVE: "AR_REFUND_APPROVE";
         readonly REFUND_POST: "AR_REFUND_POST";

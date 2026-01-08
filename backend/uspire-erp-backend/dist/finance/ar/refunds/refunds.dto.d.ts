@@ -16,4 +16,13 @@ export declare class PostRefundDto {
 export declare class VoidRefundDto {
     reason: string;
 }
+export declare class ListRefundsQueryDto {
+    status?: 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+    customerId?: string;
+    creditNoteId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    pageSize?: number;
+}
 export {};

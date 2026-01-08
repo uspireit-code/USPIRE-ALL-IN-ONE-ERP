@@ -162,6 +162,7 @@ async function main() {
     'PAYMENT_POST',
     'PAYMENT_APPROVE',
     'FINANCE_PERIOD_CLOSE_APPROVE',
+    'FINANCE_PERIOD_CORRECT',
   ];
 
   const expectedController = [
@@ -170,6 +171,7 @@ async function main() {
     'AP_INVOICE_POST',
     'PAYMENT_POST',
     'FINANCE_PERIOD_CLOSE_APPROVE',
+    'FINANCE_PERIOD_CORRECT',
   ];
 
   const forbiddenController = ['FINANCE_GL_POST'];
@@ -183,6 +185,8 @@ async function main() {
   ];
 
   const forbiddenManager = ['FINANCE_GL_FINAL_POST', 'FINANCE_PERIOD_CLOSE_APPROVE', 'AR_INVOICE_POST', 'AP_INVOICE_POST', 'PAYMENT_POST'];
+
+  const forbiddenManagerPeriodCorrection = ['FINANCE_PERIOD_CORRECT'];
 
   const expectedOfficer = ['FINANCE_GL_CREATE', 'AR_INVOICE_CREATE', 'AP_INVOICE_CREATE', 'PAYMENT_CREATE', 'AR_CREDIT_NOTE_CREATE'];
 
@@ -198,6 +202,7 @@ async function main() {
     'PAYMENT_POST',
     'FINANCE_PERIOD_CLOSE',
     'FINANCE_PERIOD_CLOSE_APPROVE',
+    'FINANCE_PERIOD_CORRECT',
   ];
 
   const superadmin = summaries['superadmin@uspire.local'];
@@ -234,6 +239,9 @@ async function main() {
 
     const present = requireNone(perms, forbiddenManager, 'FINANCE_MANAGER');
     if (present.length > 0) hasFailure = true;
+
+    const presentCorrection = requireNone(perms, forbiddenManagerPeriodCorrection, 'FINANCE_MANAGER');
+    if (presentCorrection.length > 0) hasFailure = true;
   }
 
   if (officer) {

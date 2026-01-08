@@ -6,8 +6,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
 import type { Request } from 'express';
+import { Prisma } from '@prisma/client';
+import {
+  sortBy,
+  sumBy,
+  uniq,
+  uniqBy,
+} from 'lodash';
+import {
+  buildOverlapPeriodFieldError,
+  validateMonthlyPeriodDates,
+  throwPeriodValidation,
+} from '../periods/period-validation';
 import * as ExcelJS from 'exceljs';
 import { CacheService } from '../cache/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -3289,14 +3300,13 @@ export class GlService {
       throw new BadRequestException('Please select a valid period type.');
     }
 
-    const startDate = new Date(dto.startDate);
-    const endDate = new Date(dto.endDate);
-
-    if (startDate > endDate) {
-      throw new BadRequestException(
-        'Start date cannot be after the end date. Please correct the period dates.',
-      );
-    }
+    const { start: startDate, end: endDate } = validateMonthlyPeriodDates({
+      type,
+      startIso: dto.startDate,
+      endIso: dto.endDate,
+      startField: 'startDate',
+      endField: 'endDate',
+    });
 
     const existingCode = await (this.prisma.accountingPeriod as any).findFirst({
       where: { tenantId: tenant.id, code },
@@ -3311,12 +3321,6 @@ export class GlService {
 
     // Opening period rules
     if (type === 'OPENING') {
-      const isSingleDay =
-        startDate.toISOString().slice(0, 10) === endDate.toISOString().slice(0, 10);
-      if (!isSingleDay) {
-        throw new BadRequestException('Opening Balance period must be a single day.');
-      }
-
       const existingOpening = await (this.prisma.accountingPeriod as any).findFirst({
         where: { tenantId: tenant.id, type: 'OPENING' },
         select: { id: true, code: true },
@@ -3362,13 +3366,21 @@ export class GlService {
         startDate: { lte: endDate },
         endDate: { gte: startDate },
       },
-      select: { id: true, name: true, startDate: true, endDate: true },
+      select: { id: true, code: true, name: true, startDate: true, endDate: true },
     });
 
     if (overlap) {
-      throw new BadRequestException(
-        'This period overlaps with an existing accounting period. Adjust the dates to avoid overlap.',
-      );
+      throwPeriodValidation([
+        buildOverlapPeriodFieldError({
+          field: 'startDate',
+          overlap: {
+            code: (overlap as any).code ?? null,
+            name: (overlap as any).name ?? null,
+            startDate: overlap.startDate,
+            endDate: overlap.endDate,
+          },
+        }),
+      ]);
     }
 
     return this.prisma.$transaction(async (tx) => {

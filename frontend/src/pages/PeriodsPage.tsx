@@ -4,6 +4,7 @@ import type { ApiError } from '../services/api';
 import {
   closePeriod,
   completePeriodChecklistItem,
+  correctPeriod as correctPeriodApi,
   createPeriod,
   getPeriodChecklist,
   listPeriods,
@@ -14,16 +15,22 @@ import {
 } from '../services/periods';
 
 export function PeriodsPage() {
-  const { hasPermission, state } = useAuth();
+  const { hasPermission } = useAuth();
+
+  const hasSystemViewAll = hasPermission('SYSTEM_VIEW_ALL');
+  const hasFinanceViewAll = hasPermission('FINANCE_VIEW_ALL');
 
   const canView =
+    hasFinanceViewAll ||
+    hasSystemViewAll ||
     hasPermission('FINANCE_PERIOD_VIEW') ||
     hasPermission('FINANCE_GL_VIEW') ||
     hasPermission('FINANCE_PERIOD_REVIEW') ||
     hasPermission('FINANCE_PERIOD_CHECKLIST_VIEW');
   const canCreate = hasPermission('FINANCE_PERIOD_CREATE');
   const canClose = hasPermission('FINANCE_PERIOD_CLOSE');
-  const canReopen = hasPermission('FINANCE_PERIOD_REOPEN') && Boolean(state.me?.user?.roles?.includes('ADMIN'));
+  const canReopen = hasPermission('FINANCE_PERIOD_REOPEN');
+  const canCorrect = hasPermission('FINANCE_PERIOD_CORRECT');
   const canViewChecklist = hasPermission('FINANCE_PERIOD_CHECKLIST_VIEW');
   const canCompleteChecklist = hasPermission('FINANCE_PERIOD_CHECKLIST_COMPLETE');
 
@@ -39,7 +46,19 @@ export function PeriodsPage() {
   });
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<any>(null);
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [correctingPeriod, setCorrectingPeriod] = useState<AccountingPeriod | null>(null);
+  const [correctDraft, setCorrectDraft] = useState<{ newStartDate: string; newEndDate: string; reason: string }>({
+    newStartDate: '',
+    newEndDate: '',
+    reason: '',
+  });
+  const [correctSubmitting, setCorrectSubmitting] = useState(false);
+  const [correctError, setCorrectError] = useState<any>(null);
+  const [correctFieldErrors, setCorrectFieldErrors] = useState<Record<string, string>>({});
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsPeriodId, setDetailsPeriodId] = useState<string | null>(null);
@@ -74,12 +93,178 @@ export function PeriodsPage() {
     }
   }
 
+  function parseStrictIsoDate(input: string) {
+    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(input ?? '').trim());
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+    const d = new Date(Date.UTC(year, month - 1, day));
+    if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
+    return { date: d, year, month, day };
+  }
+
+  function lastDayOfMonthIso(year: number, month1to12: number) {
+    const d = new Date(Date.UTC(year, month1to12, 0));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function monthYearLabel(d: Date) {
+    return d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  function extractFieldErrors(e: unknown): Record<string, string> {
+    const body = (e as ApiError | any)?.body;
+    const list = Array.isArray(body?.fieldErrors) ? body.fieldErrors : [];
+    const out: Record<string, string> = {};
+    for (const fe of list) {
+      const field = String(fe?.field ?? '').trim();
+      const msg = String(fe?.message ?? '').trim();
+      if (field && msg && !out[field]) out[field] = msg;
+    }
+    return out;
+  }
+
+  function openCorrect(p: AccountingPeriod) {
+    if (!canCorrect) return;
+    if (p.status === 'CLOSED') {
+      window.alert(
+        'This period is CLOSED. Governance requires: Reopen (FINANCE_PERIOD_REOPEN) → Correct (FINANCE_PERIOD_CORRECT) → Close (FINANCE_PERIOD_CLOSE).',
+      );
+      return;
+    }
+
+    setCorrectError(null);
+    setCorrectFieldErrors({});
+    setCorrectingPeriod(p);
+    setCorrectDraft({
+      newStartDate: String(p.startDate).slice(0, 10),
+      newEndDate: String(p.endDate).slice(0, 10),
+      reason: '',
+    });
+    setCorrectOpen(true);
+  }
+
+  async function submitCorrect() {
+    if (!canCorrect) return;
+    if (!correctingPeriod) return;
+
+    const reason = correctDraft.reason.trim();
+    if (!reason) {
+      setCorrectFieldErrors({ reason: 'Reason is required.' });
+      setCorrectError({ body: { message: 'Could not correct period. Please fix the highlighted fields.' } });
+      return;
+    }
+
+    const nextFieldErrors: Record<string, string> = {};
+    const startParsed = parseStrictIsoDate(correctDraft.newStartDate);
+    const endParsed = parseStrictIsoDate(correctDraft.newEndDate);
+    if (!startParsed) nextFieldErrors.newStartDate = 'Please enter a valid start date (YYYY-MM-DD).';
+    if (!endParsed) nextFieldErrors.newEndDate = 'Please enter a valid end date (YYYY-MM-DD).';
+
+    if (startParsed && endParsed) {
+      if (endParsed.date.getTime() < startParsed.date.getTime()) {
+        nextFieldErrors.newEndDate = 'End date cannot be earlier than start date.';
+      }
+
+      if (correctingPeriod.type === 'OPENING') {
+        if (correctDraft.newStartDate !== correctDraft.newEndDate) {
+          nextFieldErrors.newEndDate = 'Opening period must be a single day (start date must equal end date).';
+        }
+      } else {
+        if (startParsed.day !== 1) {
+          nextFieldErrors.newStartDate = 'Start date must be the first day of the month.';
+        }
+        const expectedEnd = lastDayOfMonthIso(endParsed.year, endParsed.month);
+        if (correctDraft.newEndDate !== expectedEnd) {
+          nextFieldErrors.newEndDate = `${monthYearLabel(endParsed.date)} has ${new Date(expectedEnd + 'T00:00:00Z').getUTCDate()} days. Please use ${expectedEnd}.`;
+        }
+        const expectedStart = `${String(endParsed.year).padStart(4, '0')}-${String(endParsed.month).padStart(2, '0')}-01`;
+        if (correctDraft.newStartDate !== expectedStart) {
+          nextFieldErrors.newStartDate = `Start date must be the first day of the same month as the end date (e.g., ${expectedStart}).`;
+        }
+      }
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setCorrectFieldErrors(nextFieldErrors);
+      setCorrectError({ body: { message: 'Could not correct period. Please fix the highlighted fields.' } });
+      return;
+    }
+
+    const payload: { newStartDate?: string; newEndDate?: string; reason: string } = { reason };
+    if (correctDraft.newStartDate.trim()) payload.newStartDate = correctDraft.newStartDate.trim();
+    if (correctDraft.newEndDate.trim()) payload.newEndDate = correctDraft.newEndDate.trim();
+
+    setCorrectSubmitting(true);
+    setCorrectError(null);
+    setCorrectFieldErrors({});
+    try {
+      await correctPeriodApi(correctingPeriod.id, payload);
+      setCorrectOpen(false);
+      setCorrectingPeriod(null);
+      await load();
+      if (detailsPeriodId === correctingPeriod.id) {
+        await loadDetails(correctingPeriod.id);
+      }
+    } catch (e) {
+      setCorrectFieldErrors(extractFieldErrors(e));
+      setCorrectError(e);
+    } finally {
+      setCorrectSubmitting(false);
+    }
+  }
+
   async function submitCreate() {
     if (!canCreate) return;
     const trimmedCode = createDraft.code.trim();
     if (trimmedCode.length < 3) return;
+
+    const nextFieldErrors: Record<string, string> = {};
+    if (!createDraft.startDate.trim()) nextFieldErrors.startDate = 'Start date is required.';
+    if (!createDraft.endDate.trim()) nextFieldErrors.endDate = 'End date is required.';
+
+    const startParsed = parseStrictIsoDate(createDraft.startDate);
+    const endParsed = parseStrictIsoDate(createDraft.endDate);
+    if (createDraft.startDate.trim() && !startParsed) nextFieldErrors.startDate = 'Please enter a valid start date (YYYY-MM-DD).';
+    if (createDraft.endDate.trim() && !endParsed) nextFieldErrors.endDate = 'Please enter a valid end date (YYYY-MM-DD).';
+
+    if (startParsed && endParsed) {
+      if (endParsed.date.getTime() < startParsed.date.getTime()) {
+        nextFieldErrors.endDate = 'End date cannot be earlier than start date.';
+      }
+
+      if (createDraft.type === 'OPENING') {
+        if (createDraft.startDate !== createDraft.endDate) {
+          nextFieldErrors.endDate = 'Opening period must be a single day (start date must equal end date).';
+        }
+      } else {
+        if (startParsed.day !== 1) {
+          nextFieldErrors.startDate = 'Start date must be the first day of the month.';
+        }
+        const expectedEnd = lastDayOfMonthIso(endParsed.year, endParsed.month);
+        if (createDraft.endDate !== expectedEnd) {
+          nextFieldErrors.endDate = `${monthYearLabel(endParsed.date)} has ${new Date(expectedEnd + 'T00:00:00Z').getUTCDate()} days. Please use ${expectedEnd}.`;
+        }
+        const expectedStart = `${String(endParsed.year).padStart(4, '0')}-${String(endParsed.month).padStart(2, '0')}-01`;
+        if (createDraft.startDate !== expectedStart) {
+          nextFieldErrors.startDate = `Start date must be the first day of the same month as the end date (e.g., ${expectedStart}).`;
+        }
+      }
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setCreateFieldErrors(nextFieldErrors);
+      setCreateError({ body: { message: 'Could not create period. Please fix the highlighted fields.' } });
+      return;
+    }
+
     setCreateSubmitting(true);
     setCreateError(null);
+    setCreateFieldErrors({});
     try {
       await createPeriod({
         code: trimmedCode,
@@ -91,6 +276,7 @@ export function PeriodsPage() {
       setCreateDraft({ code: '', type: 'NORMAL', startDate: '', endDate: '' });
       await load();
     } catch (e) {
+      setCreateFieldErrors(extractFieldErrors(e));
       setCreateError(e);
     } finally {
       setCreateSubmitting(false);
@@ -208,7 +394,122 @@ export function PeriodsPage() {
   const detailsIsOpen = details?.period?.status === 'OPEN';
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div style={{ padding: 18 }}>
+      {correctOpen && correctingPeriod ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 50,
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div style={{ width: 520, maxWidth: '100%', background: '#fff', border: '1px solid #ddd', padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Correct Period</h3>
+              <button
+                onClick={() => {
+                  setCorrectOpen(false);
+                  setCorrectingPeriod(null);
+                }}
+                disabled={correctSubmitting}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>
+              Period: <b>{correctingPeriod.name}</b>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#374151' }}>New Start Date</label>
+              <input
+                type="date"
+                value={correctDraft.newStartDate}
+                onChange={(e) => setCorrectDraft((d) => ({ ...d, newStartDate: e.target.value }))}
+                style={{ width: '100%', padding: 8, border: '1px solid #ddd' }}
+                disabled={correctSubmitting}
+              />
+              {correctFieldErrors.newStartDate ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b' }}>{correctFieldErrors.newStartDate}</div>
+              ) : null}
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#374151' }}>New End Date</label>
+              <input
+                type="date"
+                value={correctDraft.newEndDate}
+                onChange={(e) => setCorrectDraft((d) => ({ ...d, newEndDate: e.target.value }))}
+                style={{ width: '100%', padding: 8, border: '1px solid #ddd' }}
+                disabled={correctSubmitting}
+              />
+              {correctFieldErrors.newEndDate ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b' }}>{correctFieldErrors.newEndDate}</div>
+              ) : null}
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#374151' }}>Reason (required)</label>
+              <input
+                value={correctDraft.reason}
+                onChange={(e) => setCorrectDraft((d) => ({ ...d, reason: e.target.value }))}
+                style={{ width: '100%', padding: 8, border: '1px solid #ddd' }}
+                disabled={correctSubmitting}
+              />
+              {correctFieldErrors.reason ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b' }}>{correctFieldErrors.reason}</div>
+              ) : null}
+            </div>
+
+            {correctError ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 10,
+                  background: '#fff5f5',
+                  border: '1px solid #fecaca',
+                  color: '#991b1b',
+                }}
+              >
+                {(() => {
+                  const body = (correctError as ApiError | any)?.body;
+                  if (typeof body?.message === 'string') return body.message;
+                  if (body?.error === 'VALIDATION_FAILED') {
+                    return 'Could not correct period. Please fix the highlighted fields.';
+                  }
+                  if (typeof body === 'string') return body;
+                  if (typeof body?.error === 'string') return body.error;
+                  return 'Correction failed.';
+                })()}
+              </div>
+            ) : null}
+
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => {
+                  setCorrectOpen(false);
+                  setCorrectingPeriod(null);
+                }}
+                disabled={correctSubmitting}
+              >
+                Cancel
+              </button>
+              <button onClick={() => void submitCorrect()} disabled={correctSubmitting}>
+                {correctSubmitting ? 'Saving…' : 'Save Correction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <h2>Accounting Periods</h2>
 
       <div style={{ marginTop: 12 }}>
@@ -270,7 +571,8 @@ export function PeriodsPage() {
             </select>
 
             <div style={{ fontSize: 12, color: '#444' }}>Start date</div>
-            <input
+            <div>
+              <input
               type="date"
               value={createDraft.startDate}
               onChange={(e) =>
@@ -281,15 +583,24 @@ export function PeriodsPage() {
                   return next;
                 })
               }
-            />
+              />
+              {createFieldErrors.startDate ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b' }}>{createFieldErrors.startDate}</div>
+              ) : null}
+            </div>
 
             <div style={{ fontSize: 12, color: '#444' }}>End date</div>
-            <input
-              type="date"
-              value={createDraft.endDate}
-              disabled={createDraft.type === 'OPENING'}
-              onChange={(e) => setCreateDraft((d) => ({ ...d, endDate: e.target.value }))}
-            />
+            <div>
+              <input
+                type="date"
+                value={createDraft.endDate}
+                disabled={createDraft.type === 'OPENING'}
+                onChange={(e) => setCreateDraft((d) => ({ ...d, endDate: e.target.value }))}
+              />
+              {createFieldErrors.endDate ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b' }}>{createFieldErrors.endDate}</div>
+              ) : null}
+            </div>
           </div>
 
           {createError ? (() => {
@@ -297,13 +608,15 @@ export function PeriodsPage() {
             const msg =
               typeof body?.message === 'string'
                 ? body.message
-                : typeof body === 'string'
-                  ? body
-                  : typeof body?.error === 'string'
-                    ? body.error
-                    : typeof body?.reason === 'string'
-                      ? body.reason
-                      : '';
+                : body?.error === 'VALIDATION_FAILED'
+                  ? 'Could not create period. Please fix the highlighted fields.'
+                  : typeof body === 'string'
+                    ? body
+                    : typeof body?.error === 'string'
+                      ? body.error
+                      : typeof body?.reason === 'string'
+                        ? body.reason
+                        : '';
             return (
               <div style={{ marginTop: 10, padding: 10, border: '1px solid #f3b2b2', background: '#fff0f0' }}>
                 <div style={{ fontWeight: 700 }}>Could not create period</div>
@@ -387,6 +700,12 @@ export function PeriodsPage() {
                 {p.status === 'CLOSED' && canReopen ? (
                   <button style={{ marginLeft: 8 }} disabled={actionBusyId === p.id} onClick={() => void doReopen(p.id)}>
                     {actionBusyId === p.id ? 'Reopening…' : 'Reopen'}
+                  </button>
+                ) : null}
+
+                {canCorrect ? (
+                  <button style={{ marginLeft: 8 }} disabled={actionBusyId === p.id} onClick={() => openCorrect(p)}>
+                    Correct
                   </button>
                 ) : null}
 

@@ -9,17 +9,17 @@ export declare class CoaController {
         coaFrozen: boolean;
         coaLockedAt: Date | null;
         accounts: {
-            name: string;
             id: string;
+            tenantId: string;
+            name: string;
+            createdById: string | null;
             createdAt: Date;
             updatedAt: Date;
-            tenantId: string;
-            createdById: string | null;
+            isActive: boolean;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             isBudgetRelevant: boolean;
             budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-            isActive: boolean;
             parentAccountId: string | null;
             isPosting: boolean;
             isPostingAllowed: boolean;
@@ -36,12 +36,13 @@ export declare class CoaController {
         tree: any[];
     }>;
     create(req: Request, dto: CreateCoaAccountDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
+        createdById: string | null;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
-        createdById: string | null;
+        isActive: boolean;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
@@ -49,7 +50,6 @@ export declare class CoaController {
         fsMappingLevel2: string | null;
         isBudgetRelevant: boolean;
         budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-        isActive: boolean;
         parentAccountId: string | null;
         isPosting: boolean;
         isPostingAllowed: boolean;
@@ -69,12 +69,13 @@ export declare class CoaController {
     }>;
     importTemplate(req: Request, format: string | undefined, res: Response): Promise<void>;
     get(req: Request, id: string): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
+        createdById: string | null;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
-        createdById: string | null;
+        isActive: boolean;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
@@ -82,7 +83,6 @@ export declare class CoaController {
         fsMappingLevel2: string | null;
         isBudgetRelevant: boolean;
         budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-        isActive: boolean;
         parentAccountId: string | null;
         isPosting: boolean;
         isPostingAllowed: boolean;
@@ -137,12 +137,13 @@ export declare class CoaController {
         createdAccountIds: string[];
     }>;
     update(req: Request, id: string, dto: UpdateCoaAccountDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
+        createdById: string | null;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
-        createdById: string | null;
+        isActive: boolean;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
@@ -150,7 +151,6 @@ export declare class CoaController {
         fsMappingLevel2: string | null;
         isBudgetRelevant: boolean;
         budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-        isActive: boolean;
         parentAccountId: string | null;
         isPosting: boolean;
         isPostingAllowed: boolean;
@@ -161,12 +161,13 @@ export declare class CoaController {
         ifrsMappingCode: string | null;
     }>;
     put(req: Request, id: string, dto: UpdateCoaAccountDto): Promise<{
-        name: string;
         id: string;
+        tenantId: string;
+        name: string;
+        createdById: string | null;
         createdAt: Date;
         updatedAt: Date;
-        tenantId: string;
-        createdById: string | null;
+        isActive: boolean;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         subCategory: string | null;
@@ -174,7 +175,6 @@ export declare class CoaController {
         fsMappingLevel2: string | null;
         isBudgetRelevant: boolean;
         budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-        isActive: boolean;
         parentAccountId: string | null;
         isPosting: boolean;
         isPostingAllowed: boolean;

@@ -4,9 +4,9 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
-import { listCreditNotes, type CreditNoteListItem } from '../../services/ar';
+import { listCreditNotes, type CreditNoteListItem, type CreditNoteStatus } from '../../services/ar';
 
-function StatusBadge(props: { status: string }) {
+function StatusBadge(props: { status: CreditNoteStatus | string }) {
   const s = String(props.status ?? '').toUpperCase();
   const bg = s === 'POSTED' ? '#e6ffed' : s === 'VOID' ? '#ffecec' : s === 'APPROVED' ? '#e6f0ff' : '#fff7e6';
   const fg = s === 'POSTED' ? '#137333' : s === 'VOID' ? '#b00020' : s === 'APPROVED' ? '#1a4fb3' : '#7a4b00';
@@ -31,7 +31,7 @@ export function CreditNotesListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<CreditNoteStatus | ''>('');
   const [filterCustomerId, setFilterCustomerId] = useState('');
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
@@ -81,7 +81,7 @@ export function CreditNotesListPage() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Status</div>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as CreditNoteStatus | '')}>
               <option value="">All</option>
               <option value="DRAFT">DRAFT</option>
               <option value="APPROVED">APPROVED</option>

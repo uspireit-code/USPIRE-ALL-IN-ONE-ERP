@@ -116,64 +116,69 @@ export class SettingsService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
 
-  private async ensureAdminMasterDataPermissions(tenantId: string) {
-    const adminRole = await this.prisma.role.findFirst({
-      where: { tenantId, name: 'ADMIN' },
+  private async ensureFinanceOfficerRole(tenantId: string) {
+    const role = await this.prisma.role.upsert({
+      where: { tenantId_name: { tenantId, name: 'FINANCE_OFFICER' } },
+      create: {
+        tenantId,
+        name: 'FINANCE_OFFICER',
+        description: 'Finance operations role',
+      },
+      update: {
+        description: 'Finance operations role',
+      },
       select: { id: true },
     });
 
-    if (!adminRole) return;
+    const allowedPermissionCodes = [
+      'FINANCE_GL_VIEW',
+      'FINANCE_GL_CREATE',
 
-    const requiredPermissionCodes = [
-      'MASTER_DATA_DEPARTMENT_VIEW',
-      'MASTER_DATA_DEPARTMENT_CREATE',
-      'MASTER_DATA_DEPARTMENT_EDIT',
-
-      'MASTER_DATA_PROJECT_VIEW',
-      'MASTER_DATA_PROJECT_CREATE',
-      'MASTER_DATA_PROJECT_EDIT',
-      'MASTER_DATA_PROJECT_CLOSE',
-
-      'MASTER_DATA_FUND_VIEW',
-      'MASTER_DATA_FUND_CREATE',
-      'MASTER_DATA_FUND_EDIT',
-    ] as const;
-
-    const perms = await this.prisma.permission.findMany({
-      where: { code: { in: [...requiredPermissionCodes] } },
-      select: { id: true },
-    });
-
-    if (perms.length === 0) return;
-
-    await this.prisma.rolePermission.createMany({
-      data: perms.map((p) => ({ roleId: adminRole.id, permissionId: p.id })),
-      skipDuplicates: true,
-    });
-  }
-
-  private async ensureAdminCoaPermissions(tenantId: string) {
-    const adminRole = await this.prisma.role.findFirst({
-      where: { tenantId, name: 'ADMIN' },
-      select: { id: true },
-    });
-
-    if (!adminRole) return;
-
-    const requiredPermissionCodes = [
       'FINANCE_COA_VIEW',
-      'FINANCE_COA_UPDATE',
+
+      'AR_INVOICE_VIEW',
+      'AR_INVOICE_CREATE',
+      'AR_INVOICE_SUBMIT',
+      'AR_RECEIPTS_VIEW',
+      'AR_RECEIPTS_CREATE',
+      'AR_RECEIPT_VOID',
+
+      'AP_INVOICE_VIEW',
+      'AP_INVOICE_CREATE',
+      'AP_INVOICE_SUBMIT',
+
+      'PAYMENT_VIEW',
+      'PAYMENT_CREATE',
+
+      'BANK_RECONCILIATION_VIEW',
+      'BANK_STATEMENT_IMPORT',
+
+      'FINANCE_PERIOD_VIEW',
+      'FINANCE_PERIOD_CHECKLIST_VIEW',
+
+      'FINANCE_TB_VIEW',
+      'report.view.pl',
+      'report.view.bs',
     ] as const;
+
     const perms = await this.prisma.permission.findMany({
-      where: { code: { in: [...requiredPermissionCodes] } },
+      where: { code: { in: [...allowedPermissionCodes] } },
       select: { id: true },
     });
 
-    if (perms.length === 0) return;
+    if (perms.length > 0) {
+      await this.prisma.rolePermission.createMany({
+        data: perms.map((p) => ({ roleId: role.id, permissionId: p.id })),
+        skipDuplicates: true,
+      });
+    }
 
-    await this.prisma.rolePermission.createMany({
-      data: perms.map((p) => ({ roleId: adminRole.id, permissionId: p.id })),
-      skipDuplicates: true,
+    // Enforce that FINANCE_OFFICER stays non-approver / non-poster.
+    await this.prisma.rolePermission.deleteMany({
+      where: {
+        roleId: role.id,
+        permission: { code: { notIn: [...allowedPermissionCodes] } },
+      },
     });
   }
 
@@ -308,10 +313,9 @@ export class SettingsService {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');
 
+    await this.ensureFinanceOfficerRole(tenant.id);
     await this.ensureFinanceManagerRole(tenant.id);
     await this.ensureFinanceControllerRole(tenant.id);
-    await this.ensureAdminMasterDataPermissions(tenant.id);
-    await this.ensureAdminCoaPermissions(tenant.id);
 
     const roles = await this.prisma.role.findMany({
       where: { tenantId: tenant.id },
@@ -692,7 +696,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ name: created.name, email: created.email }),
           userId: actor.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
         },
       })
       .catch(() => undefined);
@@ -762,7 +766,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ isActive: updated.isActive }),
           userId: actor.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
         },
       })
       .catch(() => undefined);
@@ -811,7 +815,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ roleIds }),
           userId: actor.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
         },
       })
       .catch(() => undefined);
@@ -1379,7 +1383,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: 'FINANCE_CONFIG_CHANGE',
         },
       })
       .catch(() => undefined);
@@ -1438,7 +1442,7 @@ export class SettingsService {
             after: { faviconUrl: updated.faviconUrl },
           }),
           userId: user.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
         },
       })
       .catch(() => undefined);
@@ -1532,7 +1536,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
         },
       })
       .catch(() => undefined);

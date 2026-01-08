@@ -209,6 +209,23 @@ enum ReceiptPaymentMethod {
   OTHER
 }
 
+enum ArReminderTriggerType {
+  BEFORE_DUE
+  ON_DUE
+  AFTER_DUE
+}
+
+enum ArReminderLevel {
+  NORMAL
+  ESCALATED
+  FINAL
+}
+
+enum ArReminderTriggerMode {
+  AUTO
+  MANUAL
+}
+
 enum RefundPaymentMethod {
   BANK
   CASH
@@ -217,6 +234,72 @@ enum RefundPaymentMethod {
 enum PaymentType {
   SUPPLIER_PAYMENT
   CUSTOMER_RECEIPT
+}
+
+model ArReminderRule {
+  id              String              @id @default(uuid())
+  tenantId         String
+  name             String
+  triggerType      ArReminderTriggerType
+  daysOffset       Int
+  active           Boolean             @default(true)
+  escalationLevel  ArReminderLevel
+  createdById      String
+  createdAt        DateTime            @default(now())
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy        User                @relation("ArReminderRuleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  logs             ArReminderLog[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([tenantId, active])
+  @@index([tenantId, triggerType])
+  @@index([createdById])
+}
+
+model ArReminderTemplate {
+  id              String          @id @default(uuid())
+  tenantId         String
+  level           ArReminderLevel
+  subject         String
+  body            String
+  active          Boolean         @default(true)
+  lastUpdatedById String
+  lastUpdatedAt   DateTime        @default(now()) @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lastUpdatedBy   User            @relation("ArReminderTemplateLastUpdatedBy", fields: [lastUpdatedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, level])
+  @@index([tenantId])
+  @@index([tenantId, active])
+  @@index([lastUpdatedById])
+}
+
+model ArReminderLog {
+  id             String               @id @default(uuid())
+  tenantId       String
+  customerId     String
+  invoiceId      String
+  reminderRuleId String?
+  reminderLevel  ArReminderLevel
+  triggerMode    ArReminderTriggerMode
+  sentById       String
+  sentAt         DateTime             @default(now())
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer       Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoice        CustomerInvoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  reminderRule   ArReminderRule?      @relation(fields: [reminderRuleId], references: [id], onDelete: SetNull)
+  sentBy         User                 @relation("ArReminderLogSentBy", fields: [sentById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([tenantId, sentAt])
+  @@index([tenantId, customerId])
+  @@index([tenantId, invoiceId])
+  @@index([sentById])
 }
 
 enum PaymentStatus {
@@ -434,6 +517,7 @@ model Customer {
   receipts CustomerReceipt[]
   creditNotes CustomerCreditNote[]
   refunds CustomerRefund[]
+  reminderLogs ArReminderLog[]
 
   @@unique([tenantId, customerCode])
   @@index([tenantId])
@@ -481,6 +565,7 @@ model CustomerInvoice {
   lines      CustomerInvoiceLine[]
   receiptLines CustomerReceiptLine[]
   creditNotes CustomerCreditNote[] @relation("CustomerCreditNoteInvoice")
+  reminderLogs ArReminderLog[]
 
   @@unique([tenantId, customerId, invoiceNumber])
   @@index([tenantId])
@@ -1088,6 +1173,8 @@ enum AuditEventType {
   PERIOD_CLOSE
   PERIOD_REOPEN
   PERIOD_REOPENED
+  PERIOD_CORRECTION
+  PERIOD_CORRECTED
   SOD_VIOLATION
   USER_CREATE
   USER_STATUS_CHANGE
@@ -1142,6 +1229,9 @@ enum AuditEventType {
   TAX_RATE_UPDATED
   TAX_RATE_STATUS_CHANGE
   TAX_CONFIG_UPDATED
+
+  AR_REMINDER_SENT
+  AR_REMINDER_CONFIG_CHANGED
 }
 
 enum BudgetStatus {
@@ -1259,6 +1349,10 @@ model Tenant {
   customerReceiptLines CustomerReceiptLine[]
   customerInvoiceImportLogs CustomerInvoiceImportLog[]
   invoiceCategories   InvoiceCategory[]
+
+  arReminderRules      ArReminderRule[]
+  arReminderTemplates  ArReminderTemplate[]
+  arReminderLogs       ArReminderLog[]
   bankAccounts        BankAccount[]
   payments            Payment[]
   bankStatements      BankStatement[]
@@ -1281,6 +1375,8 @@ model Tenant {
   accountingPeriodChecklists AccountingPeriodChecklist[]
 
   accountingPeriodCloseLogs AccountingPeriodCloseLog[]
+
+  accountingPeriodCorrections AccountingPeriodCorrection[]
 
   auditEvents AuditEvent[]
 
@@ -1514,6 +1610,8 @@ model User {
 
   accountingPeriodCloseLogs AccountingPeriodCloseLog[]
 
+  accountingPeriodCorrections AccountingPeriodCorrection[]
+
   auditEvents AuditEvent[]
 
   accountsCreated Account[] @relation("AccountCreatedBy")
@@ -1533,6 +1631,10 @@ model User {
 
   recurringJournalTemplatesCreated RecurringJournalTemplate[]   @relation("RecurringTemplateCreatedBy")
   recurringJournalGenerations      RecurringJournalGeneration[] @relation("RecurringJournalGeneratedBy")
+
+  arReminderRulesCreated     ArReminderRule[]     @relation("ArReminderRuleCreatedBy")
+  arReminderTemplatesUpdated ArReminderTemplate[] @relation("ArReminderTemplateLastUpdatedBy")
+  arReminderLogsSent         ArReminderLog[]      @relation("ArReminderLogSentBy")
 
   coaCanonicalSnapshotsUploaded CoaCanonicalSnapshot[] @relation("CoaCanonicalSnapshotUploadedBy")
 
@@ -1884,12 +1986,35 @@ model AccountingPeriod {
 
   journals JournalEntry[]
 
+  corrections AccountingPeriodCorrection[]
+
   @@unique([tenantId, code])
   @@index([tenantId])
   @@index([tenantId, type])
   @@index([tenantId, status])
   @@index([tenantId, startDate, endDate])
   @@index([createdById])
+}
+
+model AccountingPeriodCorrection {
+  id           String   @id @default(uuid())
+  tenantId     String
+  periodId     String
+  oldStartDate DateTime
+  oldEndDate   DateTime
+  newStartDate DateTime
+  newEndDate   DateTime
+  reason       String
+  correctedBy  String
+  correctedAt  DateTime @default(now())
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  period AccountingPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [correctedBy], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([tenantId, periodId])
+  @@index([correctedBy])
 }
 
 model DisclosureNote {

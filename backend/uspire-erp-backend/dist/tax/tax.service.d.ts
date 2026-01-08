@@ -7,12 +7,13 @@ export declare class TaxService {
     createTaxRate(req: Request, dto: CreateTaxRateDto): Promise<any>;
     listTaxRates(req: Request): Promise<({
         glAccount: {
-            name: string;
             id: string;
+            tenantId: string;
+            name: string;
+            createdById: string | null;
             createdAt: Date;
             updatedAt: Date;
-            tenantId: string;
-            createdById: string | null;
+            isActive: boolean;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             subCategory: string | null;
@@ -24,7 +25,6 @@ export declare class TaxService {
             requiresFund: boolean;
             isBudgetRelevant: boolean;
             budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-            isActive: boolean;
             parentAccountId: string | null;
             isPosting: boolean;
             isPostingAllowed: boolean;
@@ -35,14 +35,14 @@ export declare class TaxService {
             ifrsMappingCode: string | null;
         } | null;
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
+        isActive: boolean;
         code: string;
         type: import("@prisma/client").$Enums.TaxRateType;
-        isActive: boolean;
-        glAccountId: string | null;
         rate: import("@prisma/client/runtime/library").Decimal;
+        glAccountId: string | null;
     })[]>;
 }

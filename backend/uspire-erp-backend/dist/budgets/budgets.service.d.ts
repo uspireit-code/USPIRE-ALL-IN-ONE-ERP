@@ -80,42 +80,42 @@ export declare class BudgetsService {
     createBudget(req: Request, dto: CreateBudgetDto): Promise<{
         budget: {
             id: string;
-            status: import("@prisma/client").$Enums.BudgetStatus;
-            createdAt: Date;
             tenantId: string;
             createdById: string;
-            approvedById: string | null;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.BudgetStatus;
             approvedAt: Date | null;
+            approvedById: string | null;
             fiscalYear: number;
         };
         revision: {
             id: string;
-            createdAt: Date;
             createdById: string;
+            createdAt: Date;
             revisionNo: number;
         };
     }>;
     approveBudget(req: Request, id: string): Promise<{
         id: string;
-        status: import("@prisma/client").$Enums.BudgetStatus;
-        createdAt: Date;
         tenantId: string;
         createdById: string;
-        approvedById: string | null;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.BudgetStatus;
         approvedAt: Date | null;
+        approvedById: string | null;
         fiscalYear: number;
     }>;
     listBudgets(req: Request, query?: {
         fiscalYear?: number;
     }): Promise<{
         id: string;
-        status: import("@prisma/client").$Enums.BudgetStatus;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         createdBy: {
             id: string;
             email: string;
         };
+        status: import("@prisma/client").$Enums.BudgetStatus;
         approvedAt: Date | null;
         approvedBy: {
             id: string;
@@ -126,13 +126,13 @@ export declare class BudgetsService {
     getBudget(req: Request, id: string): Promise<{
         budget: {
             id: string;
-            status: import("@prisma/client").$Enums.BudgetStatus;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             createdBy: {
                 id: string;
                 email: string;
             };
+            status: import("@prisma/client").$Enums.BudgetStatus;
             approvedAt: Date | null;
             approvedBy: {
                 id: string;
@@ -161,19 +161,19 @@ export declare class BudgetsService {
         lines: {
             id: string;
             account: {
-                name: string;
                 id: string;
+                name: string;
                 code: string;
             };
+            amount: Prisma.Decimal;
             accountId: string;
             periodId: string;
             period: {
-                name: string;
                 id: string;
+                name: string;
                 startDate: Date;
                 endDate: Date;
             };
-            amount: Prisma.Decimal;
         }[];
     }>;
     budgetVsActual(req: Request, query?: {
@@ -187,8 +187,8 @@ export declare class BudgetsService {
             createdAt: Date;
         };
         periods: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
@@ -210,8 +210,8 @@ export declare class BudgetsService {
         from: string;
         to: string;
         periods: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;

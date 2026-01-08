@@ -1,9 +1,56 @@
 import type { Request } from 'express';
-import { ApproveRefundDto, CreateCustomerRefundDto, PostRefundDto, VoidRefundDto } from './refunds.dto';
+import { ApproveRefundDto, CreateCustomerRefundDto, ListRefundsQueryDto, PostRefundDto, VoidRefundDto } from './refunds.dto';
 import { FinanceArRefundsService } from './refunds.service';
 export declare class FinanceArRefundsController {
     private readonly refunds;
     constructor(refunds: FinanceArRefundsService);
+    list(req: Request, q: ListRefundsQueryDto): Promise<{
+        items: any;
+        total: any;
+        page: number;
+        pageSize: number;
+    }>;
+    refundable(req: Request, creditNoteId: string): Promise<{
+        creditNote: {
+            creditNoteDate: any;
+            id: any;
+            creditNoteNumber: string;
+            customerId: any;
+            currency: string;
+            totalAmount: number;
+        };
+        refunded: number;
+        refundable: number;
+    }>;
+    getById(req: Request, id: string): Promise<{
+        id: any;
+        refundNumber: any;
+        refundDate: any;
+        customerId: any;
+        customerName: any;
+        creditNoteId: any;
+        creditNoteNumber: any;
+        creditNoteDate: any;
+        creditNoteTotalAmount: number;
+        creditNoteCurrency: any;
+        invoiceId: any;
+        currency: any;
+        exchangeRate: number;
+        amount: number;
+        paymentMethod: any;
+        bankAccountId: any;
+        status: any;
+        createdById: any;
+        createdAt: any;
+        approvedById: any;
+        approvedAt: any;
+        postedById: any;
+        postedAt: any;
+        voidedById: any;
+        voidedAt: any;
+        voidReason: any;
+        postedJournalId: any;
+    }>;
     create(req: Request, dto: CreateCustomerRefundDto): Promise<any>;
     approve(req: Request, id: string, dto: ApproveRefundDto): Promise<any>;
     post(req: Request, id: string, _dto: PostRefundDto): Promise<any>;

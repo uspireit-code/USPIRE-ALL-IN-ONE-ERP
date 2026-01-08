@@ -8,8 +8,8 @@ export declare function assertPeriodIsOpen(params: {
     documentLabel: string;
     dateLabel?: string;
 }): Promise<{
-    name: string;
     id: string;
+    name: string;
     status: import("@prisma/client").$Enums.AccountingPeriodStatus;
     code: string | null;
 }>;

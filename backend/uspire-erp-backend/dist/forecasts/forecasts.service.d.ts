@@ -40,20 +40,20 @@ export declare class ForecastsService {
     }>;
     createForecast(req: Request, dto: CreateForecastDto): Promise<{
         forecast: {
-            name: string;
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
-            createdAt: Date;
-            updatedAt: Date;
             tenantId: string;
+            name: string;
             createdById: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.ForecastStatus;
+            updatedAt: Date;
             fiscalYear: number;
         };
         version: {
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
-            createdAt: Date;
             createdById: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.ForecastStatus;
             forecastId: string;
             versionNumber: number;
         };
@@ -63,109 +63,109 @@ export declare class ForecastsService {
         limit?: number;
         offset?: number;
     }): Promise<{
-        name: string;
         id: string;
-        status: import("@prisma/client").$Enums.ForecastStatus;
-        createdAt: Date;
-        updatedAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         createdBy: {
             id: string;
             email: string;
         };
+        status: import("@prisma/client").$Enums.ForecastStatus;
+        updatedAt: Date;
         fiscalYear: number;
     }[]>;
     getForecast(req: Request, id: string): Promise<{
         forecast: {
-            name: string;
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
-            createdAt: Date;
-            updatedAt: Date;
             tenantId: string;
+            name: string;
+            createdAt: Date;
             createdBy: {
                 id: string;
                 email: string;
             };
+            status: import("@prisma/client").$Enums.ForecastStatus;
+            updatedAt: Date;
             fiscalYear: number;
         };
         versions: {
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
             createdBy: {
                 id: string;
                 email: string;
             };
+            status: import("@prisma/client").$Enums.ForecastStatus;
             forecastId: string;
             versionNumber: number;
         }[];
         latestVersion: {
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
             createdBy: {
                 id: string;
                 email: string;
             };
+            status: import("@prisma/client").$Enums.ForecastStatus;
             forecastId: string;
             versionNumber: number;
         };
         lines: {
             id: string;
             account: {
-                name: string;
                 id: string;
+                name: string;
                 code: string;
             };
-            accountId: string;
             amount: import("@prisma/client/runtime/library").Decimal;
+            accountId: string;
             month: number;
         }[];
     }>;
     submitForecast(req: Request, id: string): Promise<{
         forecast: {
-            name: string;
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
-            createdAt: Date;
-            updatedAt: Date;
             tenantId: string;
+            name: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.ForecastStatus;
+            updatedAt: Date;
             fiscalYear: number;
         };
         version: {
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
+            status: import("@prisma/client").$Enums.ForecastStatus;
             forecastId: string;
             versionNumber: number;
         };
     }>;
     approveForecast(req: Request, id: string): Promise<{
         forecast: {
-            name: string;
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
-            createdAt: Date;
-            updatedAt: Date;
             tenantId: string;
+            name: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.ForecastStatus;
+            updatedAt: Date;
             fiscalYear: number;
         };
         version: {
             id: string;
-            status: import("@prisma/client").$Enums.ForecastStatus;
             createdAt: Date;
+            status: import("@prisma/client").$Enums.ForecastStatus;
             forecastId: string;
             versionNumber: number;
         };
     }>;
     updateForecastLines(req: Request, id: string, dto: UpdateForecastLinesDto): Promise<{
-        name: string;
         id: string;
-        status: import("@prisma/client").$Enums.ForecastStatus;
-        createdAt: Date;
-        updatedAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.ForecastStatus;
+        updatedAt: Date;
         fiscalYear: number;
     }>;
 }

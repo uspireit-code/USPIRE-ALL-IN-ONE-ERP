@@ -7,24 +7,24 @@ export declare class ApController {
     private readonly ap;
     constructor(ap: ApService);
     createSupplier(req: Request, dto: CreateSupplierDto): Promise<{
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
-        isActive: boolean;
+        name: string;
+        createdAt: Date;
         taxNumber: string | null;
+        isActive: boolean;
     }>;
     listSuppliers(req: Request): Promise<{
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
-        isActive: boolean;
+        name: string;
+        createdAt: Date;
         taxNumber: string | null;
+        isActive: boolean;
     }[]>;
     listEligibleAccounts(req: Request): Promise<{
-        name: string;
         id: string;
+        name: string;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
     }[]>;
@@ -32,12 +32,13 @@ export declare class ApController {
         taxLines: ({
             taxRate: {
                 glAccount: {
-                    name: string;
                     id: string;
+                    tenantId: string;
+                    name: string;
+                    createdById: string | null;
                     createdAt: Date;
                     updatedAt: Date;
-                    tenantId: string;
-                    createdById: string | null;
+                    isActive: boolean;
                     code: string;
                     type: import("@prisma/client").$Enums.AccountType;
                     subCategory: string | null;
@@ -49,7 +50,6 @@ export declare class ApController {
                     requiresFund: boolean;
                     isBudgetRelevant: boolean;
                     budgetControlMode: import("@prisma/client").$Enums.BudgetControlMode;
-                    isActive: boolean;
                     parentAccountId: string | null;
                     isPosting: boolean;
                     isPostingAllowed: boolean;
@@ -60,152 +60,152 @@ export declare class ApController {
                     ifrsMappingCode: string | null;
                 } | null;
             } & {
-                name: string;
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                name: string;
+                createdAt: Date;
+                isActive: boolean;
                 code: string;
                 type: import("@prisma/client").$Enums.TaxRateType;
-                isActive: boolean;
-                glAccountId: string | null;
                 rate: import("@prisma/client/runtime/library").Decimal;
+                glAccountId: string | null;
             };
         } & {
             id: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             taxAmount: import("@prisma/client/runtime/library").Decimal;
-            taxRateId: string;
             sourceType: import("@prisma/client").$Enums.InvoiceTaxSourceType;
             sourceId: string;
+            taxRateId: string;
             taxableAmount: import("@prisma/client/runtime/library").Decimal;
         })[];
-        supplier: {
-            name: string;
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            isActive: boolean;
-            taxNumber: string | null;
-        };
         lines: {
             id: string;
-            accountId: string;
             description: string;
             amount: import("@prisma/client/runtime/library").Decimal;
+            accountId: string;
             supplierInvoiceId: string;
         }[];
+        supplier: {
+            id: string;
+            tenantId: string;
+            name: string;
+            createdAt: Date;
+            taxNumber: string | null;
+            isActive: boolean;
+        };
         id: string;
-        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
-        createdAt: Date;
         tenantId: string;
+        createdById: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
-        createdById: string;
         postedById: string | null;
         postedAt: Date | null;
-        approvedById: string | null;
         approvedAt: Date | null;
         supplierId: string;
+        approvedById: string | null;
     }>;
     submitInvoice(req: Request, id: string): Promise<{
-        supplier: {
-            name: string;
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            isActive: boolean;
-            taxNumber: string | null;
-        };
         lines: {
             id: string;
-            accountId: string;
             description: string;
             amount: import("@prisma/client/runtime/library").Decimal;
+            accountId: string;
             supplierInvoiceId: string;
         }[];
+        supplier: {
+            id: string;
+            tenantId: string;
+            name: string;
+            createdAt: Date;
+            taxNumber: string | null;
+            isActive: boolean;
+        };
     } & {
         id: string;
-        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
-        createdAt: Date;
         tenantId: string;
+        createdById: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
-        createdById: string;
         postedById: string | null;
         postedAt: Date | null;
-        approvedById: string | null;
         approvedAt: Date | null;
         supplierId: string;
+        approvedById: string | null;
     }>;
     approveInvoice(req: Request, id: string): Promise<{
-        supplier: {
-            name: string;
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            isActive: boolean;
-            taxNumber: string | null;
-        };
         lines: {
             id: string;
-            accountId: string;
             description: string;
             amount: import("@prisma/client/runtime/library").Decimal;
+            accountId: string;
             supplierInvoiceId: string;
         }[];
+        supplier: {
+            id: string;
+            tenantId: string;
+            name: string;
+            createdAt: Date;
+            taxNumber: string | null;
+            isActive: boolean;
+        };
     } & {
         id: string;
-        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
-        createdAt: Date;
         tenantId: string;
+        createdById: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
-        createdById: string;
         postedById: string | null;
         postedAt: Date | null;
-        approvedById: string | null;
         approvedAt: Date | null;
         supplierId: string;
+        approvedById: string | null;
     }>;
     postInvoice(req: Request, id: string, dto: PostInvoiceDto): Promise<{
         invoice: {
-            supplier: {
-                name: string;
-                id: string;
-                createdAt: Date;
-                tenantId: string;
-                isActive: boolean;
-                taxNumber: string | null;
-            };
             lines: {
                 id: string;
-                accountId: string;
                 description: string;
                 amount: import("@prisma/client/runtime/library").Decimal;
+                accountId: string;
                 supplierInvoiceId: string;
             }[];
+            supplier: {
+                id: string;
+                tenantId: string;
+                name: string;
+                createdAt: Date;
+                taxNumber: string | null;
+                isActive: boolean;
+            };
         } & {
             id: string;
-            status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
-            createdAt: Date;
             tenantId: string;
+            createdById: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
             invoiceNumber: string;
             invoiceDate: Date;
             dueDate: Date;
             totalAmount: import("@prisma/client/runtime/library").Decimal;
-            createdById: string;
             postedById: string | null;
             postedAt: Date | null;
-            approvedById: string | null;
             approvedAt: Date | null;
             supplierId: string;
+            approvedById: string | null;
         };
         glJournal: {
             lines: {
@@ -213,8 +213,8 @@ export declare class ApController {
                 projectId: string | null;
                 fundId: string | null;
                 departmentId: string | null;
-                accountId: string;
                 description: string | null;
+                accountId: string;
                 lineNumber: number | null;
                 debit: import("@prisma/client/runtime/library").Decimal;
                 credit: import("@prisma/client/runtime/library").Decimal;
@@ -223,21 +223,21 @@ export declare class ApController {
             }[];
         } & {
             id: string;
-            status: import("@prisma/client").$Enums.JournalStatus;
-            createdAt: Date;
             tenantId: string;
-            reference: string | null;
             createdById: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.JournalStatus;
+            reference: string | null;
             postedById: string | null;
             postedAt: Date | null;
-            description: string | null;
-            approvedById: string | null;
             approvedAt: Date | null;
+            approvedById: string | null;
+            description: string | null;
+            sourceType: string | null;
+            sourceId: string | null;
             journalNumber: number | null;
             journalType: import("@prisma/client").$Enums.JournalType;
             periodId: string | null;
-            sourceType: string | null;
-            sourceId: string | null;
             journalDate: Date;
             correctsJournalId: string | null;
             riskScore: number;
@@ -265,35 +265,35 @@ export declare class ApController {
         };
     }>;
     listInvoices(req: Request): Promise<({
-        supplier: {
-            name: string;
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            isActive: boolean;
-            taxNumber: string | null;
-        };
         lines: {
             id: string;
-            accountId: string;
             description: string;
             amount: import("@prisma/client/runtime/library").Decimal;
+            accountId: string;
             supplierInvoiceId: string;
         }[];
+        supplier: {
+            id: string;
+            tenantId: string;
+            name: string;
+            createdAt: Date;
+            taxNumber: string | null;
+            isActive: boolean;
+        };
     } & {
         id: string;
-        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
-        createdAt: Date;
         tenantId: string;
+        createdById: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.SupplierInvoiceStatus;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
-        createdById: string;
         postedById: string | null;
         postedAt: Date | null;
-        approvedById: string | null;
         approvedAt: Date | null;
         supplierId: string;
+        approvedById: string | null;
     })[]>;
 }

@@ -16,8 +16,8 @@ import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
-import { AdminRoleGuard } from './admin-role.guard';
-import { SystemSettingsReadGuard } from './system-settings-read.guard';
+import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
+import { PermissionsGuard } from '../rbac/permissions.guard';
 import { SettingsService } from './settings.service';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
@@ -27,18 +27,18 @@ import { UpdateUserRolesDto } from './dto/update-user-roles.dto';
 import { ValidateUserRolesDto } from './dto/validate-user-roles.dto';
 
 @Controller('settings')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
   @Get('organisation')
-  @UseGuards(AdminRoleGuard)
+  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL', 'FINANCE_VIEW_ALL')
   async getOrganisation(@Req() req: Request) {
     return this.settings.getOrganisation(req);
   }
 
   @Put('organisation')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async updateOrganisation(
     @Req() req: Request,
     @Body() dto: UpdateOrganisationDto,
@@ -47,7 +47,7 @@ export class SettingsController {
   }
 
   @Post('organisation/logo')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -59,7 +59,7 @@ export class SettingsController {
   }
 
   @Get('organisation/logo')
-  @UseGuards(AdminRoleGuard)
+  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL', 'FINANCE_VIEW_ALL')
   async downloadLogo(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadOrganisationLogo(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -68,13 +68,13 @@ export class SettingsController {
   }
 
   @Get('system')
-  @UseGuards(SystemSettingsReadGuard)
+  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
   async getSystemConfig(@Req() req: Request) {
     return this.settings.getSystemConfig(req);
   }
 
   @Put('system')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('FINANCE_CONFIG_CHANGE')
   async updateSystemConfig(
     @Req() req: Request,
     @Body() dto: UpdateSystemConfigDto,
@@ -83,7 +83,7 @@ export class SettingsController {
   }
 
   @Post('system/favicon')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -95,7 +95,7 @@ export class SettingsController {
   }
 
   @Get('system/favicon')
-  @UseGuards(AdminRoleGuard)
+  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
   async downloadFavicon(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadTenantFavicon(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -104,31 +104,31 @@ export class SettingsController {
   }
 
   @Get('users')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async listUsers(@Req() req: Request) {
     return this.settings.listUsers(req);
   }
 
   @Get('users/roles')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async listRoles(@Req() req: Request) {
     return this.settings.listRoles(req);
   }
 
   @Post('users/roles/validate')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async validateRoles(@Req() req: Request, @Body() dto: ValidateUserRolesDto) {
     return this.settings.validateRoles(req, dto);
   }
 
   @Post('users')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async createUser(@Req() req: Request, @Body() dto: CreateUserDto) {
     return this.settings.createUser(req, dto);
   }
 
   @Patch('users/:id/status')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async updateUserStatus(
     @Req() req: Request,
     @Param('id') id: string,
@@ -138,7 +138,7 @@ export class SettingsController {
   }
 
   @Patch('users/:id/roles')
-  @UseGuards(AdminRoleGuard)
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async updateUserRoles(
     @Req() req: Request,
     @Param('id') id: string,
@@ -148,13 +148,13 @@ export class SettingsController {
   }
 
   @Get('roles')
-  @UseGuards(AdminRoleGuard)
+  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
   async listRolesWithPermissions(@Req() req: Request) {
     return this.settings.listRolesWithPermissions(req);
   }
 
   @Get('roles/:id')
-  @UseGuards(AdminRoleGuard)
+  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
   async getRoleDetails(@Req() req: Request, @Param('id') id: string) {
     return this.settings.getRoleDetails(req, id);
   }

@@ -20,9 +20,10 @@ export declare class FinanceArInvoicesController {
         lines: any;
         outstandingBalance: number;
         id: string;
-        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
-        createdAt: Date;
         tenantId: string;
+        createdById: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         customerId: string;
         invoiceNumber: string;
         invoiceDate: Date;
@@ -37,7 +38,6 @@ export declare class FinanceArInvoicesController {
         customerEmailSnapshot: string | null;
         customerBillingAddressSnapshot: string | null;
         isTaxable: boolean;
-        createdById: string;
         postedById: string | null;
         postedAt: Date | null;
     }>;
@@ -84,9 +84,10 @@ export declare class FinanceArInvoicesController {
         lines: any;
         outstandingBalance: number;
         id: string;
-        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
-        createdAt: Date;
         tenantId: string;
+        createdById: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         customerId: string;
         invoiceNumber: string;
         invoiceDate: Date;
@@ -101,7 +102,6 @@ export declare class FinanceArInvoicesController {
         customerEmailSnapshot: string | null;
         customerBillingAddressSnapshot: string | null;
         isTaxable: boolean;
-        createdById: string;
         postedById: string | null;
         postedAt: Date | null;
     }>;
@@ -117,9 +117,10 @@ export declare class FinanceArInvoicesController {
             lines: any;
             outstandingBalance: number;
             id: string;
-            status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
-            createdAt: Date;
             tenantId: string;
+            createdById: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             customerId: string;
             invoiceNumber: string;
             invoiceDate: Date;
@@ -134,7 +135,6 @@ export declare class FinanceArInvoicesController {
             customerEmailSnapshot: string | null;
             customerBillingAddressSnapshot: string | null;
             isTaxable: boolean;
-            createdById: string;
             postedById: string | null;
             postedAt: Date | null;
         };

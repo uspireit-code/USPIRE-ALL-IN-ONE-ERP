@@ -3,8 +3,9 @@ export declare class InternalController {
     private readonly prisma;
     constructor(prisma: PrismaService);
     listTenants(): Promise<{
-        name: string;
         id: string;
+        name: string;
+        createdAt: Date;
         organisationName: string;
         organisationShortName: string | null;
         logoUrl: string | null;
@@ -41,13 +42,13 @@ export declare class InternalController {
         coaFrozen: boolean;
         coaLockedAt: Date | null;
         status: import("@prisma/client").$Enums.TenantStatus;
-        createdAt: Date;
         updatedAt: Date;
     }[]>;
     listEntities(): Promise<({
         tenant: {
-            name: string;
             id: string;
+            name: string;
+            createdAt: Date;
             organisationName: string;
             organisationShortName: string | null;
             logoUrl: string | null;
@@ -84,14 +85,13 @@ export declare class InternalController {
             coaFrozen: boolean;
             coaLockedAt: Date | null;
             status: import("@prisma/client").$Enums.TenantStatus;
-            createdAt: Date;
             updatedAt: Date;
         };
     } & {
-        name: string;
         id: string;
-        createdAt: Date;
         tenantId: string;
+        name: string;
+        createdAt: Date;
         jurisdiction: string;
         baseCurrency: string;
         fiscalYearStart: number;

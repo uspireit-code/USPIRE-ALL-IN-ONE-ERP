@@ -11,18 +11,18 @@ export declare class DisclosureNotesAuditService {
         reason?: string;
     }): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
-        reason: string | null;
-        userId: string;
+        createdAt: Date;
         eventType: import("@prisma/client").$Enums.AuditEventType;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
         action: string;
         outcome: import("@prisma/client").$Enums.AuditOutcome;
+        reason: string | null;
         permissionUsed: string | null;
         forecastId: string | null;
         forecastVersionId: string | null;
+        userId: string;
     }>;
     disclosureNoteView(params: {
         req: Request;
@@ -32,17 +32,17 @@ export declare class DisclosureNotesAuditService {
         reason?: string;
     }): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
-        reason: string | null;
-        userId: string;
+        createdAt: Date;
         eventType: import("@prisma/client").$Enums.AuditEventType;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
         action: string;
         outcome: import("@prisma/client").$Enums.AuditOutcome;
+        reason: string | null;
         permissionUsed: string | null;
         forecastId: string | null;
         forecastVersionId: string | null;
+        userId: string;
     }>;
 }

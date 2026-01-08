@@ -9,8 +9,8 @@ export declare class AuditEvidenceService {
     constructor(prisma: PrismaService, storage: StorageProvider);
     uploadEvidence(req: Request, dto: AuditEvidenceUploadDto, file?: any): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
         fileName: string;
@@ -26,8 +26,8 @@ export declare class AuditEvidenceService {
     }>;
     listEvidence(req: Request, dto: AuditEvidenceQueryDto): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
         fileName: string;

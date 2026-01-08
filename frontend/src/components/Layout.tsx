@@ -259,8 +259,16 @@ export function Layout() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v18h18" />
       <path d="M7 16v-6" />
-      <path d="M12 16v-10" />
-      <path d="M17 16v-4" />
+      <path d="M11 16v-10" />
+      <path d="M15 16v-4" />
+      <path d="M19 16v-8" />
+    </svg>
+  );
+
+  const BellIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   );
 
@@ -296,17 +304,27 @@ export function Layout() {
 
   const SIDEBAR_WIDTH = 280;
 
-  const showAudit = hasPermission('AUDIT_VIEW');
+  const hasSystemViewAll = hasPermission('SYSTEM_VIEW_ALL');
+  const hasFinanceViewAll = hasPermission('FINANCE_VIEW_ALL');
+  const hasSettingsView = hasPermission('SETTINGS_VIEW');
+
+  const showAudit = hasPermission('AUDIT_VIEW') || hasSystemViewAll;
+
+  const showArAging = hasPermission('AR_AGING_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showArStatements = hasPermission('AR_STATEMENT_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showArReminders = hasPermission('AR_REMINDER_VIEW') || hasFinanceViewAll || hasSystemViewAll;
   const showGlCreate = hasPermission('FINANCE_GL_CREATE');
-  const showGlView = hasPermission('FINANCE_GL_VIEW');
+  const showGlView = hasPermission('FINANCE_GL_VIEW') || hasFinanceViewAll || hasSystemViewAll;
   const showGlReviewQueue = hasPermission('FINANCE_GL_APPROVE');
   const showGlPostQueue = hasPermission('FINANCE_GL_FINAL_POST');
   const showGlRecurring = hasPermission('FINANCE_GL_RECURRING_MANAGE') || hasPermission('FINANCE_GL_RECURRING_GENERATE');
   const showGlRiskIntelligence = showGlView;
   const showGlRegister = showGlView;
   const showGlDrafts = showGlCreate;
-  const showCoa = hasPermission('FINANCE_COA_VIEW');
+  const showCoa = hasPermission('FINANCE_COA_VIEW') || hasFinanceViewAll || hasSystemViewAll;
   const showPeriods =
+    hasFinanceViewAll ||
+    hasSystemViewAll ||
     hasPermission('FINANCE_PERIOD_VIEW') ||
     hasPermission('FINANCE_PERIOD_CLOSE_APPROVE') ||
     hasPermission('FINANCE_PERIOD_REOPEN');
@@ -333,7 +351,20 @@ export function Layout() {
 
   const showBankReconciliation = hasPermission('BANK_RECONCILIATION_VIEW');
 
-  const isAdmin = Boolean(state.me?.user?.roles?.includes('ADMIN'));
+  const showSettings = hasSettingsView || hasSystemViewAll;
+
+  const showFinanceNav =
+    hasFinanceViewAll ||
+    hasSystemViewAll ||
+    showCoa ||
+    showGlView ||
+    showPeriods ||
+    showFinanceBudgets ||
+    showForecasts ||
+    showFixedAssets ||
+    showBankReconciliation ||
+    showArCreditNotes ||
+    showArRefunds;
 
   const linkBaseStyle: React.CSSProperties = {
     display: 'flex',
@@ -511,64 +542,66 @@ export function Layout() {
           <Section>
             <SidebarLink to="/" label="Dashboard" icon={<GridIcon />} end level={1} />
 
-            <SidebarToggle
-              label="Finance & Accounting"
-              icon={<CalculatorIcon />}
-              open={openL1 === 'finance'}
-              active={isFinanceActive}
-              level={1}
-              onToggle={() => setOpenL1((v) => (v === 'finance' ? null : 'finance'))}
-            />
-            {openL1 === 'finance' ? (
-              <Indent level={2}>
-                {showCoa ? <SidebarLink to="/finance/coa" label="Chart of Accounts" icon={<BookIcon />} level={2} /> : null}
-
+            {showFinanceNav ? (
+              <>
                 <SidebarToggle
-                  label="General Ledger"
-                  icon={<FolderIcon />}
-                  open={openFinanceL2.gl}
-                  active={financeActiveL2.gl}
-                  level={2}
-                  onToggle={() => setOpenFinanceL2((s) => ({ ...s, gl: !s.gl }))}
+                  label="Finance & Accounting"
+                  icon={<CalculatorIcon />}
+                  open={openL1 === 'finance'}
+                  active={isFinanceActive}
+                  level={1}
+                  onToggle={() => setOpenL1((v) => (v === 'finance' ? null : 'finance'))}
                 />
-                {openFinanceL2.gl ? (
-                  <Indent level={3}>
-                    {showGlCreate ? <SidebarLink to="/finance/gl/journals/new" end label="New Journal" icon={<FileTextIcon />} level={3} /> : null}
-                    {showGlCreate ? <SidebarLink to="/finance/gl/upload" end label="Journal Upload" icon={<UploadIcon />} level={3} /> : null}
-                    {showGlDrafts ? (
-                      <SidebarLink
-                        to="/finance/gl/journals?workbench=1"
-                        end
-                        label="Draft Journals"
-                        icon={<FileTextIcon />}
-                        level={3}
-                        activeMatch={(loc) => {
-                          if (loc.pathname !== '/finance/gl/journals') return false;
-                          const qs = new URLSearchParams(loc.search);
-                          return qs.get('workbench') === '1';
-                        }}
-                      />
+                {openL1 === 'finance' ? (
+                  <Indent level={2}>
+                    {showCoa ? <SidebarLink to="/finance/coa" label="Chart of Accounts" icon={<BookIcon />} level={2} /> : null}
+
+                    <SidebarToggle
+                      label="General Ledger"
+                      icon={<FolderIcon />}
+                      open={openFinanceL2.gl}
+                      active={financeActiveL2.gl}
+                      level={2}
+                      onToggle={() => setOpenFinanceL2((s) => ({ ...s, gl: !s.gl }))}
+                    />
+                    {openFinanceL2.gl ? (
+                      <Indent level={3}>
+                        {showGlCreate ? <SidebarLink to="/finance/gl/journals/new" end label="New Journal" icon={<FileTextIcon />} level={3} /> : null}
+                        {showGlCreate ? <SidebarLink to="/finance/gl/upload" end label="Journal Upload" icon={<UploadIcon />} level={3} /> : null}
+                        {showGlDrafts ? (
+                          <SidebarLink
+                            to="/finance/gl/journals?workbench=1"
+                            end
+                            label="Draft Journals"
+                            icon={<FileTextIcon />}
+                            level={3}
+                            activeMatch={(loc) => {
+                              if (loc.pathname !== '/finance/gl/journals') return false;
+                              const qs = new URLSearchParams(loc.search);
+                              return qs.get('workbench') === '1';
+                            }}
+                          />
+                        ) : null}
+                        {showGlReviewQueue ? <SidebarLink to="/finance/gl/review" end label="Review Queue" icon={<ClipboardIcon />} level={3} /> : null}
+                        {showGlPostQueue ? <SidebarLink to="/finance/gl/post" end label="Post Queue" icon={<ClipboardIcon />} level={3} /> : null}
+                        {showGlRegister ? (
+                          <SidebarLink
+                            to="/finance/gl/journals"
+                            end
+                            label="Journal Register"
+                            icon={<FileTextIcon />}
+                            level={3}
+                            activeMatch={(loc) => {
+                              if (loc.pathname !== '/finance/gl/journals') return false;
+                              const qs = new URLSearchParams(loc.search);
+                              return qs.get('workbench') !== '1' && qs.get('drilldown') !== '1';
+                            }}
+                          />
+                        ) : null}
+                        {showGlRiskIntelligence ? <SidebarLink to="/finance/gl/risk" end label="Risk Intelligence" icon={<ShieldIcon />} level={3} /> : null}
+                        {showGlRecurring ? <SidebarLink to="/finance/gl/recurring" end label="Recurring Journals" icon={<RepeatIcon />} level={3} /> : null}
+                      </Indent>
                     ) : null}
-                    {showGlReviewQueue ? <SidebarLink to="/finance/gl/review" end label="Review Queue" icon={<ClipboardIcon />} level={3} /> : null}
-                    {showGlPostQueue ? <SidebarLink to="/finance/gl/post" end label="Post Queue" icon={<ClipboardIcon />} level={3} /> : null}
-                    {showGlRegister ? (
-                      <SidebarLink
-                        to="/finance/gl/journals"
-                        end
-                        label="Journal Register"
-                        icon={<FileTextIcon />}
-                        level={3}
-                        activeMatch={(loc) => {
-                          if (loc.pathname !== '/finance/gl/journals') return false;
-                          const qs = new URLSearchParams(loc.search);
-                          return qs.get('workbench') !== '1' && qs.get('drilldown') !== '1';
-                        }}
-                      />
-                    ) : null}
-                    {showGlRiskIntelligence ? <SidebarLink to="/finance/gl/risk" end label="Risk Intelligence" icon={<ShieldIcon />} level={3} /> : null}
-                    {showGlRecurring ? <SidebarLink to="/finance/gl/recurring" end label="Recurring Journals" icon={<RepeatIcon />} level={3} /> : null}
-                  </Indent>
-                ) : null}
 
                 <SidebarToggle
                   label="Accounts Receivable"
@@ -585,8 +618,9 @@ export function Layout() {
                     <SidebarLink to="/finance/ar/receipts" label="Receipts" icon={<ReceiptIcon />} level={3} />
                     {showArCreditNotes ? <SidebarLink to="/finance/ar/credit-notes" label="Credit Notes" icon={<FileTextIcon />} level={3} /> : null}
                     {showArRefunds ? <SidebarLink to="/finance/ar/refunds" label="Refunds" icon={<BanknoteIcon />} level={3} /> : null}
-                    <SidebarLink to="/finance/ar/aging" label="AR Aging" icon={<BarChartIcon />} level={3} />
-                    <SidebarLink to="/finance/ar/statements" label="Statements" icon={<FileTextIcon />} level={3} />
+                    {showArAging ? <SidebarLink to="/ar/aging" label="AR Aging" icon={<BarChartIcon />} level={3} /> : null}
+                    {showArStatements ? <SidebarLink to="/ar/statements" label="Statements" icon={<FileTextIcon />} level={3} /> : null}
+                    {showArReminders ? <SidebarLink to="/ar/reminders" label="Reminders" icon={<BellIcon />} level={3} /> : null}
                   </Indent>
                 ) : null}
 
@@ -687,7 +721,9 @@ export function Layout() {
 
                 <SidebarLink to="/reports/disclosure-notes" label="Disclosure Notes" icon={<FileTextIcon />} level={2} />
                 {showAudit ? <SidebarLink to="/audit" label="Audit" icon={<ShieldIcon />} level={2} /> : null}
-              </Indent>
+                  </Indent>
+                ) : null}
+              </>
             ) : null}
 
             <SidebarToggle
@@ -700,7 +736,7 @@ export function Layout() {
             />
             {openL1 === 'settings' ? (
               <Indent level={2}>
-                {isAdmin ? <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} /> : null}
+                {showSettings ? <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} /> : null}
               </Indent>
             ) : null}
           </Section>

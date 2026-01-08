@@ -26,8 +26,8 @@ function Field(props: { label: string; hint?: string; children: React.ReactNode 
 export function SettingsSystemPage() {
   const { setPreviewOverrides, clearPreviewOverrides, refresh: refreshBranding } = useBranding();
   const brand = useBrandColors();
-  const { state } = useAuth();
-  const isAdmin = Boolean(state.me?.user?.roles?.includes('ADMIN'));
+  const { hasPermission } = useAuth();
+  const canFinanceConfigChange = hasPermission('FINANCE_CONFIG_CHANGE');
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -813,7 +813,7 @@ export function SettingsSystemPage() {
           </div>
         </Card>
 
-        {isAdmin ? (
+        {canFinanceConfigChange ? (
           <Card
             title="Chart of Accounts"
             subtitle="Admin-only setup actions"

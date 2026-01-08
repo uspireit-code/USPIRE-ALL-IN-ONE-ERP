@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
@@ -36,18 +37,27 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       exceptionFactory: (errors) => {
-        const details = (errors ?? []).map((e) => {
+        const fieldErrors = (errors ?? []).flatMap((e) => {
           const constraints = e.constraints ?? {};
-          return {
-            field: e.property,
-            constraints,
-          };
+          return Object.entries(constraints).map(([code, rawMessage]) => {
+            let message = String(rawMessage ?? '').trim();
+
+            if (code === 'isDateString') {
+              message = 'Please enter a valid date (YYYY-MM-DD).';
+            }
+
+            return {
+              field: e.property,
+              code,
+              message,
+            };
+          });
         });
 
         return new BadRequestException({
-          error: 'BAD_REQUEST',
-          message: 'VALIDATION_FAILED',
-          details,
+          error: 'VALIDATION_FAILED',
+          message: 'Please fix the highlighted fields and try again.',
+          fieldErrors,
         });
       },
     }),
