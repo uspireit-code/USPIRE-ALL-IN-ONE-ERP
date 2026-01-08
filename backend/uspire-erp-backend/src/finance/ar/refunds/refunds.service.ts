@@ -13,6 +13,7 @@ import { resolveArControlAccount } from '../../common/resolve-ar-control-account
 import type {
   ApproveRefundDto,
   CreateCustomerRefundDto,
+  ListRefundsQueryDto,
   VoidRefundDto,
 } from './refunds.dto';
 
@@ -131,6 +132,152 @@ export class FinanceArRefundsService {
       },
       refunded,
       refundable,
+    };
+  }
+
+  async getRefundableForCreditNote(req: Request, creditNoteId: string) {
+    const tenant = this.ensureTenant(req);
+    const out = await this.computeCreditNoteRefundable({
+      tenantId: tenant.id,
+      creditNoteId: String(creditNoteId ?? '').trim(),
+    });
+
+    return {
+      creditNote: {
+        ...out.creditNote,
+        creditNoteDate:
+          (out.creditNote as any).creditNoteDate?.toISOString?.().slice(0, 10) ??
+          null,
+      },
+      refunded: Number(out.refunded),
+      refundable: Number(out.refundable),
+    };
+  }
+
+  async list(req: Request, q: ListRefundsQueryDto) {
+    const tenant = this.ensureTenant(req);
+
+    const page = Number(q.page ?? 1);
+    const pageSize = Number(q.pageSize ?? 50);
+    const take = pageSize;
+    const skip = (page - 1) * pageSize;
+
+    const where: any = { tenantId: tenant.id };
+
+    const status = String(q.status ?? '').trim();
+    if (status) where.status = status;
+
+    const customerId = String(q.customerId ?? '').trim();
+    if (customerId) where.customerId = customerId;
+
+    const creditNoteId = String(q.creditNoteId ?? '').trim();
+    if (creditNoteId) where.creditNoteId = creditNoteId;
+
+    const dateFrom = String(q.dateFrom ?? '').trim();
+    const dateTo = String(q.dateTo ?? '').trim();
+    if (dateFrom || dateTo) {
+      where.refundDate = {};
+      if (dateFrom) where.refundDate.gte = new Date(dateFrom);
+      if (dateTo) where.refundDate.lte = new Date(dateTo);
+    }
+
+    const [items, total] = await Promise.all([
+      (this.prisma as any).customerRefund.findMany({
+        where,
+        orderBy: [{ refundDate: 'desc' }, { refundNumber: 'desc' }],
+        take,
+        skip,
+        include: {
+          customer: { select: { id: true, name: true } },
+          creditNote: {
+            select: { id: true, creditNoteNumber: true, creditNoteDate: true },
+          },
+        } as any,
+      }),
+      (this.prisma as any).customerRefund.count({ where }),
+    ]);
+
+    return {
+      items: (items ?? []).map((r: any) => ({
+        id: r.id,
+        refundNumber: r.refundNumber,
+        refundDate: r.refundDate?.toISOString?.().slice(0, 10) ?? null,
+        amount: Number(r.amount ?? 0),
+        currency: r.currency,
+        exchangeRate: Number(r.exchangeRate ?? 1),
+        paymentMethod: r.paymentMethod,
+        status: r.status,
+        customerId: r.customerId,
+        customerName: r.customer?.name ?? null,
+        creditNoteId: r.creditNoteId,
+        creditNoteNumber: r.creditNote?.creditNoteNumber ?? null,
+        createdById: r.createdById,
+        approvedById: r.approvedById ?? null,
+        postedById: r.postedById ?? null,
+        voidedById: r.voidedById ?? null,
+        approvedAt: r.approvedAt?.toISOString?.() ?? null,
+        postedAt: r.postedAt?.toISOString?.() ?? null,
+        voidedAt: r.voidedAt?.toISOString?.() ?? null,
+        postedJournalId: r.postedJournalId ?? null,
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  async getById(req: Request, id: string) {
+    const tenant = this.ensureTenant(req);
+
+    const refund = await (this.prisma as any).customerRefund.findFirst({
+      where: { id, tenantId: tenant.id },
+      include: {
+        customer: { select: { id: true, name: true } },
+        creditNote: {
+          select: {
+            id: true,
+            creditNoteNumber: true,
+            creditNoteDate: true,
+            totalAmount: true,
+            currency: true,
+            invoiceId: true,
+          },
+        },
+        postedJournal: { select: { id: true } },
+      } as any,
+    });
+
+    if (!refund) throw new NotFoundException('Refund not found');
+
+    return {
+      id: refund.id,
+      refundNumber: refund.refundNumber,
+      refundDate: refund.refundDate?.toISOString?.().slice(0, 10) ?? null,
+      customerId: refund.customerId,
+      customerName: refund.customer?.name ?? null,
+      creditNoteId: refund.creditNoteId,
+      creditNoteNumber: refund.creditNote?.creditNoteNumber ?? null,
+      creditNoteDate:
+        refund.creditNote?.creditNoteDate?.toISOString?.().slice(0, 10) ?? null,
+      creditNoteTotalAmount: Number(refund.creditNote?.totalAmount ?? 0),
+      creditNoteCurrency: refund.creditNote?.currency ?? null,
+      invoiceId: refund.creditNote?.invoiceId ?? null,
+      currency: refund.currency,
+      exchangeRate: Number(refund.exchangeRate ?? 1),
+      amount: Number(refund.amount ?? 0),
+      paymentMethod: refund.paymentMethod,
+      bankAccountId: refund.bankAccountId ?? null,
+      status: refund.status,
+      createdById: refund.createdById,
+      createdAt: refund.createdAt?.toISOString?.() ?? null,
+      approvedById: refund.approvedById ?? null,
+      approvedAt: refund.approvedAt?.toISOString?.() ?? null,
+      postedById: refund.postedById ?? null,
+      postedAt: refund.postedAt?.toISOString?.() ?? null,
+      voidedById: refund.voidedById ?? null,
+      voidedAt: refund.voidedAt?.toISOString?.() ?? null,
+      voidReason: refund.voidReason ?? null,
+      postedJournalId: refund.postedJournalId ?? null,
     };
   }
 

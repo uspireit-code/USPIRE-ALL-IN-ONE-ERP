@@ -258,6 +258,7 @@ async function main() {
     'AR_CREDIT_NOTE_APPROVE',
     'AR_CREDIT_NOTE_POST',
     'AR_CREDIT_NOTE_VOID',
+    'AR_REFUND_VIEW',
     'AR_REFUND_CREATE',
     'AR_REFUND_APPROVE',
     'AR_REFUND_POST',
@@ -265,13 +266,13 @@ async function main() {
   ];
 
   const expectedOfficerCreditNote = ['AR_CREDIT_NOTE_CREATE', 'AR_CREDIT_NOTE_VIEW'];
-  const expectedOfficerRefund = ['AR_REFUND_CREATE'];
+  const expectedOfficerRefund = ['AR_REFUND_VIEW', 'AR_REFUND_CREATE'];
 
   const expectedManagerCreditNote = ['AR_CREDIT_NOTE_APPROVE', 'AR_CREDIT_NOTE_VIEW'];
-  const expectedManagerRefund = ['AR_REFUND_APPROVE'];
+  const expectedManagerRefund = ['AR_REFUND_VIEW', 'AR_REFUND_APPROVE'];
 
   const expectedControllerCreditNote = ['AR_CREDIT_NOTE_POST', 'AR_CREDIT_NOTE_VOID', 'AR_CREDIT_NOTE_VIEW'];
-  const expectedControllerRefund = ['AR_REFUND_POST', 'AR_REFUND_VOID'];
+  const expectedControllerRefund = ['AR_REFUND_VIEW', 'AR_REFUND_POST', 'AR_REFUND_VOID'];
 
   let hasCreditRefundFailure = false;
 

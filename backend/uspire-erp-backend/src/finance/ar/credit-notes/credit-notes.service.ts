@@ -180,27 +180,23 @@ export class FinanceArCreditNotesService {
       ];
     }
 
+    const dateFrom = String((q as any).dateFrom ?? '').trim();
+    const dateTo = String((q as any).dateTo ?? '').trim();
+    if (dateFrom || dateTo) {
+      where.creditNoteDate = {};
+      if (dateFrom) where.creditNoteDate.gte = new Date(dateFrom);
+      if (dateTo) where.creditNoteDate.lte = new Date(dateTo);
+    }
+
     const [items, total] = await Promise.all([
       (this.prisma as any).customerCreditNote.findMany({
         where,
         orderBy: [{ creditNoteDate: 'desc' }, { creditNoteNumber: 'desc' }],
         take,
         skip,
-        select: {
-          id: true,
-          creditNoteNumber: true,
-          creditNoteDate: true,
-          customerId: true,
-          invoiceId: true,
-          currency: true,
-          exchangeRate: true,
-          subtotal: true,
-          totalAmount: true,
-          status: true,
-          createdAt: true,
-          approvedAt: true,
-          postedAt: true,
-          voidedAt: true,
+        include: {
+          customer: { select: { id: true, name: true } },
+          invoice: { select: { id: true, invoiceNumber: true } },
         } as any,
       }),
       (this.prisma as any).customerCreditNote.count({ where }),
@@ -212,12 +208,17 @@ export class FinanceArCreditNotesService {
         creditNoteNumber: cn.creditNoteNumber,
         creditNoteDate: cn.creditNoteDate?.toISOString?.().slice(0, 10) ?? null,
         customerId: cn.customerId,
+        customerName: cn.customer?.name ?? null,
         invoiceId: cn.invoiceId ?? null,
+        invoiceNumber: cn.invoice?.invoiceNumber ?? null,
         currency: cn.currency,
         exchangeRate: Number(cn.exchangeRate ?? 1),
         subtotal: Number(cn.subtotal),
         totalAmount: Number(cn.totalAmount),
         status: cn.status,
+        createdById: cn.createdById,
+        approvedById: cn.approvedById ?? null,
+        postedById: cn.postedById ?? null,
         createdAt: cn.createdAt?.toISOString?.() ?? null,
         approvedAt: cn.approvedAt?.toISOString?.() ?? null,
         postedAt: cn.postedAt?.toISOString?.() ?? null,
@@ -244,14 +245,32 @@ export class FinanceArCreditNotesService {
 
     if (!cn) throw new NotFoundException('Credit note not found');
 
+    const invoiceId = cn.invoiceId ?? null;
+    const invoiceSummary = invoiceId
+      ? await this.computeInvoiceOutstanding({
+          tenantId: tenant.id,
+          invoiceId: String(invoiceId),
+        }).catch(() => null)
+      : null;
+
     return {
       id: cn.id,
       creditNoteNumber: cn.creditNoteNumber,
       creditNoteDate: cn.creditNoteDate?.toISOString?.().slice(0, 10) ?? null,
       customerId: cn.customerId,
       customerName: cn.customer?.name ?? '',
-      invoiceId: cn.invoiceId ?? null,
+      invoiceId,
       invoiceNumber: cn.invoice?.invoiceNumber ?? null,
+      invoiceSummary: invoiceSummary
+        ? {
+            invoiceId: invoiceSummary.invoice.id,
+            invoiceNumber: cn.invoice?.invoiceNumber ?? null,
+            invoiceTotal: Number(invoiceSummary.invoice.totalAmount ?? 0),
+            paid: Number(invoiceSummary.receiptApplied ?? 0),
+            credited: Number(invoiceSummary.creditApplied ?? 0),
+            outstanding: Number(invoiceSummary.outstanding ?? 0),
+          }
+        : null,
       memo: cn.memo ?? null,
       currency: cn.currency,
       exchangeRate: Number(cn.exchangeRate ?? 1),

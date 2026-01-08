@@ -87,6 +87,14 @@ export class ListCreditNotesQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @Min(1)
   page?: number;

@@ -232,6 +232,7 @@ async function main() {
     { code: 'AR_CREDIT_NOTE_POST', description: 'Post customer credit notes' },
     { code: 'AR_CREDIT_NOTE_VOID', description: 'Void customer credit notes' },
 
+    { code: 'AR_REFUND_VIEW', description: 'View customer refunds' },
     { code: 'AR_REFUND_CREATE', description: 'Create customer refunds (draft)' },
     { code: 'AR_REFUND_APPROVE', description: 'Approve customer refunds' },
     { code: 'AR_REFUND_POST', description: 'Post customer refunds' },
@@ -444,6 +445,7 @@ async function main() {
     'AR_CREDIT_NOTE_APPROVE',
     'AR_CREDIT_NOTE_POST',
     'AR_CREDIT_NOTE_VOID',
+    'AR_REFUND_VIEW',
     'AR_REFUND_CREATE',
     'AR_REFUND_APPROVE',
     'AR_REFUND_POST',
@@ -839,31 +841,42 @@ async function main() {
 
     await assignPermissionsByCode(financeOfficerRole.id, [
       'AR_INVOICE_CREATE',
-      'AP_INVOICE_CREATE',
+      'AR_INVOICE_VIEW',
+      'AR_RECEIPTS_CREATE',
+      'AR_RECEIPTS_VIEW',
       'PAYMENT_CREATE',
+      'AP_INVOICE_CREATE',
       'AR_CREDIT_NOTE_CREATE',
       'AR_CREDIT_NOTE_VIEW',
+      'AR_REFUND_VIEW',
       'AR_REFUND_CREATE',
     ]);
   }
 
   if (financeManagerRole?.id) {
     await assignPermissionsByCode(financeManagerRole.id, [
+      'AR_INVOICE_APPROVE',
+      'AP_INVOICE_APPROVE',
+      'PAYMENT_APPROVE',
+      'FINANCE_PERIOD_CLOSE',
+      'AR_CREDIT_NOTE_VIEW',
+      'AR_CREDIT_NOTE_APPROVE',
+      'AR_REFUND_VIEW',
       'AR_REFUND_APPROVE',
     ]);
   }
   if (financeControllerRole?.id) {
     await assignPermissionsByCode(financeControllerRole.id, [
       'FINANCE_GL_FINAL_POST',
-      'BANK_RECONCILE',
       'AR_INVOICE_POST',
       'AP_INVOICE_POST',
+      'AR_RECEIPT_VOID',
       'PAYMENT_POST',
       'FINANCE_PERIOD_CLOSE_APPROVE',
-      'TAX_CONFIG_UPDATE',
       'AR_CREDIT_NOTE_POST',
       'AR_CREDIT_NOTE_VOID',
       'AR_CREDIT_NOTE_VIEW',
+      'AR_REFUND_VIEW',
       'AR_REFUND_POST',
       'AR_REFUND_VOID',
     ]);
@@ -877,6 +890,7 @@ async function main() {
       'AR_CREDIT_NOTE_APPROVE',
       'AR_CREDIT_NOTE_POST',
       'AR_CREDIT_NOTE_VOID',
+      'AR_REFUND_VIEW',
       'AR_REFUND_CREATE',
       'AR_REFUND_APPROVE',
       'AR_REFUND_POST',

@@ -50,3 +50,35 @@ export class VoidRefundDto {
   @IsString()
   reason!: string;
 }
+
+export class ListRefundsQueryDto {
+  @IsOptional()
+  @IsString()
+  status?: 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  creditNoteId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  pageSize?: number;
+}

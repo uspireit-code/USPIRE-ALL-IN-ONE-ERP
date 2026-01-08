@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +15,7 @@ import { PermissionsGuard } from '../../../rbac/permissions.guard';
 import {
   ApproveRefundDto,
   CreateCustomerRefundDto,
+  ListRefundsQueryDto,
   PostRefundDto,
   VoidRefundDto,
 } from './refunds.dto';
@@ -22,6 +25,27 @@ import { FinanceArRefundsService } from './refunds.service';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FinanceArRefundsController {
   constructor(private readonly refunds: FinanceArRefundsService) {}
+
+  @Get()
+  @Permissions('AR_REFUND_VIEW')
+  async list(@Req() req: Request, @Query() q: ListRefundsQueryDto) {
+    return this.refunds.list(req, q);
+  }
+
+  @Get('credit-notes/:creditNoteId/refundable')
+  @Permissions('AR_REFUND_VIEW')
+  async refundable(
+    @Req() req: Request,
+    @Param('creditNoteId') creditNoteId: string,
+  ) {
+    return this.refunds.getRefundableForCreditNote(req, creditNoteId);
+  }
+
+  @Get(':id')
+  @Permissions('AR_REFUND_VIEW')
+  async getById(@Req() req: Request, @Param('id') id: string) {
+    return this.refunds.getById(req, id);
+  }
 
   @Post()
   @Permissions('AR_REFUND_CREATE')

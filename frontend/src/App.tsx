@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
+import { can, canAny } from './auth/permissions';
 import { BrandingProvider } from './branding/BrandingContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -89,6 +90,14 @@ import { SettingsInvoiceCategoriesPage } from './pages/settings/SettingsInvoiceC
 import { SettingsTaxRatesPage } from './pages/settings/SettingsTaxRatesPage';
 import { SettingsTaxConfigurationPage } from './pages/settings/SettingsTaxConfigurationPage';
 
+import { CreditNotesListPage } from './pages/ar/CreditNotesListPage';
+import { CreditNoteCreatePage } from './pages/ar/CreditNoteCreatePage';
+import { CreditNoteDetailsPage } from './pages/ar/CreditNoteDetailsPage';
+
+import { RefundsListPage } from './pages/ar/RefundsListPage';
+import { RefundCreatePage } from './pages/ar/RefundCreatePage';
+import { RefundDetailsPage } from './pages/ar/RefundDetailsPage';
+
 function AdminOnlyRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
   const isAdmin = Boolean(state.me?.user?.roles?.includes('ADMIN'));
@@ -98,16 +107,14 @@ function AdminOnlyRoute(props: { children: React.ReactNode }) {
 
 function PermissionOnlyRoute(props: { permission: string; children: React.ReactNode }) {
   const { state } = useAuth();
-  const perms = (state.me?.permissions ?? []) as string[];
-  const has = perms.includes(props.permission);
+  const has = can(state.me, props.permission);
   if (!has) return <AccessDeniedPage />;
   return <>{props.children}</>;
 }
 
 function PermissionAnyRoute(props: { permissions: string[]; children: React.ReactNode }) {
   const { state } = useAuth();
-  const perms = (state.me?.permissions ?? []) as string[];
-  const has = props.permissions.some((p) => perms.includes(p));
+  const has = canAny(state.me, props.permissions);
   if (!has) return <AccessDeniedPage />;
   return <>{props.children}</>;
 }
@@ -145,6 +152,56 @@ export default function App() {
               <Route path="ar/receipts" element={<ReceiptsPage />} />
               <Route path="ar/receipts/new" element={<CreateReceiptPage />} />
               <Route path="ar/receipts/:id" element={<ReceiptDetailsPage />} />
+
+              <Route
+                path="ar/credit-notes"
+                element={
+                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_VIEW">
+                    <CreditNotesListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="ar/credit-notes/new"
+                element={
+                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_CREATE">
+                    <CreditNoteCreatePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="ar/credit-notes/:id"
+                element={
+                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_VIEW">
+                    <CreditNoteDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+
+              <Route
+                path="ar/refunds"
+                element={
+                  <PermissionOnlyRoute permission="AR_REFUND_VIEW">
+                    <RefundsListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="ar/refunds/new"
+                element={
+                  <PermissionOnlyRoute permission="AR_REFUND_CREATE">
+                    <RefundCreatePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="ar/refunds/:id"
+                element={
+                  <PermissionOnlyRoute permission="AR_REFUND_VIEW">
+                    <RefundDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
               <Route path="payments" element={<PaymentsHomePage />} />
               <Route path="payments/bank-accounts" element={<BankAccountsListPage />} />
               <Route path="payments/ap" element={<ApPaymentsListPage />} />
@@ -350,6 +407,56 @@ export default function App() {
               <Route path="finance/ar/receipts" element={<ReceiptsPage />} />
               <Route path="finance/ar/receipts/new" element={<CreateReceiptPage />} />
               <Route path="finance/ar/receipts/:id" element={<ReceiptDetailsPage />} />
+
+              <Route
+                path="finance/ar/credit-notes"
+                element={
+                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_VIEW">
+                    <CreditNotesListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ar/credit-notes/new"
+                element={
+                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_CREATE">
+                    <CreditNoteCreatePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ar/credit-notes/:id"
+                element={
+                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_VIEW">
+                    <CreditNoteDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+
+              <Route
+                path="finance/ar/refunds"
+                element={
+                  <PermissionOnlyRoute permission="AR_REFUND_VIEW">
+                    <RefundsListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ar/refunds/new"
+                element={
+                  <PermissionOnlyRoute permission="AR_REFUND_CREATE">
+                    <RefundCreatePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ar/refunds/:id"
+                element={
+                  <PermissionOnlyRoute permission="AR_REFUND_VIEW">
+                    <RefundDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
               <Route path="finance/ar/aging" element={<ArAgingPage />} />
               <Route path="finance/ar/statements" element={<FinanceArStatementsPage />} />
               <Route path="finance/ap/suppliers" element={<SuppliersListPage />} />

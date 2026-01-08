@@ -321,6 +321,9 @@ export function Layout() {
   const showFinanceBudgets = showBudgetSetup || showBudgetVsActual;
   const showForecasts = hasPermission('forecast.view');
 
+  const showArCreditNotes = hasPermission('AR_CREDIT_NOTE_VIEW');
+  const showArRefunds = hasPermission('AR_REFUND_VIEW');
+
   const showFixedAssets =
     hasPermission('FA_CATEGORY_MANAGE') ||
     hasPermission('FA_ASSET_CREATE') ||
@@ -580,6 +583,8 @@ export function Layout() {
                     <SidebarLink to="/finance/ar/customers" label="Customers" icon={<UsersIcon />} level={3} />
                     <SidebarLink to="/finance/ar/invoices" label="Invoices" icon={<ReceiptIcon />} level={3} />
                     <SidebarLink to="/finance/ar/receipts" label="Receipts" icon={<ReceiptIcon />} level={3} />
+                    {showArCreditNotes ? <SidebarLink to="/finance/ar/credit-notes" label="Credit Notes" icon={<FileTextIcon />} level={3} /> : null}
+                    {showArRefunds ? <SidebarLink to="/finance/ar/refunds" label="Refunds" icon={<BanknoteIcon />} level={3} /> : null}
                     <SidebarLink to="/finance/ar/aging" label="AR Aging" icon={<BarChartIcon />} level={3} />
                     <SidebarLink to="/finance/ar/statements" label="Statements" icon={<FileTextIcon />} level={3} />
                   </Indent>
