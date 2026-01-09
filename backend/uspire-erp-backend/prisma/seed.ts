@@ -110,6 +110,13 @@ async function main() {
     { code: 'SYSTEM_CONFIG_CHANGE', description: 'Change system configuration (non-finance)' },
     { code: 'FINANCE_CONFIG_CHANGE', description: 'Change finance configuration (governed)' },
 
+    { code: 'USER_CREATE', description: 'Create users' },
+    { code: 'USER_VIEW', description: 'View users' },
+    { code: 'USER_EDIT', description: 'Edit users (status/profile)' },
+    { code: 'USER_ASSIGN_ROLE', description: 'Assign roles to users' },
+    { code: 'ROLE_VIEW', description: 'View roles' },
+    { code: 'ROLE_ASSIGN', description: 'Assign permissions to roles' },
+
     { code: 'FINANCE_GL_VIEW', description: 'View General Ledger' },
     { code: 'FINANCE_GL_CREATE', description: 'Create draft journal entries and accounts' },
     { code: 'FINANCE_GL_POST', description: 'Post General Ledger entries' },
@@ -191,6 +198,7 @@ async function main() {
     { code: 'AP_INVOICE_VIEW', description: 'View supplier invoices' },
     { code: 'AR_CUSTOMER_CREATE', description: 'Create customers' },
     { code: 'AR_INVOICE_CREATE', description: 'Create customer invoices' },
+    { code: 'AR_INVOICE_EDIT_DRAFT', description: 'Edit draft customer invoices' },
     { code: 'AR_INVOICE_SUBMIT', description: 'Submit customer invoices' },
     { code: 'AR_INVOICE_APPROVE', description: 'Approve customer invoices' },
     { code: 'AR_INVOICE_POST', description: 'Post customer invoices to GL' },
@@ -243,6 +251,7 @@ async function main() {
 
     { code: 'AR_CREDIT_NOTE_CREATE', description: 'Create customer credit notes (draft)' },
     { code: 'AR_CREDIT_NOTE_VIEW', description: 'View customer credit notes' },
+    { code: 'AR_CREDIT_NOTE_SUBMIT', description: 'Submit customer credit notes for approval' },
     { code: 'AR_CREDIT_NOTE_APPROVE', description: 'Approve customer credit notes' },
     { code: 'AR_CREDIT_NOTE_POST', description: 'Post customer credit notes' },
     { code: 'AR_CREDIT_NOTE_VOID', description: 'Void customer credit notes' },
@@ -462,6 +471,7 @@ async function main() {
     'REFUND_APPROVE',
     'AR_CREDIT_NOTE_CREATE',
     'AR_CREDIT_NOTE_VIEW',
+    'AR_CREDIT_NOTE_SUBMIT',
     'AR_CREDIT_NOTE_APPROVE',
     'AR_CREDIT_NOTE_POST',
     'AR_CREDIT_NOTE_VOID',
@@ -478,12 +488,26 @@ async function main() {
     'SYSTEM_VIEW_ALL',
     'FINANCE_VIEW_ALL',
     'SETTINGS_VIEW',
+    'SYSTEM_CONFIG_CHANGE',
+    'USER_CREATE',
+    'USER_VIEW',
+    'USER_EDIT',
+    'USER_ASSIGN_ROLE',
+    'ROLE_VIEW',
+    'ROLE_ASSIGN',
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
     'SYSTEM_VIEW_ALL',
     'FINANCE_VIEW_ALL',
     'SETTINGS_VIEW',
+    'SYSTEM_CONFIG_CHANGE',
+    'USER_CREATE',
+    'USER_VIEW',
+    'USER_EDIT',
+    'USER_ASSIGN_ROLE',
+    'ROLE_VIEW',
+    'ROLE_ASSIGN',
   ]);
 
   // AR Aging (AR-1) RBAC backfill (idempotent):
@@ -894,8 +918,6 @@ async function main() {
   if (financeOfficerRoleFound?.id) {
     await prisma.rolePermission.createMany({
       data: [
-        glViewPerm?.id,
-        glCreatePerm?.id,
         periodViewPerm?.id,
       ]
         .filter(Boolean)
@@ -906,69 +928,41 @@ async function main() {
       skipDuplicates: true,
     });
 
-    await assignPermissionsByCode(financeOfficerRoleFound.id, [
+    await assignPermissionsByCode(financeOfficerRole.id, [
       'AR_INVOICE_CREATE',
+      'AR_INVOICE_EDIT_DRAFT',
       'AR_INVOICE_VIEW',
       'AR_RECEIPTS_CREATE',
       'AR_RECEIPTS_VIEW',
-      'CUSTOMERS_VIEW',
-      'AR_CREDIT_NOTE_VIEW',
-      'AR_REFUND_VIEW',
-    ]);
-  }
-
-  if (financeManagerRole?.id) {
-    await assignPermissionsByCode(financeManagerRole.id, [
-      'AR_INVOICE_APPROVE',
-      'AP_INVOICE_APPROVE',
-      'PAYMENT_APPROVE',
-      'FINANCE_PERIOD_CLOSE',
-      'AR_CREDIT_NOTE_VIEW',
-      'AR_CREDIT_NOTE_APPROVE',
-      'AR_REFUND_VIEW',
-      'AR_REFUND_APPROVE',
-    ]);
-  }
-  if (financeControllerRole?.id) {
-    await assignPermissionsByCode(financeControllerRole.id, [
-      'FINANCE_PERIOD_CREATE',
-      'FINANCE_PERIOD_VIEW',
-      'FINANCE_PERIOD_REVIEW',
-      'FINANCE_PERIOD_CHECKLIST_VIEW',
-      'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-      'FINANCE_PERIOD_CLOSE',
-      'FINANCE_PERIOD_CORRECT',
-      'FINANCE_GL_FINAL_POST',
-      'AR_INVOICE_POST',
-      'AP_INVOICE_POST',
-      'AR_RECEIPT_VOID',
-      'PAYMENT_POST',
-      'FINANCE_PERIOD_CLOSE_APPROVE',
-      'AR_CREDIT_NOTE_POST',
-      'AR_CREDIT_NOTE_VOID',
-      'AR_CREDIT_NOTE_VIEW',
-      'AR_REFUND_VIEW',
-      'AR_REFUND_POST',
-      'AR_REFUND_VOID',
-      'FINANCE_PERIOD_REOPEN',
-    ]);
-  }
-
-  await removePermissionsByCode(
-    [superAdminRole.id, systemAdminRole.id, adminRole.id],
-    [
       'AR_CREDIT_NOTE_CREATE',
       'AR_CREDIT_NOTE_VIEW',
-      'AR_CREDIT_NOTE_APPROVE',
-      'AR_CREDIT_NOTE_POST',
-      'AR_CREDIT_NOTE_VOID',
-      'AR_REFUND_VIEW',
       'AR_REFUND_CREATE',
-      'AR_REFUND_APPROVE',
-      'AR_REFUND_POST',
-      'AR_REFUND_VOID',
-    ],
-  );
+      'AR_REFUND_VIEW',
+    ]);
+
+    const financeOfficerAllowedCodes = [
+      'AR_INVOICE_CREATE',
+      'AR_INVOICE_EDIT_DRAFT',
+      'AR_INVOICE_VIEW',
+      'AR_RECEIPTS_CREATE',
+      'AR_RECEIPTS_VIEW',
+      'AR_CREDIT_NOTE_CREATE',
+      'AR_CREDIT_NOTE_VIEW',
+      'AR_REFUND_CREATE',
+      'AR_REFUND_VIEW',
+      'AR_STATEMENT_VIEW',
+      'AR_REMINDER_VIEW',
+      'AR_REMINDER_TRIGGER',
+      'FINANCE_PERIOD_VIEW',
+    ] as const;
+
+    await prisma.rolePermission.deleteMany({
+      where: {
+        roleId: financeOfficerRoleFound.id,
+        permission: { code: { notIn: Array.from(financeOfficerAllowedCodes) } },
+      },
+    });
+  }
 
   // Seed default invoice categories per tenant (only if tenant has none).
   // These are defaults, but remain editable via RBAC.
@@ -1091,6 +1085,19 @@ async function main() {
         })),
       skipDuplicates: true,
     });
+
+    await assignPermissionsByCode(financeManagerRole.id, [
+      'AR_INVOICE_APPROVE',
+      'AP_INVOICE_APPROVE',
+      'PAYMENT_APPROVE',
+      'FINANCE_PERIOD_CLOSE',
+
+      'AR_CREDIT_NOTE_VIEW',
+      'AR_CREDIT_NOTE_APPROVE',
+
+      'AR_REFUND_VIEW',
+      'AR_REFUND_APPROVE',
+    ]);
   }
 
   if (periodCloseApprovePerm?.id) {
@@ -1161,6 +1168,22 @@ async function main() {
         })),
       skipDuplicates: true,
     });
+
+    await assignPermissionsByCode(financeControllerRole.id, [
+      'AR_INVOICE_POST',
+      'AP_INVOICE_POST',
+      'PAYMENT_POST',
+      'FINANCE_PERIOD_CLOSE_APPROVE',
+      'FINANCE_PERIOD_CORRECT',
+
+      'AR_CREDIT_NOTE_VIEW',
+      'AR_CREDIT_NOTE_POST',
+      'AR_CREDIT_NOTE_VOID',
+
+      'AR_REFUND_VIEW',
+      'AR_REFUND_POST',
+      'AR_REFUND_VOID',
+    ]);
   }
 
   // AR Receipts (AR-2) RBAC backfill (idempotent):

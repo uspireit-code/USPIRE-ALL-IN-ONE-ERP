@@ -153,7 +153,7 @@ export type ReceiptAllocationLine = {
   createdAt?: string | null;
 };
 
-export type CreditNoteStatus = 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+export type CreditNoteStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED' | 'VOID';
 
 export type CreditNoteListItem = {
   id: string;
@@ -721,6 +721,13 @@ export async function createCreditNote(params: {
 
 export async function approveCreditNote(id: string, params?: { memo?: string }) {
   return apiFetch<CreditNote>(`/finance/ar/credit-notes/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ memo: params?.memo || undefined }),
+  });
+}
+
+export async function submitCreditNote(id: string, params?: { memo?: string }) {
+  return apiFetch<CreditNote>(`/finance/ar/credit-notes/${id}/submit`, {
     method: 'POST',
     body: JSON.stringify({ memo: params?.memo || undefined }),
   });

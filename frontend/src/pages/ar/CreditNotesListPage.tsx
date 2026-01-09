@@ -23,6 +23,7 @@ export function CreditNotesListPage() {
 
   const canView = hasPermission('AR_CREDIT_NOTE_VIEW');
   const canCreate = hasPermission('AR_CREDIT_NOTE_CREATE');
+  const canSubmit = hasPermission('AR_CREDIT_NOTE_SUBMIT');
   const canApprove = hasPermission('AR_CREDIT_NOTE_APPROVE');
   const canPost = hasPermission('AR_CREDIT_NOTE_POST');
   const canVoid = hasPermission('AR_CREDIT_NOTE_VOID');
@@ -84,6 +85,7 @@ export function CreditNotesListPage() {
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as CreditNoteStatus | '')}>
               <option value="">All</option>
               <option value="DRAFT">DRAFT</option>
+              <option value="SUBMITTED">SUBMITTED</option>
               <option value="APPROVED">APPROVED</option>
               <option value="POSTED">POSTED</option>
               <option value="VOID">VOID</option>
@@ -127,9 +129,10 @@ export function CreditNotesListPage() {
           </thead>
           <tbody>
             {rows.map((r) => {
-              const canApproveRow = canApprove && r.status === 'DRAFT';
+              const canSubmitRow = canSubmit && r.status === 'DRAFT';
+              const canApproveRow = canApprove && r.status === 'SUBMITTED';
               const canPostRow = canPost && r.status === 'APPROVED';
-              const canVoidRow = canVoid && (r.status === 'POSTED' || r.status === 'APPROVED');
+              const canVoidRow = canVoid && r.status === 'POSTED';
 
               return (
                 <tr key={r.id}>
@@ -149,6 +152,7 @@ export function CreditNotesListPage() {
                   <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <Link to={`/finance/ar/credit-notes/${r.id}`}>View</Link>
+                      {canSubmitRow ? <Link to={`/finance/ar/credit-notes/${r.id}`}>Submit</Link> : null}
                       {canApproveRow ? <Link to={`/finance/ar/credit-notes/${r.id}`}>Approve</Link> : null}
                       {canPostRow ? <Link to={`/finance/ar/credit-notes/${r.id}`}>Post</Link> : null}
                       {canVoidRow ? <Link to={`/finance/ar/credit-notes/${r.id}`}>Void</Link> : null}
@@ -161,7 +165,7 @@ export function CreditNotesListPage() {
         </table>
       </div>
     );
-  }, [canApprove, canPost, canView, canVoid, error, filterCustomerId, filterFrom, filterStatus, filterTo, loading, rows]);
+  }, [canApprove, canPost, canSubmit, canView, canVoid, error, filterCustomerId, filterFrom, filterStatus, filterTo, loading, rows]);
 
   return (
     <PageLayout

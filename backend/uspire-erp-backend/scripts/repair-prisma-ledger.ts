@@ -58,8 +58,8 @@ async function upsertBaselineRow(opts: { migrationName: string; checksum: string
 }
 
 async function main() {
-  const migrationName = '20260107021200_baseline_drift_reconciliation';
-  const migrationPath = 'prisma/migrations/20260107021200_baseline_drift_reconciliation/migration.sql';
+  const migrationName = '20260109_reconciliation_baseline';
+  const migrationPath = 'prisma/migrations/20260109_reconciliation_baseline/migration.sql';
 
   const fileChecksum = sha256FileHex(migrationPath);
 

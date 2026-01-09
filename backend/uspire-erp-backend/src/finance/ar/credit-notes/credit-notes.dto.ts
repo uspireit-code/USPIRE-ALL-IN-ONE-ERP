@@ -72,7 +72,7 @@ export class CreateCustomerCreditNoteDto {
 export class ListCreditNotesQueryDto {
   @IsOptional()
   @IsString()
-  status?: 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED' | 'VOID';
 
   @IsOptional()
   @IsString()
@@ -106,6 +106,12 @@ export class ListCreditNotesQueryDto {
 }
 
 export class ApproveCreditNoteDto {
+  @IsOptional()
+  @IsString()
+  memo?: string;
+}
+
+export class SubmitCreditNoteDto {
   @IsOptional()
   @IsString()
   memo?: string;

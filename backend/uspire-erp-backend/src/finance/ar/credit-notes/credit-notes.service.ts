@@ -13,6 +13,7 @@ import type {
   ApproveCreditNoteDto,
   CreateCustomerCreditNoteDto,
   ListCreditNotesQueryDto,
+  SubmitCreditNoteDto,
   VoidCreditNoteDto,
 } from './credit-notes.dto';
 import { GlService } from '../../../gl/gl.service';
@@ -51,6 +52,89 @@ export class FinanceArCreditNotesService {
     const user = req.user;
     if (!user) throw new BadRequestException('Missing user context');
     return user;
+  }
+
+  private async auditLifecycle(params: {
+    req: Request;
+    eventType:
+      | 'AR_CREDIT_NOTE_CREATED'
+      | 'AR_CREDIT_NOTE_SUBMITTED'
+      | 'AR_CREDIT_NOTE_APPROVED'
+      | 'AR_CREDIT_NOTE_POSTED'
+      | 'AR_CREDIT_NOTE_VOIDED';
+    creditNoteId: string;
+    invoiceId: string | null;
+    amount: number;
+    previousStatus: string | null;
+    newStatus: string;
+    permissionUsed: string;
+    outcome: 'SUCCESS' | 'BLOCKED' | 'FAILED';
+    reason?: string;
+  }) {
+    const tenant = this.ensureTenant(params.req);
+    const user = this.ensureUser(params.req);
+    await (this.prisma as any).auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: params.eventType,
+          entityType: 'CUSTOMER_CREDIT_NOTE',
+          entityId: params.creditNoteId,
+          action: params.eventType,
+          outcome: params.outcome,
+          reason: params.reason,
+          metadata: {
+            creditNoteId: params.creditNoteId,
+            invoiceId: params.invoiceId,
+            amount: params.amount,
+            performedBy: user.id,
+            previousStatus: params.previousStatus,
+            newStatus: params.newStatus,
+          },
+          userId: user.id,
+          permissionUsed: params.permissionUsed,
+        },
+      })
+      .catch(() => undefined);
+  }
+
+  private async logSoDBlocked(params: {
+    req: Request;
+    permissionAttempted: string;
+    conflictingPermission: string;
+    creditNoteId?: string;
+    reason: string;
+  }) {
+    const tenant = this.ensureTenant(params.req);
+    const user = this.ensureUser(params.req);
+
+    await this.prisma.soDViolationLog.create({
+      data: {
+        tenantId: tenant.id,
+        userId: user.id,
+        permissionAttempted: params.permissionAttempted,
+        conflictingPermission: params.conflictingPermission,
+      },
+    });
+
+    await (this.prisma as any).auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'SOD_VIOLATION',
+          entityType: 'CUSTOMER_CREDIT_NOTE',
+          entityId: params.creditNoteId ?? user.id,
+          action: params.permissionAttempted,
+          outcome: 'BLOCKED',
+          reason: params.reason,
+          metadata: {
+            creditNoteId: params.creditNoteId,
+          },
+          userId: user.id,
+          permissionUsed: params.permissionAttempted,
+        },
+      })
+      .catch(() => undefined);
   }
 
   private parseYmdToDateOrNull(s: any): Date | null {
@@ -214,6 +298,8 @@ export class FinanceArCreditNotesService {
         currency: cn.currency,
         exchangeRate: Number(cn.exchangeRate ?? 1),
         subtotal: Number(cn.subtotal),
+        taxAmount: Number(cn.taxAmount ?? 0),
+        isTaxable: Boolean(cn.isTaxable ?? false),
         totalAmount: Number(cn.totalAmount),
         status: cn.status,
         createdById: cn.createdById,
@@ -275,6 +361,8 @@ export class FinanceArCreditNotesService {
       currency: cn.currency,
       exchangeRate: Number(cn.exchangeRate ?? 1),
       subtotal: Number(cn.subtotal),
+      taxAmount: Number((cn as any).taxAmount ?? 0),
+      isTaxable: Boolean((cn as any).isTaxable ?? false),
       totalAmount: Number(cn.totalAmount),
       status: cn.status,
       createdById: cn.createdById,
@@ -335,10 +423,21 @@ export class FinanceArCreditNotesService {
     }
 
     const invoiceId = String(dto.invoiceId ?? '').trim() || null;
+    let invoiceTaxable = false;
+    let invoiceTaxAmount = 0;
+    let invoiceSubtotal = 0;
     if (invoiceId) {
       const inv = await (this.prisma as any).customerInvoice.findFirst({
         where: { tenantId: tenant.id, id: invoiceId },
-        select: { id: true, customerId: true, currency: true, status: true },
+        select: {
+          id: true,
+          customerId: true,
+          currency: true,
+          status: true,
+          isTaxable: true,
+          taxAmount: true,
+          subtotal: true,
+        },
       });
       if (!inv) throw new BadRequestException('Invoice not found');
       if (String(inv.customerId) !== String(dto.customerId)) {
@@ -350,6 +449,10 @@ export class FinanceArCreditNotesService {
       if (String(inv.status) !== 'POSTED') {
         throw new BadRequestException('Credit note can only be applied to a POSTED invoice');
       }
+
+      invoiceTaxable = Boolean((inv as any).isTaxable);
+      invoiceTaxAmount = this.normalizeMoney(Number((inv as any).taxAmount ?? 0));
+      invoiceSubtotal = this.normalizeMoney(Number((inv as any).subtotal ?? 0));
     }
 
     if (!dto.lines || dto.lines.length < 1) {
@@ -406,7 +509,15 @@ export class FinanceArCreditNotesService {
     const subtotal = this.round2(
       computedLines.reduce((s: number, l: any) => s + l.lineAmount, 0),
     );
-    const totalAmount = subtotal;
+    const taxAmount = invoiceId
+      ? this.normalizeMoney(
+          invoiceTaxable && invoiceSubtotal > 0
+            ? (subtotal * invoiceTaxAmount) / invoiceSubtotal
+            : 0,
+        )
+      : 0;
+    const isTaxable = invoiceId ? Boolean(invoiceTaxable && taxAmount > 0) : false;
+    const totalAmount = this.normalizeMoney(subtotal + taxAmount);
 
     const created = await this.prisma.$transaction(async (tx) => {
       const creditNoteNumber = await this.nextCreditNoteNumber(tx, tenant.id);
@@ -421,6 +532,8 @@ export class FinanceArCreditNotesService {
           currency,
           exchangeRate,
           subtotal,
+          taxAmount,
+          isTaxable,
           totalAmount,
           status: 'DRAFT',
           createdById: user.id,
@@ -441,7 +554,76 @@ export class FinanceArCreditNotesService {
       });
     });
 
+    await this.auditLifecycle({
+      req,
+      eventType: 'AR_CREDIT_NOTE_CREATED',
+      creditNoteId: created.id,
+      invoiceId,
+      amount: totalAmount,
+      previousStatus: null,
+      newStatus: 'DRAFT',
+      permissionUsed: 'AR_CREDIT_NOTE_CREATE',
+      outcome: 'SUCCESS',
+    });
+
     return this.getById(req, created.id);
+  }
+
+  async submit(req: Request, id: string, dto: SubmitCreditNoteDto) {
+    const tenant = this.ensureTenant(req);
+    const user = this.ensureUser(req);
+
+    const cn = await (this.prisma as any).customerCreditNote.findFirst({
+      where: { id, tenantId: tenant.id },
+      select: {
+        id: true,
+        status: true,
+        creditNoteDate: true,
+        invoiceId: true,
+        totalAmount: true,
+      } as any,
+    });
+    if (!cn) throw new NotFoundException('Credit note not found');
+
+    if (String(cn.status) !== 'DRAFT') {
+      throw new BadRequestException(`Credit note cannot be submitted from status: ${cn.status}`);
+    }
+
+    const creditNoteDate = new Date(cn.creditNoteDate);
+    try {
+      await assertPeriodIsOpen({
+        prisma: this.prisma,
+        tenantId: tenant.id,
+        date: creditNoteDate,
+        action: 'create',
+        documentLabel: 'Credit Note',
+        dateLabel: 'credit note date',
+      });
+    } catch {
+      throw new ForbiddenException('Cannot submit in a closed period');
+    }
+
+    await (this.prisma as any).customerCreditNote.update({
+      where: { id: cn.id },
+      data: {
+        status: 'SUBMITTED',
+        ...(dto.memo !== undefined ? { memo: dto.memo ? String(dto.memo) : null } : {}),
+      } as any,
+    });
+
+    await this.auditLifecycle({
+      req,
+      eventType: 'AR_CREDIT_NOTE_SUBMITTED',
+      creditNoteId: cn.id,
+      invoiceId: cn.invoiceId ?? null,
+      amount: this.normalizeMoney(Number((cn as any).totalAmount ?? 0)),
+      previousStatus: String(cn.status),
+      newStatus: 'SUBMITTED',
+      permissionUsed: 'AR_CREDIT_NOTE_SUBMIT',
+      outcome: 'SUCCESS',
+    });
+
+    return this.getById(req, cn.id);
   }
 
   async approve(req: Request, id: string, dto: ApproveCreditNoteDto) {
@@ -454,8 +636,19 @@ export class FinanceArCreditNotesService {
     });
     if (!cn) throw new NotFoundException('Credit note not found');
 
-    if (String(cn.status) !== 'DRAFT') {
+    if (String(cn.status) !== 'SUBMITTED') {
       throw new BadRequestException(`Credit note cannot be approved from status: ${cn.status}`);
+    }
+
+    if (String(cn.createdById) === String(user.id)) {
+      await this.logSoDBlocked({
+        req,
+        permissionAttempted: 'AR_CREDIT_NOTE_APPROVE',
+        conflictingPermission: 'AR_CREDIT_NOTE_CREATE',
+        creditNoteId: cn.id,
+        reason: 'Creator cannot approve their own credit note',
+      });
+      throw new ForbiddenException('Creator cannot approve their own credit note');
     }
 
     const creditNoteDate = new Date(cn.creditNoteDate);
@@ -496,6 +689,18 @@ export class FinanceArCreditNotesService {
       } as any,
     });
 
+    await this.auditLifecycle({
+      req,
+      eventType: 'AR_CREDIT_NOTE_APPROVED',
+      creditNoteId: cn.id,
+      invoiceId: cn.invoiceId ?? null,
+      amount: this.normalizeMoney(Number((cn as any).totalAmount ?? 0)),
+      previousStatus: String(cn.status),
+      newStatus: 'APPROVED',
+      permissionUsed: 'AR_CREDIT_NOTE_APPROVE',
+      outcome: 'SUCCESS',
+    });
+
     return this.getById(req, cn.id);
   }
 
@@ -521,6 +726,17 @@ export class FinanceArCreditNotesService {
       throw new BadRequestException(`Credit note cannot be posted from status: ${cn.status}`);
     }
 
+    if (cn.approvedById && String(cn.approvedById) === String(user.id)) {
+      await this.logSoDBlocked({
+        req,
+        permissionAttempted: 'AR_CREDIT_NOTE_POST',
+        conflictingPermission: 'AR_CREDIT_NOTE_APPROVE',
+        creditNoteId: cn.id,
+        reason: 'Approver cannot post the same credit note',
+      });
+      throw new ForbiddenException('Approver cannot post the same credit note');
+    }
+
     const creditNoteDate = new Date(cn.creditNoteDate);
     try {
       await assertPeriodIsOpen({
@@ -539,11 +755,12 @@ export class FinanceArCreditNotesService {
       throw new BadRequestException('Credit note must have at least 1 line');
     }
 
-    const totalAmount = this.normalizeMoney(Number(cn.totalAmount ?? 0));
+    const totalAmount = this.normalizeMoney(Number((cn as any).totalAmount ?? 0));
     const subtotal = this.normalizeMoney(
       (cn.lines ?? []).reduce((s: number, l: any) => s + Number(l.lineAmount ?? 0), 0),
     );
-    if (this.normalizeMoney(subtotal) !== this.normalizeMoney(totalAmount)) {
+    const taxAmount = this.normalizeMoney(Number((cn as any).taxAmount ?? 0));
+    if (this.normalizeMoney(subtotal + taxAmount) !== this.normalizeMoney(totalAmount)) {
       throw new BadRequestException('Credit note totals failed validation before posting');
     }
 
@@ -561,6 +778,21 @@ export class FinanceArCreditNotesService {
     }
 
     const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
+
+    const taxLineAmount = taxAmount > 0 ? taxAmount : 0;
+    const taxAccountId = taxLineAmount > 0
+      ? String(
+          (
+            await (this.prisma as any).tenantTaxConfig.findFirst({
+              where: { tenantId: tenant.id },
+              select: { outputVatAccountId: true },
+            })
+          )?.outputVatAccountId ?? '',
+        )
+      : '';
+    if (taxLineAmount > 0 && !taxAccountId) {
+      throw new BadRequestException('Missing tenant output VAT account configuration');
+    }
 
     const journal = await this.prisma.journalEntry.create({
       data: {
@@ -585,6 +817,16 @@ export class FinanceArCreditNotesService {
               fundId: l.fundId ?? undefined,
               description: String(l.description ?? '').trim() || undefined,
             })),
+            ...(taxLineAmount > 0
+              ? [
+                  {
+                    accountId: taxAccountId,
+                    debit: taxLineAmount,
+                    credit: 0,
+                    description: 'Output VAT (credit note)',
+                  },
+                ]
+              : []),
             {
               accountId: arAccount.id,
               debit: 0,
@@ -607,6 +849,18 @@ export class FinanceArCreditNotesService {
         postedAt: new Date(),
         postedJournalId: postedJournal.id,
       } as any,
+    });
+
+    await this.auditLifecycle({
+      req,
+      eventType: 'AR_CREDIT_NOTE_POSTED',
+      creditNoteId: cn.id,
+      invoiceId: cn.invoiceId ?? null,
+      amount: totalAmount,
+      previousStatus: String(cn.status),
+      newStatus: 'POSTED',
+      permissionUsed: 'AR_CREDIT_NOTE_POST',
+      outcome: 'SUCCESS',
     });
 
     return this.getById(req, cn.id);
@@ -646,6 +900,22 @@ export class FinanceArCreditNotesService {
     const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
     const totalAmount = this.normalizeMoney(Number(cn.totalAmount ?? 0));
+    const taxAmount = this.normalizeMoney(Number((cn as any).taxAmount ?? 0));
+
+    const taxLineAmount = taxAmount > 0 ? taxAmount : 0;
+    const taxAccountId = taxLineAmount > 0
+      ? String(
+          (
+            await (this.prisma as any).tenantTaxConfig.findFirst({
+              where: { tenantId: tenant.id },
+              select: { outputVatAccountId: true },
+            })
+          )?.outputVatAccountId ?? '',
+        )
+      : '';
+    if (taxLineAmount > 0 && !taxAccountId) {
+      throw new BadRequestException('Missing tenant output VAT account configuration');
+    }
 
     const reversal = await this.prisma.journalEntry.create({
       data: {
@@ -668,6 +938,16 @@ export class FinanceArCreditNotesService {
               credit: 0,
               description: 'AR control reversal',
             },
+            ...(taxLineAmount > 0
+              ? [
+                  {
+                    accountId: taxAccountId,
+                    debit: 0,
+                    credit: taxLineAmount,
+                    description: 'Output VAT reversal (credit note)',
+                  },
+                ]
+              : []),
             ...(cn.lines ?? []).map((l: any) => ({
               accountId: l.revenueAccountId,
               debit: 0,
@@ -693,6 +973,19 @@ export class FinanceArCreditNotesService {
         voidedAt: new Date(),
         voidReason: reason,
       } as any,
+    });
+
+    await this.auditLifecycle({
+      req,
+      eventType: 'AR_CREDIT_NOTE_VOIDED',
+      creditNoteId: cn.id,
+      invoiceId: cn.invoiceId ?? null,
+      amount: totalAmount,
+      previousStatus: String(cn.status),
+      newStatus: 'VOID',
+      permissionUsed: 'AR_CREDIT_NOTE_VOID',
+      outcome: 'SUCCESS',
+      reason,
     });
 
     return this.getById(req, cn.id);

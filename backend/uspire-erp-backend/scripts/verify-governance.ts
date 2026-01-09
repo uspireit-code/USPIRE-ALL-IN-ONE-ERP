@@ -188,7 +188,15 @@ async function main() {
 
   const forbiddenManagerPeriodCorrection = ['FINANCE_PERIOD_CORRECT'];
 
-  const expectedOfficer = ['FINANCE_GL_CREATE', 'AR_INVOICE_CREATE', 'AP_INVOICE_CREATE', 'PAYMENT_CREATE', 'AR_CREDIT_NOTE_CREATE'];
+  const expectedOfficer = [
+    'AR_INVOICE_CREATE',
+    'AR_INVOICE_EDIT_DRAFT',
+    'AR_INVOICE_VIEW',
+    'AR_CREDIT_NOTE_CREATE',
+    'AR_CREDIT_NOTE_VIEW',
+    'AR_REFUND_CREATE',
+    'AR_REFUND_VIEW',
+  ];
 
   const forbiddenOfficer = [
     'FINANCE_GL_APPROVE',
@@ -263,6 +271,7 @@ async function main() {
   const creditRefundForbiddenAdmin = [
     'AR_CREDIT_NOTE_CREATE',
     'AR_CREDIT_NOTE_VIEW',
+    'AR_CREDIT_NOTE_SUBMIT',
     'AR_CREDIT_NOTE_APPROVE',
     'AR_CREDIT_NOTE_POST',
     'AR_CREDIT_NOTE_VOID',

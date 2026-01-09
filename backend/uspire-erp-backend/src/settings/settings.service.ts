@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -131,34 +132,15 @@ export class SettingsService {
     });
 
     const allowedPermissionCodes = [
-      'FINANCE_GL_VIEW',
-      'FINANCE_GL_CREATE',
-
-      'FINANCE_COA_VIEW',
-
-      'AR_INVOICE_VIEW',
       'AR_INVOICE_CREATE',
-      'AR_INVOICE_SUBMIT',
-      'AR_RECEIPTS_VIEW',
+      'AR_INVOICE_EDIT_DRAFT',
+      'AR_INVOICE_VIEW',
       'AR_RECEIPTS_CREATE',
-      'AR_RECEIPT_VOID',
-
-      'AP_INVOICE_VIEW',
-      'AP_INVOICE_CREATE',
-      'AP_INVOICE_SUBMIT',
-
-      'PAYMENT_VIEW',
-      'PAYMENT_CREATE',
-
-      'BANK_RECONCILIATION_VIEW',
-      'BANK_STATEMENT_IMPORT',
-
-      'FINANCE_PERIOD_VIEW',
-      'FINANCE_PERIOD_CHECKLIST_VIEW',
-
-      'FINANCE_TB_VIEW',
-      'report.view.pl',
-      'report.view.bs',
+      'AR_RECEIPTS_VIEW',
+      'AR_CREDIT_NOTE_CREATE',
+      'AR_CREDIT_NOTE_VIEW',
+      'AR_REFUND_CREATE',
+      'AR_REFUND_VIEW',
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -696,7 +678,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ name: created.name, email: created.email }),
           userId: actor.id,
-          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
+          permissionUsed: 'USER_CREATE',
         },
       })
       .catch(() => undefined);
@@ -766,7 +748,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ isActive: updated.isActive }),
           userId: actor.id,
-          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
+          permissionUsed: 'USER_EDIT',
         },
       })
       .catch(() => undefined);
@@ -815,7 +797,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ roleIds }),
           userId: actor.id,
-          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
+          permissionUsed: 'USER_ASSIGN_ROLE',
         },
       })
       .catch(() => undefined);
@@ -1047,6 +1029,41 @@ export class SettingsService {
     const user = req.user;
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
+
+    const financeSensitiveKeys: Array<keyof UpdateSystemConfigDto> = [
+      'allowSelfPosting',
+      'requiresDepartmentOnInvoices',
+      'requiresProjectOnInvoices',
+      'requiresFundOnInvoices',
+      'arControlAccountId',
+      'defaultBankClearingAccountId',
+      'cashClearingAccountId',
+      'unappliedReceiptsAccountId',
+    ];
+
+    const isChangingFinanceControls = financeSensitiveKeys.some(
+      (k) => (dto as any)?.[k] !== undefined,
+    );
+
+    if (isChangingFinanceControls) {
+      const hasFinanceConfig = await this.prisma.rolePermission.findFirst({
+        where: {
+          role: {
+            tenantId: tenant.id,
+            userRoles: { some: { userId: user.id } },
+          },
+          permission: { code: 'FINANCE_CONFIG_CHANGE' },
+        },
+        select: { roleId: true },
+      });
+
+      if (!hasFinanceConfig) {
+        throw new ForbiddenException({
+          error: 'Access denied',
+          missingPermissions: ['FINANCE_CONFIG_CHANGE'],
+        });
+      }
+    }
 
     const before = await (this.prisma as any).tenant.findUnique({
       where: { id: tenant.id },

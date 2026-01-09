@@ -74,7 +74,7 @@ export class SettingsController {
   }
 
   @Put('system')
-  @Permissions('FINANCE_CONFIG_CHANGE')
+  @Permissions('SYSTEM_CONFIG_CHANGE')
   async updateSystemConfig(
     @Req() req: Request,
     @Body() dto: UpdateSystemConfigDto,
@@ -104,31 +104,31 @@ export class SettingsController {
   }
 
   @Get('users')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('USER_VIEW')
   async listUsers(@Req() req: Request) {
     return this.settings.listUsers(req);
   }
 
   @Get('users/roles')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('ROLE_VIEW')
   async listRoles(@Req() req: Request) {
     return this.settings.listRoles(req);
   }
 
   @Post('users/roles/validate')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('ROLE_VIEW')
   async validateRoles(@Req() req: Request, @Body() dto: ValidateUserRolesDto) {
     return this.settings.validateRoles(req, dto);
   }
 
   @Post('users')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('USER_CREATE')
   async createUser(@Req() req: Request, @Body() dto: CreateUserDto) {
     return this.settings.createUser(req, dto);
   }
 
   @Patch('users/:id/status')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('USER_EDIT')
   async updateUserStatus(
     @Req() req: Request,
     @Param('id') id: string,
@@ -138,7 +138,7 @@ export class SettingsController {
   }
 
   @Patch('users/:id/roles')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('USER_ASSIGN_ROLE')
   async updateUserRoles(
     @Req() req: Request,
     @Param('id') id: string,

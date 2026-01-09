@@ -4,7 +4,14 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
-import { approveCreditNote, getCreditNoteById, postCreditNote, voidCreditNote, type CreditNote } from '../../services/ar';
+import {
+  approveCreditNote,
+  getCreditNoteById,
+  postCreditNote,
+  submitCreditNote,
+  voidCreditNote,
+  type CreditNote,
+} from '../../services/ar';
 
 function StatusBadge(props: { status: string }) {
   const s = String(props.status ?? '').toUpperCase();
@@ -32,6 +39,7 @@ export function CreditNoteDetailsPage() {
   const { hasPermission } = useAuth();
 
   const canView = hasPermission('AR_CREDIT_NOTE_VIEW');
+  const canSubmit = hasPermission('AR_CREDIT_NOTE_SUBMIT');
   const canApprove = hasPermission('AR_CREDIT_NOTE_APPROVE');
   const canPost = hasPermission('AR_CREDIT_NOTE_POST');
   const canVoid = hasPermission('AR_CREDIT_NOTE_VOID');
@@ -78,11 +86,29 @@ export function CreditNoteDetailsPage() {
   const allowed = useMemo(() => {
     const status = String(cn?.status ?? '').toUpperCase();
     return {
-      approve: Boolean(cn) && status === 'DRAFT' && canApprove,
+      submit: Boolean(cn) && status === 'DRAFT' && canSubmit,
+      approve: Boolean(cn) && status === 'SUBMITTED' && canApprove,
       post: Boolean(cn) && status === 'APPROVED' && canPost,
-      void: Boolean(cn) && (status === 'APPROVED' || status === 'POSTED') && canVoid,
+      void: Boolean(cn) && status === 'POSTED' && canVoid,
     };
-  }, [canApprove, canPost, canVoid, cn]);
+  }, [canApprove, canPost, canSubmit, canVoid, cn]);
+
+  async function onSubmit() {
+    if (!cn) return;
+    const ok = window.confirm('Submit this credit note for approval?');
+    if (!ok) return;
+
+    setActing(true);
+    setActionError(null);
+    try {
+      await submitCreditNote(cn.id, {});
+      await refresh();
+    } catch (e: any) {
+      setActionError(getApiErrorMessage(e, 'Submit failed'));
+    } finally {
+      setActing(false);
+    }
+  }
 
   async function onApprove() {
     if (!cn) return;
@@ -148,6 +174,11 @@ export function CreditNoteDetailsPage() {
       title={`Credit Note ${cn.creditNoteNumber}`}
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {allowed.submit ? (
+            <button type="button" disabled={acting} onClick={onSubmit}>
+              Submit
+            </button>
+          ) : null}
           {allowed.approve ? (
             <button type="button" disabled={acting} onClick={onApprove}>
               Approve

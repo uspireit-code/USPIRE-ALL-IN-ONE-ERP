@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Param,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -20,6 +21,7 @@ import { Permissions } from '../../../rbac/permissions.decorator';
 import { PermissionsGuard } from '../../../rbac/permissions.guard';
 import {
   CreateCustomerInvoiceDto,
+  UpdateCustomerInvoiceDto,
   ListInvoicesQueryDto,
   BulkPostInvoicesDto,
   PostInvoiceDto,
@@ -41,6 +43,16 @@ export class FinanceArInvoicesController {
   @Permissions('AR_INVOICE_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateCustomerInvoiceDto) {
     return this.invoices.create(req, dto);
+  }
+
+  @Put(':id')
+  @Permissions('AR_INVOICE_EDIT_DRAFT')
+  async updateDraft(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomerInvoiceDto,
+  ) {
+    return this.invoices.updateDraft(req, id, dto);
   }
 
   @Post('import')

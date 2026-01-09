@@ -357,37 +357,6 @@ export class AuthService {
       }
     }
 
-    const financeOfficerRole = await this.prisma.role.findFirst({
-      where: { tenantId: tenant.id, name: 'FINANCE_OFFICER' },
-      select: { id: true },
-    });
-
-    if (financeOfficerRole?.id) {
-      const recurringGeneratePerm = await this.prisma.permission.upsert({
-        where: { code: 'FINANCE_GL_RECURRING_GENERATE' },
-        create: {
-          code: 'FINANCE_GL_RECURRING_GENERATE',
-          description: 'Generate journals from recurring templates',
-        },
-        update: {
-          description: 'Generate journals from recurring templates',
-        },
-        select: { id: true },
-      });
-
-      if (recurringGeneratePerm?.id) {
-        await this.prisma.rolePermission.createMany({
-          data: [
-            {
-              roleId: financeOfficerRole.id,
-              permissionId: recurringGeneratePerm.id,
-            },
-          ],
-          skipDuplicates: true,
-        });
-      }
-    }
-
     const userRoles = await this.prisma.userRole.findMany({
       where: {
         userId: user.id,

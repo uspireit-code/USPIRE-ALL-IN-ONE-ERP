@@ -11,6 +11,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
 import type {
   CreateCustomerInvoiceDto,
+  UpdateCustomerInvoiceDto,
   BulkPostInvoicesDto,
   ListInvoicesQueryDto,
 } from './invoices.dto';
@@ -753,7 +754,281 @@ export class FinanceArInvoicesService {
       } as any);
     });
 
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'INVOICE_DRAFT_CREATED',
+          entityType: 'CUSTOMER_INVOICE',
+          entityId: String((created as any).id),
+          action: 'AR_INVOICE_CREATE',
+          outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            invoiceNumber: (created as any).invoiceNumber,
+          }),
+          userId: user.id,
+          permissionUsed: 'AR_INVOICE_CREATE',
+        } as any,
+      } as any)
+      .catch(() => undefined);
+
     return this.getById(req, (created as any).id);
+  }
+
+  async updateDraft(req: Request, id: string, dto: UpdateCustomerInvoiceDto) {
+    const tenant = this.ensureTenant(req);
+    const user = this.ensureUser(req);
+
+    const existing = await this.prisma.customerInvoice.findFirst({
+      where: { id, tenantId: tenant.id } as any,
+      include: { lines: true } as any,
+    });
+
+    if (!existing) throw new NotFoundException('Invoice not found');
+    if (String((existing as any).status) !== 'DRAFT') {
+      throw new BadRequestException('Only DRAFT invoices can be edited');
+    }
+
+    const invoiceDate = this.parseYmdToDateOrNull(dto.invoiceDate);
+    const dueDate = this.parseYmdToDateOrNull(dto.dueDate);
+    if (!invoiceDate) throw new BadRequestException('invoiceDate is required');
+    if (!dueDate) throw new BadRequestException('dueDate is required');
+
+    if (dueDate < invoiceDate) {
+      throw new BadRequestException('Due date cannot be earlier than invoice date');
+    }
+
+    await this.assertOpenPeriodForInvoiceDate({
+      tenantId: tenant.id,
+      invoiceDate,
+      action: 'create',
+    });
+
+    const currency = String(dto.currency ?? '').trim();
+    if (!currency) throw new BadRequestException('currency is required');
+
+    const tenantCurrency = String((tenant as any)?.defaultCurrency ?? '').trim();
+    const exchangeRate =
+      tenantCurrency && currency.toUpperCase() === tenantCurrency.toUpperCase()
+        ? 1
+        : this.round6(this.toNum((dto as any).exchangeRate ?? 0));
+    if (!(exchangeRate > 0)) {
+      throw new BadRequestException(
+        'exchangeRate is required and must be > 0 for non-base currency',
+      );
+    }
+
+    const customer = await (this.prisma as any).customer.findFirst({
+      where: { id: dto.customerId, tenantId: tenant.id },
+      select: {
+        id: true,
+        status: true,
+        name: true,
+        email: true,
+        billingAddress: true,
+      },
+    });
+
+    if (!customer) throw new BadRequestException('Customer not found');
+    if (customer.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        'Customer is inactive and cannot be used for new transactions.',
+      );
+    }
+
+    if (!dto.lines || dto.lines.length < 1) {
+      throw new BadRequestException('Invoice must have at least 1 line');
+    }
+
+    const taxRateIds = [
+      ...new Set(
+        (dto.lines ?? [])
+          .map((l: any) => String(l.taxRateId ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
+    const taxRates =
+      taxRateIds.length > 0
+        ? await (this.prisma as any).taxRate.findMany({
+            where: {
+              tenantId: tenant.id,
+              id: { in: taxRateIds },
+              isActive: true,
+            },
+            select: { id: true, type: true, rate: true } as any,
+          })
+        : [];
+    const taxById = new Map((taxRates ?? []).map((t: any) => [t.id, t]));
+    if (taxRateIds.length > 0 && taxRates.length !== taxRateIds.length) {
+      throw new BadRequestException('One or more tax rates were not found or inactive');
+    }
+    for (const t of taxRates as any[]) {
+      if (String(t.type) !== 'OUTPUT') {
+        throw new BadRequestException('Only OUTPUT VAT is allowed on AR invoices');
+      }
+    }
+
+    const accountIds = [...new Set(dto.lines.map((l) => l.accountId))];
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        tenantId: tenant.id,
+        id: { in: accountIds },
+        isActive: true,
+      },
+      select: { id: true, type: true },
+    });
+    const byId = new Map(accounts.map((a) => [a.id, a] as const));
+
+    const computedLines = dto.lines.map((l: any) => {
+      const qty = this.toNum(l.quantity ?? 1);
+      const unitPrice = this.toNum(l.unitPrice);
+      const description = String(l.description ?? '').trim();
+
+      const taxRateId = l.taxRateId ? String(l.taxRateId).trim() : null;
+      const taxRate = taxRateId ? taxById.get(taxRateId) : null;
+
+      if (!l.accountId)
+        throw new BadRequestException('Invoice line missing accountId');
+      if (!description)
+        throw new BadRequestException('Invoice line description is required');
+      if (!(qty > 0))
+        throw new BadRequestException('Invoice line quantity must be > 0');
+      if (!(unitPrice > 0))
+        throw new BadRequestException('Invoice line unitPrice must be > 0');
+
+      const acct = byId.get(l.accountId);
+      if (!acct) {
+        throw new BadRequestException(`Account not found or inactive: ${l.accountId}`);
+      }
+      if ((acct as any).type !== 'INCOME') {
+        throw new BadRequestException(`Invoice line account must be INCOME: ${l.accountId}`);
+      }
+
+      const gross = this.round2(qty * unitPrice);
+      const disc = this.computeDiscount({
+        gross,
+        discountPercent: (l as any).discountPercent,
+        discountAmount: (l as any).discountAmount,
+      });
+      const lineTotal = this.round2(gross - disc.discountTotal);
+
+      const lineTaxAmount = taxRate
+        ? this.round2(lineTotal * (this.toNum((taxRate as any).rate) / 100))
+        : 0;
+      return {
+        accountId: l.accountId,
+        taxRateId,
+        departmentId: (l as any).departmentId ?? null,
+        projectId: (l as any).projectId ?? null,
+        fundId: (l as any).fundId ?? null,
+        description,
+        quantity: qty,
+        unitPrice,
+        discountPercent: disc.discountPercent,
+        discountAmount: disc.discountAmount,
+        discountTotal: disc.discountTotal,
+        lineTotal,
+        lineTaxAmount,
+      };
+    });
+
+    const subtotal = this.round2(computedLines.reduce((s, l) => s + l.lineTotal, 0));
+    const taxAmount = this.round2(
+      computedLines.reduce(
+        (s, l) => s + this.toNum((l as any).lineTaxAmount ?? 0),
+        0,
+      ),
+    );
+    const isTaxable = computedLines.some((l) => Boolean((l as any).taxRateId));
+    const totalAmount = this.round2(subtotal + taxAmount);
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.customerInvoice.update({
+          where: { id: (existing as any).id } as any,
+          data: {
+            customerId: dto.customerId,
+            invoiceDate,
+            dueDate,
+            currency,
+            exchangeRate,
+            invoiceCategoryId: (dto as any).invoiceCategoryId ?? undefined,
+            projectId: (dto as any).projectId ?? undefined,
+            fundId: (dto as any).fundId ?? undefined,
+            departmentId: (dto as any).departmentId ?? undefined,
+            reference: dto.reference ? String(dto.reference).trim() : undefined,
+            invoiceNote: (dto as any).invoiceNote
+              ? String((dto as any).invoiceNote).trim()
+              : undefined,
+            customerNameSnapshot: String(customer.name ?? '').trim(),
+            customerEmailSnapshot: customer.email
+              ? String(customer.email).trim()
+              : undefined,
+            customerBillingAddressSnapshot: customer.billingAddress
+              ? String(customer.billingAddress).trim()
+              : undefined,
+            subtotal,
+            taxAmount,
+            isTaxable,
+            totalAmount,
+            lines: {
+              deleteMany: {},
+              create: computedLines.map((l) => ({
+                accountId: l.accountId,
+                taxRateId: (l as any).taxRateId ?? undefined,
+                departmentId: (l as any).departmentId ?? undefined,
+                projectId: (l as any).projectId ?? undefined,
+                fundId: (l as any).fundId ?? undefined,
+                description: l.description,
+                quantity: l.quantity,
+                unitPrice: l.unitPrice,
+                discountPercent: (l as any).discountPercent ?? undefined,
+                discountAmount: (l as any).discountAmount ?? undefined,
+                discountTotal: (l as any).discountTotal ?? 0,
+                lineTotal: l.lineTotal,
+              })),
+            },
+          } as any,
+        } as any);
+      });
+
+      await this.prisma.auditEvent
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventType: 'INVOICE_DRAFT_EDITED',
+            entityType: 'CUSTOMER_INVOICE',
+            entityId: String((existing as any).id),
+            action: 'AR_INVOICE_EDIT_DRAFT',
+            outcome: 'SUCCESS',
+            reason: JSON.stringify({
+              invoiceNumber: (existing as any).invoiceNumber,
+            }),
+            userId: user.id,
+            permissionUsed: 'AR_INVOICE_EDIT_DRAFT',
+          } as any,
+        } as any)
+        .catch(() => undefined);
+    } catch (e: any) {
+      await this.prisma.auditEvent
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventType: 'INVOICE_DRAFT_EDITED',
+            entityType: 'CUSTOMER_INVOICE',
+            entityId: String((existing as any).id),
+            action: 'AR_INVOICE_EDIT_DRAFT',
+            outcome: 'FAILED',
+            reason: String(e?.message ?? 'Failed to edit invoice draft'),
+            userId: user.id,
+            permissionUsed: 'AR_INVOICE_EDIT_DRAFT',
+          } as any,
+        } as any)
+        .catch(() => undefined);
+      throw e;
+    }
+
+    return this.getById(req, String((existing as any).id));
   }
 
   async post(

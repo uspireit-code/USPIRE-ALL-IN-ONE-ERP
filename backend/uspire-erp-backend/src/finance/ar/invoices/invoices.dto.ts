@@ -102,6 +102,9 @@ export class CreateCustomerInvoiceDto {
   lines!: CreateCustomerInvoiceLineDto[];
 }
 
+export class UpdateCustomerInvoiceDto extends CreateCustomerInvoiceDto {
+}
+
 export class ListInvoicesQueryDto {
   @IsOptional()
   @IsString()

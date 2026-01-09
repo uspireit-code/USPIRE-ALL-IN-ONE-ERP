@@ -17,6 +17,7 @@ import {
   CreateCustomerCreditNoteDto,
   ListCreditNotesQueryDto,
   PostCreditNoteDto,
+  SubmitCreditNoteDto,
   VoidCreditNoteDto,
 } from './credit-notes.dto';
 import { FinanceArCreditNotesService } from './credit-notes.service';
@@ -42,6 +43,16 @@ export class FinanceArCreditNotesController {
   @Permissions('AR_CREDIT_NOTE_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateCustomerCreditNoteDto) {
     return this.creditNotes.create(req, dto);
+  }
+
+  @Post(':id/submit')
+  @Permissions('AR_CREDIT_NOTE_SUBMIT')
+  async submit(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: SubmitCreditNoteDto,
+  ) {
+    return this.creditNotes.submit(req, id, dto);
   }
 
   @Post(':id/approve')

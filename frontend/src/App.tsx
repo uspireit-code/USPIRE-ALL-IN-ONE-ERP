@@ -204,9 +204,9 @@ export default function App() {
               <Route
                 path="ar/credit-notes"
                 element={
-                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_VIEW">
+                  <PermissionAnyRoute permissions={['AR_CREDIT_NOTE_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
                     <CreditNotesListPage />
-                  </PermissionOnlyRoute>
+                  </PermissionAnyRoute>
                 }
               />
               <Route
@@ -220,18 +220,18 @@ export default function App() {
               <Route
                 path="ar/credit-notes/:id"
                 element={
-                  <PermissionOnlyRoute permission="AR_CREDIT_NOTE_VIEW">
+                  <PermissionAnyRoute permissions={['AR_CREDIT_NOTE_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
                     <CreditNoteDetailsPage />
-                  </PermissionOnlyRoute>
+                  </PermissionAnyRoute>
                 }
               />
 
               <Route
                 path="ar/refunds"
                 element={
-                  <PermissionOnlyRoute permission="AR_REFUND_VIEW">
+                  <PermissionAnyRoute permissions={['AR_REFUND_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
                     <RefundsListPage />
-                  </PermissionOnlyRoute>
+                  </PermissionAnyRoute>
                 }
               />
               <Route
@@ -245,9 +245,9 @@ export default function App() {
               <Route
                 path="ar/refunds/:id"
                 element={
-                  <PermissionOnlyRoute permission="AR_REFUND_VIEW">
+                  <PermissionAnyRoute permissions={['AR_REFUND_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
                     <RefundDetailsPage />
-                  </PermissionOnlyRoute>
+                  </PermissionAnyRoute>
                 }
               />
               <Route path="payments" element={<PaymentsHomePage />} />

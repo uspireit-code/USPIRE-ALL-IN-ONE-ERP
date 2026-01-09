@@ -5,6 +5,14 @@ import * as path from 'path';
 async function main() {
   const migrationsDir = path.join(process.cwd(), 'prisma', 'migrations');
 
+  const throughIdx = process.argv.findIndex((a) => a === '--through');
+  const through = throughIdx >= 0 ? process.argv[throughIdx + 1] : undefined;
+  if (!through) {
+    throw new Error(
+      'Usage: ts-node scripts/reconcile-migrations.ts --through <migration_folder_name>',
+    );
+  }
+
   if (!fs.existsSync(migrationsDir)) {
     throw new Error(`Missing migrations directory: ${migrationsDir}`);
   }
@@ -15,10 +23,19 @@ async function main() {
     .map((d) => d.name)
     .sort((a, b) => a.localeCompare(b));
 
-  const total = migrationNames.length;
+  const throughPos = migrationNames.indexOf(through);
+  if (throughPos < 0) {
+    throw new Error(
+      `Cutoff migration '${through}' was not found in ${migrationsDir}.`,
+    );
+  }
+
+  const toResolve = migrationNames.slice(0, throughPos + 1);
+
+  const total = toResolve.length;
   let processed = 0;
 
-  for (const name of migrationNames) {
+  for (const name of toResolve) {
     processed++;
 
     const result = spawnSync(

@@ -31,6 +31,30 @@
 $ npm install
 ```
 
+## Database governance (NO RESETS)
+
+Database resets are forbidden. Do not use destructive workflows (dropping schemas, `prisma migrate reset`, or any manual `DROP` operations).
+
+If Prisma reports drift on a stateful development database, use reconciliation:
+
+```bash
+$ npm run prisma:reconcile
+$ npx prisma db pull
+$ npx prisma migrate status
+```
+
+Forward-only migration discipline:
+
+```bash
+# generate migration SQL only (no apply)
+$ npm run prisma:migrate:create -- --name <change_name>
+
+# review prisma/migrations/*/migration.sql
+
+# apply safely (deploy)
+$ npm run prisma:migrate:apply
+```
+
 ## Compile and run the project
 
 ```bash

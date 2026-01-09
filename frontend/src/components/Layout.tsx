@@ -339,8 +339,16 @@ export function Layout() {
   const showFinanceBudgets = showBudgetSetup || showBudgetVsActual;
   const showForecasts = hasPermission('forecast.view');
 
-  const showArCreditNotes = hasPermission('AR_CREDIT_NOTE_VIEW');
-  const showArRefunds = hasPermission('AR_REFUND_VIEW');
+  const showArCustomers =
+    hasPermission('CUSTOMERS_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showArInvoices =
+    hasPermission('AR_INVOICE_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showArReceipts =
+    hasPermission('AR_RECEIPTS_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showArCreditNotes =
+    hasPermission('AR_CREDIT_NOTE_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showArRefunds =
+    hasPermission('AR_REFUND_VIEW') || hasFinanceViewAll || hasSystemViewAll;
 
   const showFixedAssets =
     hasPermission('FA_CATEGORY_MANAGE') ||
@@ -613,9 +621,15 @@ export function Layout() {
                 />
                 {openFinanceL2.ar ? (
                   <Indent level={3}>
-                    <SidebarLink to="/finance/ar/customers" label="Customers" icon={<UsersIcon />} level={3} />
-                    <SidebarLink to="/finance/ar/invoices" label="Invoices" icon={<ReceiptIcon />} level={3} />
-                    <SidebarLink to="/finance/ar/receipts" label="Receipts" icon={<ReceiptIcon />} level={3} />
+                    {showArCustomers ? (
+                      <SidebarLink to="/finance/ar/customers" label="Customers" icon={<UsersIcon />} level={3} />
+                    ) : null}
+                    {showArInvoices ? (
+                      <SidebarLink to="/finance/ar/invoices" label="Invoices" icon={<ReceiptIcon />} level={3} />
+                    ) : null}
+                    {showArReceipts ? (
+                      <SidebarLink to="/finance/ar/receipts" label="Receipts" icon={<ReceiptIcon />} level={3} />
+                    ) : null}
                     {showArCreditNotes ? <SidebarLink to="/finance/ar/credit-notes" label="Credit Notes" icon={<FileTextIcon />} level={3} /> : null}
                     {showArRefunds ? <SidebarLink to="/finance/ar/refunds" label="Refunds" icon={<BanknoteIcon />} level={3} /> : null}
                     {showArAging ? <SidebarLink to="/ar/aging" label="AR Aging" icon={<BarChartIcon />} level={3} /> : null}
@@ -736,7 +750,14 @@ export function Layout() {
             />
             {openL1 === 'settings' ? (
               <Indent level={2}>
-                {showSettings ? <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} /> : null}
+                {showSettings ? (
+                  <>
+                    <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} />
+                    <SidebarLink to="/settings/system" label="System Configuration" icon={<SettingsIcon />} level={2} />
+                    <SidebarLink to="/settings/users" label="Users" icon={<UsersIcon />} level={2} />
+                    <SidebarLink to="/settings/roles" label="Roles" icon={<ClipboardIcon />} level={2} />
+                  </>
+                ) : null}
               </Indent>
             ) : null}
           </Section>
