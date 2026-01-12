@@ -144,16 +144,31 @@ export function CreditNoteCreatePage() {
     };
   }, [invoiceId]);
 
+  const selectedEligibleInvoice = useMemo(() => {
+    return (postedInvoices ?? []).find((x) => String(x.invoiceId) === String(invoiceId)) ?? null;
+  }, [invoiceId, postedInvoices]);
+
   const invoiceOutstanding = useMemo(() => {
-    const total = Number(invoice?.totalAmount ?? 0);
-    const remaining = Number(invoice?.outstandingBalance ?? total);
+    const remaining = Number(selectedEligibleInvoice?.outstandingBalance ?? 0);
     return round2(remaining);
-  }, [invoice?.outstandingBalance, invoice?.totalAmount]);
+  }, [selectedEligibleInvoice?.outstandingBalance]);
+
+  useEffect(() => {
+    if (!invoiceId) return;
+    console.log('Invoice selected:', selectedEligibleInvoice);
+    console.log('Net outstanding used:', invoiceOutstanding);
+  }, [invoiceId, invoiceOutstanding, selectedEligibleInvoice]);
 
   const computedTotal = useMemo(() => {
     const sum = lines.reduce((s, l) => s + round2(Number(l.quantity || 0) * Number(l.unitPrice || 0)), 0);
     return round2(sum);
   }, [lines]);
+
+  const exceedsOutstanding = useMemo(() => {
+    if (!invoiceId) return false;
+    if (!(invoiceOutstanding > 0)) return false;
+    return computedTotal > invoiceOutstanding;
+  }, [computedTotal, invoiceId, invoiceOutstanding]);
 
   async function onSave() {
     if (!canCreate) {
@@ -315,12 +330,17 @@ export function CreditNoteCreatePage() {
 
         <div style={{ gridColumn: '1 / span 2', padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontWeight: 700 }}>Invoice outstanding balance</div>
+            <div style={{ fontWeight: 700 }}>Invoice Outstanding (NET)</div>
             <div style={{ fontWeight: 700 }}>{formatMoney(invoiceOutstanding)}</div>
           </div>
           <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
             Saving is allowed even if the credit note total exceeds outstanding. Approval/posting will be validated by the server.
           </div>
+          {exceedsOutstanding ? (
+            <div style={{ fontSize: 12, color: 'crimson', marginTop: 6 }}>
+              This credit note exceeds the outstanding balance and cannot be submitted.
+            </div>
+          ) : null}
         </div>
       </div>
 

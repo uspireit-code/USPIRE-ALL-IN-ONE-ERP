@@ -43,10 +43,6 @@ export class FinanceArRefundsService {
       throw new BadRequestException(`Refund cannot be approved from status: ${refund.status}`);
     }
 
-    if (String(refund.createdById) === String(user.id)) {
-      throw new ConflictException('Creator cannot approve their own refund');
-    }
-
     await (this.prisma as any).customerRefund.update({
       where: { id: refund.id },
       data: {
@@ -593,10 +589,6 @@ export class FinanceArRefundsService {
       throw new BadRequestException(`Refund cannot be submitted from status: ${refund.status}`);
     }
 
-    if (String(refund.createdById ?? '') !== '' && String(refund.createdById) !== String(user.id)) {
-      // submit is allowed by creator (officer) only; do not block if legacy data is missing.
-    }
-
     const refundDate = new Date(refund.refundDate);
     try {
       await assertPeriodIsOpen({
@@ -639,14 +631,6 @@ export class FinanceArRefundsService {
       throw new BadRequestException(
         `Refund cannot be posted from status: ${refund.status}`,
       );
-    }
-
-    if (String(refund.createdById) === String(user.id)) {
-      throw new ConflictException('Creator cannot post their own refund');
-    }
-
-    if (refund.approvedById && String(refund.approvedById) === String(user.id)) {
-      throw new ConflictException('Approver cannot post the same refund');
     }
 
     if (!refund.creditNoteId) throw new BadRequestException('Refund must reference a credit note');

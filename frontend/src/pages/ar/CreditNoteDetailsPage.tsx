@@ -93,10 +93,37 @@ export function CreditNoteDetailsPage() {
     };
   }, [canApprove, canPost, canSubmit, canVoid, cn]);
 
+  const netOutstanding = useMemo(() => {
+    const v = Number(cn?.invoiceSummary?.outstanding ?? 0);
+    return Number.isFinite(v) ? v : 0;
+  }, [cn?.invoiceSummary?.outstanding]);
+
+  const exceedsOutstanding = useMemo(() => {
+    if (!cn?.invoiceId) return false;
+    if (!(netOutstanding > 0)) return false;
+    const total = Number(cn?.totalAmount ?? 0);
+    return total > netOutstanding;
+  }, [cn?.invoiceId, cn?.totalAmount, netOutstanding]);
+
+  function validateSubmitOrApproveOrThrow() {
+    if (exceedsOutstanding) {
+      throw new Error(
+        'Credit note exceeds the outstanding balance of the invoice.',
+      );
+    }
+  }
+
   async function onSubmit() {
     if (!cn) return;
     const ok = window.confirm('Submit this credit note for approval?');
     if (!ok) return;
+
+    try {
+      validateSubmitOrApproveOrThrow();
+    } catch (e: any) {
+      setActionError(String(e?.message ?? 'Submit blocked'));
+      return;
+    }
 
     setActing(true);
     setActionError(null);
@@ -114,6 +141,13 @@ export function CreditNoteDetailsPage() {
     if (!cn) return;
     const ok = window.confirm('Approve this credit note?');
     if (!ok) return;
+
+    try {
+      validateSubmitOrApproveOrThrow();
+    } catch (e: any) {
+      setActionError(String(e?.message ?? 'Approve blocked'));
+      return;
+    }
 
     setActing(true);
     setActionError(null);
@@ -207,6 +241,12 @@ export function CreditNoteDetailsPage() {
       }
     >
       {actionError ? <div style={{ color: 'crimson', marginBottom: 12 }}>{actionError}</div> : null}
+
+      {exceedsOutstanding ? (
+        <div style={{ color: 'crimson', marginBottom: 12 }}>
+          This credit note exceeds the outstanding balance of the invoice and cannot be submitted or approved.
+        </div>
+      ) : null}
 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 320, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>

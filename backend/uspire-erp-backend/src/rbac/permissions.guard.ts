@@ -20,6 +20,34 @@ function permissionIsView(code: string): boolean {
   return (code || '').toUpperCase().endsWith('_VIEW');
 }
 
+function findRefundLifecycleExclusivityConflict(params: {
+  requiredPermissions: string[];
+  userPermissionCodes: Set<string>;
+}): null | { permissionAttempted: string; conflictingPermission: string } {
+  const refundPowers = [
+    'REFUND_CREATE',
+    'REFUND_APPROVE',
+    'REFUND_POST',
+    'REFUND_VOID',
+  ] as const;
+
+  const attempted = params.requiredPermissions.find((p) =>
+    (refundPowers as readonly string[]).includes(p),
+  );
+  if (!attempted) return null;
+
+  const present = refundPowers.filter((p) => params.userPermissionCodes.has(p));
+  if (present.length <= 1) return null;
+
+  const conflictingPermission =
+    present.find((p) => p !== attempted) ?? present[0] ?? attempted;
+
+  return {
+    permissionAttempted: attempted,
+    conflictingPermission,
+  };
+}
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(
@@ -103,6 +131,53 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const requiredForSoD = required.filter((p) => !satisfiedBySystemView.has(p));
+
+    const refundExclusivityConflict = findRefundLifecycleExclusivityConflict({
+      requiredPermissions: requiredForSoD,
+      userPermissionCodes: codes,
+    });
+    if (refundExclusivityConflict) {
+      await this.prisma.soDViolationLog.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          permissionAttempted: refundExclusivityConflict.permissionAttempted,
+          conflictingPermission: refundExclusivityConflict.conflictingPermission,
+        },
+      });
+
+      await this.prisma.auditEvent
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventType: 'SOD_VIOLATION',
+            entityType: 'USER',
+            entityId: user.id,
+            action: refundExclusivityConflict.permissionAttempted,
+            outcome: 'BLOCKED',
+            reason: `Conflicts with ${refundExclusivityConflict.conflictingPermission}`,
+            userId: user.id,
+            permissionUsed: refundExclusivityConflict.permissionAttempted,
+          },
+        })
+        .catch(() => undefined);
+
+      throw new ForbiddenException({
+        error: 'Action blocked by Segregation of Duties (SoD)',
+        permissionAttempted: refundExclusivityConflict.permissionAttempted,
+        conflictingPermission: refundExclusivityConflict.conflictingPermission,
+      });
+    }
+
+    if (
+      requiredForSoD.some((p) =>
+        ['REFUND_CREATE', 'REFUND_APPROVE', 'REFUND_POST', 'REFUND_VOID'].includes(
+          p,
+        ),
+      )
+    ) {
+      return true;
+    }
 
     const conflict = await this.findSoDConflict({
       tenantId: tenant.id,

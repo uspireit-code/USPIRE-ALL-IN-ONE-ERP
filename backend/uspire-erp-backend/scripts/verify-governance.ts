@@ -2,6 +2,12 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+type ProcessLike = {
+  exit(code?: number): never;
+};
+
+declare const process: ProcessLike;
+
 type RoleSummary = {
   name: string;
   permissionCodes: string[];

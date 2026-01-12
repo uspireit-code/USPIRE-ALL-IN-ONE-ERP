@@ -675,6 +675,20 @@ export class FinanceArCreditNotesService {
       throw new ForbiddenException('Cannot submit in a closed period');
     }
 
+    if (cn.invoiceId) {
+      const outstanding = await this.computeInvoiceOutstanding({
+        tenantId: tenant.id,
+        invoiceId: cn.invoiceId,
+      });
+      const totalAmount = this.normalizeMoney(Number(cn.totalAmount ?? 0));
+
+      if (totalAmount > outstanding.outstanding) {
+        throw new BadRequestException(
+          'Credit note exceeds the outstanding balance of the invoice.',
+        );
+      }
+    }
+
     await (this.prisma as any).customerCreditNote.update({
       where: { id: cn.id },
       data: {
@@ -745,8 +759,8 @@ export class FinanceArCreditNotesService {
       const totalAmount = this.normalizeMoney(Number(cn.totalAmount ?? 0));
 
       if (totalAmount > outstanding.outstanding) {
-        throw new ConflictException(
-          'Credit note total exceeds invoice outstanding balance',
+        throw new BadRequestException(
+          'Credit note exceeds the outstanding balance of the invoice.',
         );
       }
     }

@@ -472,6 +472,121 @@ async function main() {
     });
   }
 
+  {
+    const refundPowersAndAliases = [
+      'REFUND_CREATE',
+      'AR_REFUND_CREATE',
+      'REFUND_SUBMIT',
+      'AR_REFUND_SUBMIT',
+      'REFUND_APPROVE',
+      'AR_REFUND_APPROVE',
+      'REFUND_POST',
+      'AR_REFUND_POST',
+      'REFUND_VOID',
+      'AR_REFUND_VOID',
+    ];
+
+    const officerForbidden = [
+      'REFUND_APPROVE',
+      'AR_REFUND_APPROVE',
+      'REFUND_POST',
+      'AR_REFUND_POST',
+      'REFUND_VOID',
+      'AR_REFUND_VOID',
+    ];
+
+    const managerForbidden = [
+      'REFUND_CREATE',
+      'AR_REFUND_CREATE',
+      'REFUND_SUBMIT',
+      'AR_REFUND_SUBMIT',
+      'REFUND_POST',
+      'AR_REFUND_POST',
+      'REFUND_VOID',
+      'AR_REFUND_VOID',
+    ];
+
+    const controllerForbidden = [
+      'REFUND_CREATE',
+      'AR_REFUND_CREATE',
+      'REFUND_SUBMIT',
+      'AR_REFUND_SUBMIT',
+      'REFUND_APPROVE',
+      'AR_REFUND_APPROVE',
+      'REFUND_VOID',
+      'AR_REFUND_VOID',
+    ];
+
+    const adminForbidden = [
+      'REFUND_CREATE',
+      'AR_REFUND_CREATE',
+      'REFUND_SUBMIT',
+      'AR_REFUND_SUBMIT',
+      'REFUND_APPROVE',
+      'AR_REFUND_APPROVE',
+      'REFUND_POST',
+      'AR_REFUND_POST',
+    ];
+
+    const rolesByName = await prisma.role.findMany({
+      where: {
+        name: {
+          in: [
+            'FINANCE_OFFICER',
+            'FINANCE_MANAGER',
+            'FINANCE_CONTROLLER',
+            'SYSTEM_ADMIN',
+            'SUPERADMIN',
+          ],
+        },
+      },
+      select: { id: true, name: true },
+    });
+
+    const officerRoleIds = rolesByName
+      .filter((r) => r.name === 'FINANCE_OFFICER')
+      .map((r) => r.id);
+    const managerRoleIds = rolesByName
+      .filter((r) => r.name === 'FINANCE_MANAGER')
+      .map((r) => r.id);
+    const controllerRoleIds = rolesByName
+      .filter((r) => r.name === 'FINANCE_CONTROLLER')
+      .map((r) => r.id);
+    const systemAdminRoleIds = rolesByName
+      .filter((r) => r.name === 'SYSTEM_ADMIN')
+      .map((r) => r.id);
+    const superAdminRoleIds = rolesByName
+      .filter((r) => r.name === 'SUPERADMIN')
+      .map((r) => r.id);
+
+    await removePermissionsByCode(officerRoleIds, officerForbidden);
+    await removePermissionsByCode(managerRoleIds, managerForbidden);
+    await removePermissionsByCode(controllerRoleIds, controllerForbidden);
+
+    await removePermissionsByCode(controllerRoleIds, [
+      'INVOICE_POST',
+      'AR_INVOICE_POST',
+      'AP_INVOICE_POST',
+      'RECEIPT_POST',
+      'CREDIT_NOTE_POST',
+      'PAYMENT_POST',
+    ]);
+
+    await removePermissionsByCode(systemAdminRoleIds, adminForbidden);
+    await removePermissionsByCode(superAdminRoleIds, adminForbidden);
+
+    await removePermissionsByCode(systemAdminRoleIds, [
+      ...refundPowersAndAliases.filter(
+        (p) => !['REFUND_VOID', 'AR_REFUND_VOID'].includes(p),
+      ),
+    ]);
+    await removePermissionsByCode(superAdminRoleIds, [
+      ...refundPowersAndAliases.filter(
+        (p) => !['REFUND_VOID', 'AR_REFUND_VOID'].includes(p),
+      ),
+    ]);
+  }
+
   await prisma.rolePermission.createMany({
     data: allPermissions
       .filter(
@@ -535,12 +650,20 @@ async function main() {
     'AR_CREDIT_NOTE_APPROVE',
     'AR_CREDIT_NOTE_VOID',
     'AR_REFUND_VIEW',
+    'REFUND_VIEW',
     'AR_REFUND_CREATE',
+    'REFUND_CREATE',
+    'AR_REFUND_SUBMIT',
+    'REFUND_SUBMIT',
+    'AR_REFUND_APPROVE',
+    'REFUND_APPROVE',
+    'AR_REFUND_POST',
+    'REFUND_POST',
     'AR_REFUND_VOID',
+    'REFUND_VOID',
 
     'RECEIPT_POST',
     'CREDIT_NOTE_POST',
-    'REFUND_POST',
   ] as const;
 
   await removePermissionsByCode([superAdminRole.id, systemAdminRole.id, adminRole.id], Array.from(forbiddenAdminBypassPermCodes));
@@ -557,6 +680,7 @@ async function main() {
     'ROLE_ASSIGN',
     'CREDIT_NOTE_VIEW',
     'CREDIT_NOTE_VOID',
+    'REFUND_VOID',
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
@@ -568,6 +692,7 @@ async function main() {
     'USER_EDIT',
     'ROLE_VIEW',
     'ROLE_ASSIGN',
+    'REFUND_VOID',
   ]);
 
   // AR Aging (AR-1) RBAC backfill (idempotent):
@@ -1181,11 +1306,17 @@ async function main() {
       'FINANCE_PERIOD_CHECKLIST_COMPLETE',
       'FINANCE_PERIOD_CLOSE',
 
+      'INVOICE_POST',
+      'AR_INVOICE_POST',
+      'AP_INVOICE_POST',
+      'PAYMENT_POST',
+
       'RECEIPT_VIEW',
       'RECEIPT_POST',
 
       'CREDIT_NOTE_VIEW',
       'CREDIT_NOTE_APPROVE',
+      'CREDIT_NOTE_POST',
       
       'REFUND_VIEW',
       'REFUND_APPROVE',
@@ -1193,19 +1324,7 @@ async function main() {
       // Manager must not post refunds
     ]);
 
-    // Governance: FINANCE_MANAGER must not have AP invoice posting permissions.
-    // Additive-only seeds won't remove historical grants, so we explicitly remove here.
-    await removePermissionsByCode([financeManagerRole.id], ['AP_INVOICE_POST']);
-
-    // Governance: FINANCE_MANAGER must not have AR invoice posting permissions.
-    // This is explicit cleanup for historical grants.
-    await removePermissionsByCode([financeManagerRole.id], ['AR_INVOICE_POST', 'INVOICE_POST']);
-
-    // Governance: FINANCE_MANAGER must not have credit note posting permissions.
-    await removePermissionsByCode([financeManagerRole.id], [
-      'CREDIT_NOTE_POST',
-      'AR_CREDIT_NOTE_POST',
-    ]);
+    await removePermissionsByCode([financeManagerRole.id], ['FINANCE_GL_FINAL_POST']);
 
     // Governance: manager must not have maker/poster refund permissions.
     await removePermissionsByCode([financeManagerRole.id], [
@@ -1296,18 +1415,12 @@ async function main() {
       'FINANCE_CONFIG_VIEW',
       'FINANCE_CONFIG_UPDATE',
       'RECEIPT_VIEW',
-      'RECEIPT_POST',
 
       'CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_POST',
 
       'REFUND_VIEW',
       'REFUND_POST',
       'INVOICE_VIEW',
-      'INVOICE_POST',
-      'AR_INVOICE_POST',
-      'AP_INVOICE_POST',
-      'PAYMENT_POST',
       'FINANCE_PERIOD_CLOSE_APPROVE',
       'FINANCE_PERIOD_CORRECT',
 
@@ -1841,6 +1954,37 @@ async function main() {
     skipDuplicates: true,
   });
 
+  await prisma.userRole.deleteMany({
+    where: {
+      userId: superAdminUser.id,
+      roleId: { not: superAdminRole.id },
+    },
+  });
+  await prisma.userRole.deleteMany({
+    where: {
+      userId: sysAdminUser.id,
+      roleId: { not: systemAdminRole.id },
+    },
+  });
+  await prisma.userRole.deleteMany({
+    where: {
+      userId: controllerUser.id,
+      roleId: { not: financeControllerRole.id },
+    },
+  });
+  await prisma.userRole.deleteMany({
+    where: {
+      userId: managerUser.id,
+      roleId: { not: financeManagerRole.id },
+    },
+  });
+  await prisma.userRole.deleteMany({
+    where: {
+      userId: officerUser.id,
+      roleId: { not: (financeOfficerRole?.id as string) },
+    },
+  });
+
   await prisma.arReminderTemplate.upsert({
     where: {
       tenantId_level: {
@@ -2086,9 +2230,9 @@ async function main() {
       tenantId: tenant.id,
       forbiddenPermissionA: 'REFUND_CREATE',
       forbiddenPermissionB: 'REFUND_APPROVE',
-      description: 'Refund maker vs approver conflict',
+      description: 'REFUND_LIFECYCLE_SOD',
     },
-    update: {},
+    update: { description: 'REFUND_LIFECYCLE_SOD' },
   });
 
   await prisma.soDRule.upsert({
@@ -2103,9 +2247,9 @@ async function main() {
       tenantId: tenant.id,
       forbiddenPermissionA: 'REFUND_CREATE',
       forbiddenPermissionB: 'REFUND_POST',
-      description: 'Refund maker vs poster conflict',
+      description: 'REFUND_LIFECYCLE_SOD',
     },
-    update: {},
+    update: { description: 'REFUND_LIFECYCLE_SOD' },
   });
 
   await prisma.soDRule.upsert({
@@ -2120,9 +2264,60 @@ async function main() {
       tenantId: tenant.id,
       forbiddenPermissionA: 'REFUND_APPROVE',
       forbiddenPermissionB: 'REFUND_POST',
-      description: 'Refund approver vs poster conflict',
+      description: 'REFUND_LIFECYCLE_SOD',
     },
-    update: {},
+    update: { description: 'REFUND_LIFECYCLE_SOD' },
+  });
+
+  await prisma.soDRule.upsert({
+    where: {
+      tenantId_forbiddenPermissionA_forbiddenPermissionB: {
+        tenantId: tenant.id,
+        forbiddenPermissionA: 'REFUND_CREATE',
+        forbiddenPermissionB: 'REFUND_VOID',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      forbiddenPermissionA: 'REFUND_CREATE',
+      forbiddenPermissionB: 'REFUND_VOID',
+      description: 'REFUND_LIFECYCLE_SOD',
+    },
+    update: { description: 'REFUND_LIFECYCLE_SOD' },
+  });
+
+  await prisma.soDRule.upsert({
+    where: {
+      tenantId_forbiddenPermissionA_forbiddenPermissionB: {
+        tenantId: tenant.id,
+        forbiddenPermissionA: 'REFUND_APPROVE',
+        forbiddenPermissionB: 'REFUND_VOID',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      forbiddenPermissionA: 'REFUND_APPROVE',
+      forbiddenPermissionB: 'REFUND_VOID',
+      description: 'REFUND_LIFECYCLE_SOD',
+    },
+    update: { description: 'REFUND_LIFECYCLE_SOD' },
+  });
+
+  await prisma.soDRule.upsert({
+    where: {
+      tenantId_forbiddenPermissionA_forbiddenPermissionB: {
+        tenantId: tenant.id,
+        forbiddenPermissionA: 'REFUND_POST',
+        forbiddenPermissionB: 'REFUND_VOID',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      forbiddenPermissionA: 'REFUND_POST',
+      forbiddenPermissionB: 'REFUND_VOID',
+      description: 'REFUND_LIFECYCLE_SOD',
+    },
+    update: { description: 'REFUND_LIFECYCLE_SOD' },
   });
 
   await prisma.soDRule.upsert({
