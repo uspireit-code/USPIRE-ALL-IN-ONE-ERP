@@ -385,6 +385,27 @@ export class AuthService {
       }
     }
 
+    if (process.env.NODE_ENV !== 'production') {
+      const permissionList = Array.from(permissions);
+      const arPerms = permissionList
+        .filter((p) =>
+          /^(AR_)?(INVOICE|RECEIPT|RECEIPTS|CREDIT_NOTE|REFUND)_(VIEW|CREATE|EDIT_DRAFT)/i.test(p),
+        )
+        .sort();
+
+      // TEMP DEBUG: prove what the UI is receiving from /auth/me.
+      // Intentionally filtered to AR perms only.
+      // eslint-disable-next-line no-console
+      console.log('[auth.me]', {
+        email: user.email,
+        tenantId: tenant.id,
+        roles: Array.from(roles),
+        permissionCount: permissionList.length,
+        arPermissionCount: arPerms.length,
+        arPermissions: arPerms,
+      });
+    }
+
     return {
       user: {
         id: user.id,

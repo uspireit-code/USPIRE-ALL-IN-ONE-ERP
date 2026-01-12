@@ -11,13 +11,15 @@ export declare class CreateCustomerRefundDto {
 }
 export declare class ApproveRefundDto {
 }
+export declare class SubmitRefundDto {
+}
 export declare class PostRefundDto {
 }
 export declare class VoidRefundDto {
     reason: string;
 }
 export declare class ListRefundsQueryDto {
-    status?: 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+    status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED' | 'VOID';
     customerId?: string;
     creditNoteId?: string;
     dateFrom?: string;

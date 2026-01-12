@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { canAny } from '../auth/permissions';
 import { resolveBrandAssetUrl, useBrandColors, useBranding } from '../branding/BrandingContext';
 
 export function Layout() {
@@ -306,7 +307,9 @@ export function Layout() {
 
   const hasSystemViewAll = hasPermission('SYSTEM_VIEW_ALL');
   const hasFinanceViewAll = hasPermission('FINANCE_VIEW_ALL');
-  const hasSettingsView = hasPermission('SETTINGS_VIEW');
+  const hasSystemConfigView = hasPermission('SYSTEM_CONFIG_VIEW');
+  const hasUserView = hasPermission('USER_VIEW');
+  const hasRoleView = hasPermission('ROLE_VIEW');
 
   const showAudit = hasPermission('AUDIT_VIEW') || hasSystemViewAll;
 
@@ -342,13 +345,13 @@ export function Layout() {
   const showArCustomers =
     hasPermission('CUSTOMERS_VIEW') || hasFinanceViewAll || hasSystemViewAll;
   const showArInvoices =
-    hasPermission('AR_INVOICE_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission('INVOICE_VIEW') || hasPermission('INVOICE_CREATE') || hasFinanceViewAll || hasSystemViewAll;
   const showArReceipts =
-    hasPermission('AR_RECEIPTS_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission('RECEIPT_VIEW') || hasPermission('RECEIPT_POST') || hasPermission('RECEIPT_CREATE') || hasFinanceViewAll || hasSystemViewAll;
   const showArCreditNotes =
-    hasPermission('AR_CREDIT_NOTE_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+    canAny(state.me, ['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_CREATE', 'CREDIT_NOTE_POST']) || hasFinanceViewAll || hasSystemViewAll;
   const showArRefunds =
-    hasPermission('AR_REFUND_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+    canAny(state.me, ['REFUND_VIEW', 'REFUND_CREATE', 'REFUND_POST']) || hasFinanceViewAll || hasSystemViewAll;
 
   const showFixedAssets =
     hasPermission('FA_CATEGORY_MANAGE') ||
@@ -359,7 +362,7 @@ export function Layout() {
 
   const showBankReconciliation = hasPermission('BANK_RECONCILIATION_VIEW');
 
-  const showSettings = hasSettingsView || hasSystemViewAll;
+  const showSettings = hasSystemViewAll || hasSystemConfigView || hasUserView || hasRoleView;
 
   const showFinanceNav =
     hasFinanceViewAll ||
@@ -371,6 +374,9 @@ export function Layout() {
     showForecasts ||
     showFixedAssets ||
     showBankReconciliation ||
+    showArCustomers ||
+    showArInvoices ||
+    showArReceipts ||
     showArCreditNotes ||
     showArRefunds;
 

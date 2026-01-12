@@ -29,8 +29,9 @@ export function ReceiptsPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('AR_RECEIPTS_VIEW');
-  const canCreate = hasPermission('AR_RECEIPTS_CREATE');
+  const canView = hasPermission('RECEIPT_VIEW') || hasPermission('RECEIPT_POST');
+  const canCreate = hasPermission('RECEIPT_CREATE');
+  const canPost = hasPermission('RECEIPT_POST');
 
   const [rows, setRows] = useState<ArReceipt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,8 +64,8 @@ export function ReceiptsPage() {
   }, [canView]);
 
   async function onPost(id: string) {
-    if (!canCreate) {
-      setError('Permission denied');
+    if (!canPost) {
+      setError('You do not have permission to post receipts. Required: RECEIPT_POST.');
       return;
     }
 
@@ -85,7 +86,7 @@ export function ReceiptsPage() {
   }
 
   const content = useMemo(() => {
-    if (!canView) return <div style={{ color: 'crimson' }}>Permission denied</div>;
+    if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view receipts. Required: RECEIPT_VIEW.</div>;
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 
@@ -115,7 +116,7 @@ export function ReceiptsPage() {
               </td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  {r.status === 'DRAFT' && canCreate ? (
+                  {r.status === 'DRAFT' && canPost ? (
                     <button type="button" disabled={actingId === r.id} onClick={() => onPost(r.id)}>
                       Post
                     </button>
@@ -128,7 +129,7 @@ export function ReceiptsPage() {
         </tbody>
       </table>
     );
-  }, [actingId, canCreate, canView, error, loading, rows]);
+  }, [actingId, canPost, canView, error, loading, rows]);
 
   return (
     <PageLayout

@@ -38,7 +38,7 @@ export function CreateInvoicePage() {
   const { effective } = useBranding();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('AR_INVOICE_CREATE');
+  const canCreate = hasPermission('INVOICE_CREATE');
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<AccountLookup[]>([]);
@@ -274,7 +274,7 @@ export function CreateInvoicePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canCreate) {
-      setError('Permission denied');
+      setError('You don’t have permission to create invoices. Required: INVOICE_CREATE.');
       return;
     }
 

@@ -4,7 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
-import { approveRefund, getRefundById, postRefund, voidRefund, type Refund } from '../../services/ar';
+import { approveRefund, getRefundById, postRefund, submitRefund, type Refund } from '../../services/ar';
 
 function StatusBadge(props: { status: string }) {
   const s = String(props.status ?? '').toUpperCase();
@@ -31,10 +31,10 @@ export function RefundDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('AR_REFUND_VIEW');
-  const canApprove = hasPermission('AR_REFUND_APPROVE');
-  const canPost = hasPermission('AR_REFUND_POST');
-  const canVoid = hasPermission('AR_REFUND_VOID');
+  const canView = hasPermission('REFUND_VIEW');
+  const canSubmit = hasPermission('REFUND_SUBMIT');
+  const canApprove = hasPermission('REFUND_APPROVE');
+  const canPost = hasPermission('REFUND_POST');
 
   const [refund, setRefund] = useState<Refund | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,11 +78,28 @@ export function RefundDetailsPage() {
   const allowed = useMemo(() => {
     const status = String(refund?.status ?? '').toUpperCase();
     return {
-      approve: Boolean(refund) && status === 'DRAFT' && canApprove,
+      submit: Boolean(refund) && status === 'DRAFT' && canSubmit,
+      approve: Boolean(refund) && status === 'SUBMITTED' && canApprove,
       post: Boolean(refund) && status === 'APPROVED' && canPost,
-      void: Boolean(refund) && status === 'POSTED' && canVoid,
     };
-  }, [canApprove, canPost, canVoid, refund]);
+  }, [canApprove, canPost, canSubmit, refund]);
+
+  async function onSubmit() {
+    if (!refund) return;
+    const ok = window.confirm('Submit this refund?');
+    if (!ok) return;
+
+    setActing(true);
+    setActionError(null);
+    try {
+      await submitRefund(refund.id);
+      await refresh();
+    } catch (e: any) {
+      setActionError(getApiErrorMessage(e, 'Submit failed'));
+    } finally {
+      setActing(false);
+    }
+  }
 
   async function onApprove() {
     if (!refund) return;
@@ -118,27 +135,7 @@ export function RefundDetailsPage() {
     }
   }
 
-  async function onVoid() {
-    if (!refund) return;
-    const reason = window.prompt('Void reason (required):');
-    if (!reason || reason.trim().length < 2) {
-      setActionError('Void reason is required');
-      return;
-    }
-
-    setActing(true);
-    setActionError(null);
-    try {
-      await voidRefund(refund.id, reason);
-      await refresh();
-    } catch (e: any) {
-      setActionError(getApiErrorMessage(e, 'Void failed'));
-    } finally {
-      setActing(false);
-    }
-  }
-
-  if (!canView) return <div style={{ color: 'crimson' }}>Permission denied</div>;
+  if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view refunds. Required: REFUND_VIEW.</div>;
   if (loading) return <div>Loading...</div>;
   if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
   if (!refund) return <div style={{ color: 'crimson' }}>Refund not found</div>;
@@ -148,6 +145,11 @@ export function RefundDetailsPage() {
       title={`Refund ${refund.refundNumber}`}
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {allowed.submit ? (
+            <button type="button" disabled={acting} onClick={onSubmit}>
+              Submit
+            </button>
+          ) : null}
           {allowed.approve ? (
             <button type="button" disabled={acting} onClick={onApprove}>
               Approve
@@ -156,11 +158,6 @@ export function RefundDetailsPage() {
           {allowed.post ? (
             <button type="button" disabled={acting} onClick={onPost}>
               Post
-            </button>
-          ) : null}
-          {allowed.void ? (
-            <button type="button" disabled={acting} onClick={onVoid}>
-              Void
             </button>
           ) : null}
           <button type="button" onClick={() => navigate('/finance/ar/refunds')}>

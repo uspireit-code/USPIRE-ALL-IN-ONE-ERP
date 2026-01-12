@@ -27,7 +27,7 @@ export function DashboardPage() {
 
   const glVisible = hasPermission('FINANCE_GL_VIEW') || hasPermission('FINANCE_GL_CREATE') || hasPermission('FINANCE_GL_POST');
   const apVisible = hasPermission('AP_INVOICE_VIEW') || hasPermission('AP_INVOICE_CREATE');
-  const arVisible = hasPermission('AR_INVOICE_VIEW') || hasPermission('AR_INVOICE_CREATE');
+  const arVisible = hasPermission('INVOICE_VIEW') || hasPermission('INVOICE_CREATE') || hasPermission('FINANCE_VIEW_ALL') || hasPermission('SYSTEM_VIEW_ALL');
   const paymentsVisible = hasPermission('PAYMENT_VIEW') || hasPermission('PAYMENT_CREATE');
   const periodsVisible = hasPermission('FINANCE_PERIOD_VIEW');
 

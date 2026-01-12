@@ -11,7 +11,6 @@ import { GlService } from '../../../gl/gl.service';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
 import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
 import type {
-  ApproveRefundDto,
   CreateCustomerRefundDto,
   ListRefundsQueryDto,
   VoidRefundDto,
@@ -28,6 +27,38 @@ export class FinanceArRefundsService {
 
   private round2(n: number) {
     return Math.round(Number(n ?? 0) * 100) / 100;
+  }
+
+  async approve(req: Request, id: string) {
+    const tenant = this.ensureTenant(req);
+    const user = this.ensureUser(req);
+    const now = new Date();
+
+    const refund = await (this.prisma as any).customerRefund.findFirst({
+      where: { id, tenantId: tenant.id },
+    });
+    if (!refund) throw new NotFoundException('Refund not found');
+
+    if (String(refund.status) !== 'SUBMITTED') {
+      throw new BadRequestException(`Refund cannot be approved from status: ${refund.status}`);
+    }
+
+    if (String(refund.createdById) === String(user.id)) {
+      throw new ConflictException('Creator cannot approve their own refund');
+    }
+
+    await (this.prisma as any).customerRefund.update({
+      where: { id: refund.id },
+      data: {
+        status: 'APPROVED',
+        approvedById: user.id,
+        approvedAt: now,
+      } as any,
+    });
+
+    return (this.prisma as any).customerRefund.findFirst({
+      where: { id: refund.id, tenantId: tenant.id },
+    });
   }
 
   private normalizeMoney(n: number) {
@@ -90,6 +121,7 @@ export class FinanceArRefundsService {
         id: true,
         status: true,
         currency: true,
+        exchangeRate: true,
         totalAmount: true,
         customerId: true,
         creditNoteNumber: true,
@@ -128,6 +160,7 @@ export class FinanceArRefundsService {
         creditNoteDate: (cn as any).creditNoteDate,
         customerId: (cn as any).customerId,
         currency: String((cn as any).currency ?? '').trim(),
+        exchangeRate: Number((cn as any).exchangeRate ?? 1),
         totalAmount: total,
       },
       refunded,
@@ -152,6 +185,141 @@ export class FinanceArRefundsService {
       refunded: Number(out.refunded),
       refundable: Number(out.refundable),
     };
+  }
+
+  async listRefundableCustomers(req: Request) {
+    const tenant = this.ensureTenant(req);
+
+    const creditNotes = await (this.prisma as any).customerCreditNote.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: 'POSTED',
+      } as any,
+      select: {
+        id: true,
+        customerId: true,
+        totalAmount: true,
+      } as any,
+    });
+
+    if ((creditNotes ?? []).length === 0) {
+      return { items: [] as any[] };
+    }
+
+    const refundsAgg = await (this.prisma as any).customerRefund.groupBy({
+      by: ['creditNoteId'],
+      where: {
+        tenantId: tenant.id,
+        status: 'POSTED',
+        creditNoteId: { in: creditNotes.map((c: any) => c.id) },
+      } as any,
+      _sum: { amount: true },
+    });
+
+    const refundedByCreditNoteId = new Map<string, number>();
+    for (const r of refundsAgg ?? []) {
+      refundedByCreditNoteId.set(
+        String(r.creditNoteId),
+        this.normalizeMoney(Number(r?._sum?.amount ?? 0)),
+      );
+    }
+
+    const customerIds = new Set<string>();
+    for (const cn of creditNotes ?? []) {
+      const total = this.normalizeMoney(Number(cn.totalAmount ?? 0));
+      const refunded = refundedByCreditNoteId.get(String(cn.id)) ?? 0;
+      const refundable = this.normalizeMoney(total - refunded);
+      if (refundable > 0) customerIds.add(String(cn.customerId));
+    }
+
+    if (customerIds.size === 0) {
+      return { items: [] as any[] };
+    }
+
+    const customers = await (this.prisma as any).customer.findMany({
+      where: {
+        tenantId: tenant.id,
+        id: { in: Array.from(customerIds) },
+        status: 'ACTIVE',
+      } as any,
+      select: { id: true, name: true } as any,
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      items: (customers ?? []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    };
+  }
+
+  async listRefundableCreditNotes(req: Request, customerId: string) {
+    const tenant = this.ensureTenant(req);
+
+    const cid = String(customerId ?? '').trim();
+    if (!cid) throw new BadRequestException('customerId is required');
+
+    const creditNotes = await (this.prisma as any).customerCreditNote.findMany({
+      where: {
+        tenantId: tenant.id,
+        customerId: cid,
+        status: 'POSTED',
+      } as any,
+      orderBy: [{ creditNoteDate: 'desc' }, { creditNoteNumber: 'desc' }],
+      select: {
+        id: true,
+        creditNoteNumber: true,
+        creditNoteDate: true,
+        invoiceId: true,
+        invoice: { select: { invoiceNumber: true } },
+        currency: true,
+        totalAmount: true,
+      } as any,
+    });
+
+    if ((creditNotes ?? []).length === 0) {
+      return { items: [] as any[] };
+    }
+
+    const refundsAgg = await (this.prisma as any).customerRefund.groupBy({
+      by: ['creditNoteId'],
+      where: {
+        tenantId: tenant.id,
+        status: 'POSTED',
+        creditNoteId: { in: creditNotes.map((c: any) => c.id) },
+      } as any,
+      _sum: { amount: true },
+    });
+
+    const refundedByCreditNoteId = new Map<string, number>();
+    for (const r of refundsAgg ?? []) {
+      refundedByCreditNoteId.set(
+        String(r.creditNoteId),
+        this.normalizeMoney(Number(r?._sum?.amount ?? 0)),
+      );
+    }
+
+    const items = (creditNotes ?? [])
+      .map((cn: any) => {
+        const total = this.normalizeMoney(Number(cn.totalAmount ?? 0));
+        const refunded = refundedByCreditNoteId.get(String(cn.id)) ?? 0;
+        const refundable = this.normalizeMoney(total - refunded);
+        return {
+          id: cn.id,
+          creditNoteNumber: String(cn.creditNoteNumber ?? '').trim(),
+          creditNoteDate: cn.creditNoteDate?.toISOString?.().slice(0, 10) ?? null,
+          invoiceId: cn.invoiceId ?? null,
+          invoiceNumber: cn.invoice?.invoiceNumber ?? null,
+          currency: String(cn.currency ?? '').trim(),
+          totalAmount: total,
+          refunded,
+          refundable,
+        };
+      })
+      .filter((x: any) => Number(x.refundable ?? 0) > 0);
+
+    return { items };
   }
 
   async list(req: Request, q: ListRefundsQueryDto) {
@@ -284,9 +452,15 @@ export class FinanceArRefundsService {
   private async resolveClearingAccountId(params: {
     tenantId: string;
     paymentMethod: 'BANK' | 'CASH';
-    bankAccountId?: string | null;
+    bankAccountId: string | null;
   }) {
     if (params.paymentMethod === 'BANK') {
+      if (!params.bankAccountId) {
+        throw new BadRequestException({
+          error: 'Bank account is required for BANK refunds',
+          field: 'CustomerRefund.bankAccountId',
+        });
+      }
       if (params.bankAccountId) {
         const ba = await this.prisma.bankAccount.findFirst({
           where: {
@@ -315,36 +489,6 @@ export class FinanceArRefundsService {
 
         return bankGl.id;
       }
-
-      const tenantControls = await (this.prisma as any).tenant.findUnique({
-        where: { id: params.tenantId },
-        select: { defaultBankClearingAccountId: true },
-      });
-      const bankClearingAccountId =
-        (tenantControls?.defaultBankClearingAccountId ?? null) as string | null;
-      if (!bankClearingAccountId) {
-        throw new BadRequestException({
-          error: 'Missing configuration: default bank clearing account',
-          field: 'Tenant.defaultBankClearingAccountId',
-        });
-      }
-
-      const bankAccount = await this.prisma.account.findFirst({
-        where: {
-          tenantId: params.tenantId,
-          id: bankClearingAccountId,
-          isActive: true,
-          type: 'ASSET',
-        },
-        select: { id: true },
-      });
-      if (!bankAccount) {
-        throw new BadRequestException(
-          'Configured bank clearing GL account not found or invalid',
-        );
-      }
-
-      return bankAccount.id;
     }
 
     const tenantControls = await (this.prisma as any).tenant.findUnique({
@@ -356,7 +500,7 @@ export class FinanceArRefundsService {
     if (!cashClearingAccountId) {
       throw new BadRequestException({
         error: 'Missing configuration: cash clearing account',
-        field: 'Tenant.cashClearingAccountId',
+        field: 'AR_CASH_CLEARING_ACCOUNT_ID',
       });
     }
 
@@ -396,6 +540,21 @@ export class FinanceArRefundsService {
     const exchangeRate = Number(dto.exchangeRate ?? 1);
     if (!(exchangeRate > 0)) throw new BadRequestException('exchangeRate must be > 0');
 
+    const refundable = await this.computeCreditNoteRefundable({
+      tenantId: tenant.id,
+      creditNoteId: String(dto.creditNoteId ?? '').trim(),
+    });
+
+    const requestedCustomerId = String(dto.customerId ?? '').trim();
+    if (!requestedCustomerId) throw new BadRequestException('customerId is required');
+    if (String(refundable.creditNote.customerId) !== requestedCustomerId) {
+      throw new BadRequestException('creditNoteId does not belong to customerId');
+    }
+
+    if (amount > refundable.refundable) {
+      throw new ConflictException('Refund amount exceeds available credit balance');
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
       const refundNumber = await this.nextRefundNumber(tx, tenant.id);
 
@@ -420,19 +579,22 @@ export class FinanceArRefundsService {
     return created;
   }
 
-  async approve(req: Request, id: string, _dto: ApproveRefundDto) {
+  async submit(req: Request, id: string) {
     const tenant = this.ensureTenant(req);
     const user = this.ensureUser(req);
 
     const refund = await (this.prisma as any).customerRefund.findFirst({
       where: { id, tenantId: tenant.id },
+      select: { id: true, status: true, refundDate: true } as any,
     });
     if (!refund) throw new NotFoundException('Refund not found');
 
     if (String(refund.status) !== 'DRAFT') {
-      throw new BadRequestException(
-        `Refund cannot be approved from status: ${refund.status}`,
-      );
+      throw new BadRequestException(`Refund cannot be submitted from status: ${refund.status}`);
+    }
+
+    if (String(refund.createdById ?? '') !== '' && String(refund.createdById) !== String(user.id)) {
+      // submit is allowed by creator (officer) only; do not block if legacy data is missing.
     }
 
     const refundDate = new Date(refund.refundDate);
@@ -446,26 +608,12 @@ export class FinanceArRefundsService {
         dateLabel: 'refund date',
       });
     } catch {
-      throw new ForbiddenException('Cannot approve in a closed period');
-    }
-
-    const refundable = await this.computeCreditNoteRefundable({
-      tenantId: tenant.id,
-      creditNoteId: String(refund.creditNoteId ?? ''),
-    });
-
-    const amount = this.normalizeMoney(Number(refund.amount ?? 0));
-    if (amount > refundable.refundable) {
-      throw new ConflictException('Refund amount exceeds available credit balance');
+      throw new ForbiddenException('Cannot submit in a closed period');
     }
 
     await (this.prisma as any).customerRefund.update({
       where: { id: refund.id },
-      data: {
-        status: 'APPROVED',
-        approvedById: user.id,
-        approvedAt: new Date(),
-      } as any,
+      data: { status: 'SUBMITTED' } as any,
     });
 
     return (this.prisma as any).customerRefund.findFirst({
@@ -493,6 +641,16 @@ export class FinanceArRefundsService {
       );
     }
 
+    if (String(refund.createdById) === String(user.id)) {
+      throw new ConflictException('Creator cannot post their own refund');
+    }
+
+    if (refund.approvedById && String(refund.approvedById) === String(user.id)) {
+      throw new ConflictException('Approver cannot post the same refund');
+    }
+
+    if (!refund.creditNoteId) throw new BadRequestException('Refund must reference a credit note');
+
     const refundDate = new Date(refund.refundDate);
     try {
       await assertPeriodIsOpen({
@@ -518,7 +676,34 @@ export class FinanceArRefundsService {
 
     const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
-    const clearingAccountId = await this.resolveClearingAccountId({
+    const tenantControls = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: { defaultBankClearingAccountId: true },
+    });
+    const refundClearingAccountId =
+      (tenantControls?.defaultBankClearingAccountId ?? null) as string | null;
+    if (!refundClearingAccountId) {
+      throw new BadRequestException({
+        error: 'Missing configuration: refund clearing account',
+        field: 'AR_REFUND_CLEARING_ACCOUNT_ID',
+      });
+    }
+    const refundClearingAccount = await this.prisma.account.findFirst({
+      where: {
+        tenantId: tenant.id,
+        id: refundClearingAccountId,
+        isActive: true,
+        type: 'ASSET',
+      },
+      select: { id: true },
+    });
+    if (!refundClearingAccount) {
+      throw new BadRequestException(
+        'Configured refund clearing GL account not found or invalid',
+      );
+    }
+
+    const paymentAccountId = await this.resolveClearingAccountId({
       tenantId: tenant.id,
       paymentMethod: String(refund.paymentMethod) as any,
       bankAccountId: (refund as any).bankAccountId ?? null,
@@ -534,8 +719,8 @@ export class FinanceArRefundsService {
         description: `AR refund posting: ${refund.refundNumber}`,
         createdById: refund.createdById,
         status: 'REVIEWED',
-        reviewedById: refund.approvedById,
-        reviewedAt: refund.approvedAt ?? now,
+        reviewedById: user.id,
+        reviewedAt: now,
         lines: {
           create: [
             {
@@ -545,13 +730,25 @@ export class FinanceArRefundsService {
               description: 'AR control',
             },
             {
-              accountId: clearingAccountId,
+              accountId: refundClearingAccount.id,
+              debit: 0,
+              credit: amount,
+              description: 'AR refund clearing',
+            },
+            {
+              accountId: refundClearingAccount.id,
+              debit: amount,
+              credit: 0,
+              description: 'AR refund clearing',
+            },
+            {
+              accountId: paymentAccountId,
               debit: 0,
               credit: amount,
               description:
                 String(refund.paymentMethod) === 'CASH'
                   ? 'Cash clearing'
-                  : 'Bank clearing',
+                  : 'Bank account',
             },
           ],
         },
@@ -570,6 +767,22 @@ export class FinanceArRefundsService {
         postedJournalId: postedJournal.id,
       } as any,
     });
+
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'AR_POST',
+          entityType: 'CUSTOMER_REFUND',
+          entityId: refund.id,
+          action: 'REFUND_POSTED',
+          outcome: 'SUCCESS',
+          reason: JSON.stringify({ journalId: postedJournal.id }),
+          userId: user.id,
+          permissionUsed: 'REFUND_POST',
+        } as any,
+      })
+      .catch(() => undefined);
 
     return (this.prisma as any).customerRefund.findFirst({
       where: { id: refund.id, tenantId: tenant.id },
@@ -610,7 +823,34 @@ export class FinanceArRefundsService {
 
     const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
-    const clearingAccountId = await this.resolveClearingAccountId({
+    const tenantControls = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: { defaultBankClearingAccountId: true },
+    });
+    const refundClearingAccountId =
+      (tenantControls?.defaultBankClearingAccountId ?? null) as string | null;
+    if (!refundClearingAccountId) {
+      throw new BadRequestException({
+        error: 'Missing configuration: refund clearing account',
+        field: 'AR_REFUND_CLEARING_ACCOUNT_ID',
+      });
+    }
+    const refundClearingAccount = await this.prisma.account.findFirst({
+      where: {
+        tenantId: tenant.id,
+        id: refundClearingAccountId,
+        isActive: true,
+        type: 'ASSET',
+      },
+      select: { id: true },
+    });
+    if (!refundClearingAccount) {
+      throw new BadRequestException(
+        'Configured refund clearing GL account not found or invalid',
+      );
+    }
+
+    const paymentAccountId = await this.resolveClearingAccountId({
       tenantId: tenant.id,
       paymentMethod: String(refund.paymentMethod) as any,
       bankAccountId: (refund as any).bankAccountId ?? null,
@@ -634,13 +874,25 @@ export class FinanceArRefundsService {
         lines: {
           create: [
             {
-              accountId: clearingAccountId,
+              accountId: paymentAccountId,
               debit: amount,
               credit: 0,
               description:
                 String(refund.paymentMethod) === 'CASH'
                   ? 'Cash clearing reversal'
-                  : 'Bank clearing reversal',
+                  : 'Bank account reversal',
+            },
+            {
+              accountId: refundClearingAccount.id,
+              debit: 0,
+              credit: amount,
+              description: 'AR refund clearing reversal',
+            },
+            {
+              accountId: refundClearingAccount.id,
+              debit: amount,
+              credit: 0,
+              description: 'AR refund clearing reversal',
             },
             {
               accountId: arAccount.id,

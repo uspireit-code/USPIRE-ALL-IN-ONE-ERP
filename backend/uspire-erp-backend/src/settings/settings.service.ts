@@ -133,14 +133,33 @@ export class SettingsService {
 
     const allowedPermissionCodes = [
       'AR_INVOICE_CREATE',
+      'INVOICE_CREATE',
       'AR_INVOICE_EDIT_DRAFT',
       'AR_INVOICE_VIEW',
+      'INVOICE_VIEW',
       'AR_RECEIPTS_CREATE',
+      'RECEIPT_CREATE',
       'AR_RECEIPTS_VIEW',
+      'RECEIPT_VIEW',
       'AR_CREDIT_NOTE_CREATE',
+      'CREDIT_NOTE_CREATE',
+      'AR_CREDIT_NOTE_SUBMIT',
+      'CREDIT_NOTE_SUBMIT',
       'AR_CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_VIEW',
       'AR_REFUND_CREATE',
+      'REFUND_CREATE',
+      'AR_REFUND_SUBMIT',
+      'REFUND_SUBMIT',
       'AR_REFUND_VIEW',
+      'REFUND_VIEW',
+
+      'INVOICE_CATEGORY_VIEW',
+      'TAX_RATE_VIEW',
+      'FINANCE_GL_VIEW',
+      'MASTER_DATA_DEPARTMENT_VIEW',
+      'MASTER_DATA_PROJECT_VIEW',
+      'MASTER_DATA_FUND_VIEW',
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -186,9 +205,12 @@ export class SettingsService {
       'FINANCE_COA_VIEW',
       'FINANCE_BUDGET_VIEW',
 
+      'INVOICE_VIEW',
+
       'FINANCE_PERIOD_VIEW',
       'FINANCE_PERIOD_CHECKLIST_VIEW',
       'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+      'FINANCE_PERIOD_CLOSE',
 
       'FINANCE_TB_VIEW',
       'FINANCE_CASHFLOW_VIEW',
@@ -198,6 +220,14 @@ export class SettingsService {
       'report.view.pl',
       'report.view.bs',
       'FINANCE_REPORT_EXPORT',
+
+      'RECEIPT_VIEW',
+
+      'RECEIPT_POST',
+      'CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_APPROVE',
+      'REFUND_VIEW',
+      'REFUND_APPROVE',
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -247,6 +277,16 @@ export class SettingsService {
       'FINANCE_COA_UPDATE',
       'FINANCE_BUDGET_VIEW',
 
+      'FINANCE_CONFIG_VIEW',
+      'FINANCE_CONFIG_UPDATE',
+      'FINANCE_CONFIG_CHANGE',
+
+      'RECEIPT_VIEW',
+
+      'INVOICE_VIEW',
+
+      'INVOICE_POST',
+
       'MASTER_DATA_DEPARTMENT_VIEW',
       'MASTER_DATA_DEPARTMENT_CREATE',
       'MASTER_DATA_DEPARTMENT_EDIT',
@@ -268,6 +308,12 @@ export class SettingsService {
       'report.view.pl',
       'report.view.bs',
       'FINANCE_REPORT_EXPORT',
+
+      'RECEIPT_POST',
+      'CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_POST',
+      'REFUND_VIEW',
+      'REFUND_POST',
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -797,7 +843,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ roleIds }),
           userId: actor.id,
-          permissionUsed: 'USER_ASSIGN_ROLE',
+          permissionUsed: 'ROLE_ASSIGN',
         },
       })
       .catch(() => undefined);
@@ -1019,6 +1065,8 @@ export class SettingsService {
 
     return {
       ...row,
+      arRefundClearingAccountId: (row as any).defaultBankClearingAccountId ?? null,
+      arCashClearingAccountId: (row as any).cashClearingAccountId ?? null,
       logoUrl: row.logoUrl ? '/settings/organisation/logo' : null,
       faviconUrl: row.faviconUrl ? '/settings/system/favicon' : null,
     };
@@ -1037,13 +1085,40 @@ export class SettingsService {
       'requiresFundOnInvoices',
       'arControlAccountId',
       'defaultBankClearingAccountId',
+      'arRefundClearingAccountId',
       'cashClearingAccountId',
+      'arCashClearingAccountId',
       'unappliedReceiptsAccountId',
     ];
 
     const isChangingFinanceControls = financeSensitiveKeys.some(
       (k) => (dto as any)?.[k] !== undefined,
     );
+
+    const isChangingNonFinanceControls = Object.keys(dto as any).some((k) => {
+      if ((dto as any)?.[k] === undefined) return false;
+      return !financeSensitiveKeys.includes(k as any);
+    });
+
+    if (isChangingNonFinanceControls) {
+      const hasSystemConfigUpdate = await this.prisma.rolePermission.findFirst({
+        where: {
+          role: {
+            tenantId: tenant.id,
+            userRoles: { some: { userId: user.id } },
+          },
+          permission: { code: 'SYSTEM_CONFIG_UPDATE' },
+        },
+        select: { roleId: true },
+      });
+
+      if (!hasSystemConfigUpdate) {
+        throw new ForbiddenException({
+          error: 'Access denied',
+          missingPermissions: ['SYSTEM_CONFIG_UPDATE'],
+        });
+      }
+    }
 
     if (isChangingFinanceControls) {
       const hasFinanceConfig = await this.prisma.rolePermission.findFirst({
@@ -1052,7 +1127,7 @@ export class SettingsService {
             tenantId: tenant.id,
             userRoles: { some: { userId: user.id } },
           },
-          permission: { code: 'FINANCE_CONFIG_CHANGE' },
+          permission: { code: { in: ['FINANCE_CONFIG_UPDATE', 'FINANCE_CONFIG_CHANGE'] } },
         },
         select: { roleId: true },
       });
@@ -1060,7 +1135,7 @@ export class SettingsService {
       if (!hasFinanceConfig) {
         throw new ForbiddenException({
           error: 'Access denied',
-          missingPermissions: ['FINANCE_CONFIG_CHANGE'],
+          missingPermissions: ['FINANCE_CONFIG_UPDATE'],
         });
       }
     }
@@ -1290,19 +1365,26 @@ export class SettingsService {
               : String((dto as any).arControlAccountId).trim() || null,
 
         defaultBankClearingAccountId:
-          (dto as any).defaultBankClearingAccountId === undefined
-            ? undefined
-            : (dto as any).defaultBankClearingAccountId === null
+          (dto as any).arRefundClearingAccountId !== undefined
+            ? (dto as any).arRefundClearingAccountId === null
               ? null
-              : String((dto as any).defaultBankClearingAccountId).trim() ||
-                null,
+              : String((dto as any).arRefundClearingAccountId).trim() || null
+            : (dto as any).defaultBankClearingAccountId === undefined
+              ? undefined
+              : (dto as any).defaultBankClearingAccountId === null
+                ? null
+                : String((dto as any).defaultBankClearingAccountId).trim() || null,
 
         cashClearingAccountId:
-          (dto as any).cashClearingAccountId === undefined
-            ? undefined
-            : (dto as any).cashClearingAccountId === null
+          (dto as any).arCashClearingAccountId !== undefined
+            ? (dto as any).arCashClearingAccountId === null
               ? null
-              : String((dto as any).cashClearingAccountId).trim() || null,
+              : String((dto as any).arCashClearingAccountId).trim() || null
+            : (dto as any).cashClearingAccountId === undefined
+              ? undefined
+              : (dto as any).cashClearingAccountId === null
+                ? null
+                : String((dto as any).cashClearingAccountId).trim() || null,
 
         unappliedReceiptsAccountId:
           (dto as any).unappliedReceiptsAccountId === undefined
@@ -1400,7 +1482,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: 'FINANCE_CONFIG_CHANGE',
+          permissionUsed: 'SYSTEM_CONFIG_UPDATE',
         },
       })
       .catch(() => undefined);
@@ -1459,7 +1541,7 @@ export class SettingsService {
             after: { faviconUrl: updated.faviconUrl },
           }),
           userId: user.id,
-          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
+          permissionUsed: 'SYSTEM_CONFIG_UPDATE',
         },
       })
       .catch(() => undefined);
@@ -1553,7 +1635,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: 'SYSTEM_CONFIG_CHANGE',
+          permissionUsed: 'SYSTEM_CONFIG_UPDATE',
         },
       })
       .catch(() => undefined);

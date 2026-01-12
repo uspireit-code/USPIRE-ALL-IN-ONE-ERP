@@ -19,6 +19,27 @@ export type CustomersListResponse = {
   items: Customer[];
 };
 
+export type EligibleCreditNoteCustomerRow = {
+  customerId: string;
+  customerName: string;
+  customerCode?: string | null;
+};
+
+export type EligibleCreditNoteCustomersResponse = {
+  items: EligibleCreditNoteCustomerRow[];
+};
+
+export type EligibleCreditNoteInvoiceRow = {
+  invoiceId: string;
+  invoiceNumber: string;
+  currency: string;
+  outstandingBalance: number;
+};
+
+export type EligibleCreditNoteInvoicesResponse = {
+  items: EligibleCreditNoteInvoiceRow[];
+};
+
 export type AccountLookup = {
   id: string;
   code: string;
@@ -234,7 +255,7 @@ export type CreditNote = {
   lines: CreditNoteLine[];
 };
 
-export type RefundStatus = 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+export type RefundStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED' | 'VOID';
 export type RefundPaymentMethod = 'BANK' | 'CASH';
 
 export type RefundListItem = {
@@ -299,10 +320,32 @@ export type CreditNoteRefundableResponse = {
     creditNoteDate?: string | null;
     customerId: string;
     currency: string;
+    exchangeRate?: number;
     totalAmount: number;
   };
   refunded: number;
   refundable: number;
+};
+
+export type RefundableCustomerRow = {
+  id: string;
+  name: string;
+};
+
+export type RefundableCreditNoteRow = {
+  id: string;
+  creditNoteNumber: string;
+  creditNoteDate?: string | null;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
+  currency: string;
+  totalAmount: number;
+  refunded: number;
+  refundable: number;
+};
+
+export type RefundableCreditNotesResponse = {
+  items: RefundableCreditNoteRow[];
 };
 
 export type ReceiptAllocationsResponse = {
@@ -345,6 +388,22 @@ export async function listCustomers(params?: {
   const qs = q.toString();
   return apiFetch<CustomersListResponse>(
     `/finance/ar/customers${qs ? `?${qs}` : ''}`,
+    { method: 'GET' },
+  );
+}
+
+export async function listEligibleCreditNoteCustomers() {
+  return apiFetch<EligibleCreditNoteCustomersResponse>(
+    '/finance/ar/credit-notes/eligible-customers',
+    { method: 'GET' },
+  );
+}
+
+export async function listEligibleCreditNoteInvoices(customerId: string) {
+  const q = new URLSearchParams();
+  q.set('customerId', String(customerId));
+  return apiFetch<EligibleCreditNoteInvoicesResponse>(
+    `/finance/ar/credit-notes/eligible-invoices?${q.toString()}`,
     { method: 'GET' },
   );
 }
@@ -779,6 +838,22 @@ export async function getRefundableForCreditNote(creditNoteId: string) {
   });
 }
 
+export async function listRefundableCreditNotes(customerId: string) {
+  const q = new URLSearchParams();
+  q.set('customerId', String(customerId));
+  return apiFetch<RefundableCreditNotesResponse>(
+    `/finance/ar/refunds/refundable-credit-notes?${q.toString()}`,
+    { method: 'GET' },
+  );
+}
+
+export async function listRefundableCustomers() {
+  return apiFetch<{ items: RefundableCustomerRow[] }>(
+    '/finance/ar/refunds/refundable-customers',
+    { method: 'GET' },
+  );
+}
+
 export async function createRefund(params: {
   refundDate: string;
   customerId: string;
@@ -801,6 +876,13 @@ export async function createRefund(params: {
       paymentMethod: params.paymentMethod,
       bankAccountId: params.bankAccountId || undefined,
     }),
+  });
+}
+
+export async function submitRefund(id: string) {
+  return apiFetch<Refund>(`/finance/ar/refunds/${id}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
 }
 

@@ -1215,10 +1215,10 @@ export class FinanceArInvoicesService {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'AR_POST',
+            eventType: 'INVOICE_POSTED',
             entityType: 'CUSTOMER_INVOICE',
             entityId: String((inv as any).id),
-            action: 'AR_INVOICE_POST',
+            action: 'INVOICE_POST',
             outcome: 'SUCCESS',
             reason: JSON.stringify({
               invoiceNumber: (inv as any).invoiceNumber,
@@ -1228,7 +1228,7 @@ export class FinanceArInvoicesService {
               revenueAccountId,
             }),
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_POST',
+            permissionUsed: 'INVOICE_POST',
           } as any,
         } as any)
         .catch(() => undefined);
@@ -1242,14 +1242,14 @@ export class FinanceArInvoicesService {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'AR_POST',
+            eventType: 'INVOICE_POSTED',
             entityType: 'CUSTOMER_INVOICE',
             entityId: String((inv as any).id),
-            action: 'AR_INVOICE_POST',
+            action: 'INVOICE_POST',
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to post invoice'),
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_POST',
+            permissionUsed: 'INVOICE_POST',
           } as any,
         } as any)
         .catch(() => undefined);

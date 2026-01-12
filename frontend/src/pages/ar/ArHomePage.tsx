@@ -5,8 +5,8 @@ import { PageLayout } from '../../components/PageLayout';
 export function ArHomePage() {
   const { hasPermission } = useAuth();
 
-  const canViewInvoices = hasPermission('AR_INVOICE_VIEW');
-  const canCreateInvoice = hasPermission('AR_INVOICE_CREATE');
+  const canViewInvoices = hasPermission('INVOICE_VIEW');
+  const canCreateInvoice = hasPermission('INVOICE_CREATE');
 
   const canCreateCustomer = hasPermission('AR_CUSTOMER_CREATE');
 

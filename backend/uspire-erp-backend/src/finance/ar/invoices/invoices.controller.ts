@@ -34,13 +34,13 @@ export class FinanceArInvoicesController {
   constructor(private readonly invoices: FinanceArInvoicesService) {}
 
   @Get()
-  @Permissions('AR_INVOICE_VIEW')
+  @Permissions('INVOICE_VIEW')
   async list(@Req() req: Request, @Query() q: ListInvoicesQueryDto) {
     return this.invoices.list(req, q);
   }
 
   @Post()
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('INVOICE_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateCustomerInvoiceDto) {
     return this.invoices.create(req, dto);
   }
@@ -56,7 +56,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post('import')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('INVOICE_CREATE')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -70,7 +70,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post('import/preview')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('INVOICE_CREATE')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -82,7 +82,7 @@ export class FinanceArInvoicesController {
   }
 
   @Get('import/template.csv')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('INVOICE_CREATE')
   async downloadImportCsvTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.invoices.getImportCsvTemplate(req);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -94,7 +94,7 @@ export class FinanceArInvoicesController {
   }
 
   @Get('import/template.xlsx')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('INVOICE_CREATE')
   async downloadImportXlsxTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.invoices.getImportXlsxTemplate(req);
     res.setHeader(
@@ -109,13 +109,13 @@ export class FinanceArInvoicesController {
   }
 
   @Get(':id')
-  @Permissions('AR_INVOICE_VIEW')
+  @Permissions('INVOICE_VIEW')
   async getById(@Req() req: Request, @Param('id') id: string) {
     return this.invoices.getById(req, id);
   }
 
   @Get(':id/export')
-  @Permissions('AR_INVOICE_VIEW')
+  @Permissions('INVOICE_VIEW')
   async exportInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -135,7 +135,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post(':id/post')
-  @Permissions('AR_INVOICE_POST')
+  @Permissions('INVOICE_POST')
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -145,7 +145,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post('post/bulk')
-  @Permissions('AR_INVOICE_POST')
+  @Permissions('INVOICE_POST')
   async bulkPost(@Req() req: Request, @Body() dto: BulkPostInvoicesDto) {
     return this.invoices.bulkPost(req, dto);
   }

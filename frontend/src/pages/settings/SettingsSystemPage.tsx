@@ -27,7 +27,8 @@ export function SettingsSystemPage() {
   const { setPreviewOverrides, clearPreviewOverrides, refresh: refreshBranding } = useBranding();
   const brand = useBrandColors();
   const { hasPermission } = useAuth();
-  const canFinanceConfigChange = hasPermission('FINANCE_CONFIG_CHANGE');
+  const canSystemConfigUpdate = hasPermission('SYSTEM_CONFIG_UPDATE');
+  const canFinanceConfigChange = hasPermission('FINANCE_CONFIG_UPDATE');
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -73,6 +74,14 @@ export function SettingsSystemPage() {
   const [defaultBankClearingAccountId, setDefaultBankClearingAccountId] = useState<string>('');
   const [bankClearingSearch, setBankClearingSearch] = useState('');
   const [bankClearingPickerOpen, setBankClearingPickerOpen] = useState(false);
+
+  const [arRefundClearingAccountId, setArRefundClearingAccountId] = useState<string>('');
+  const [arRefundClearingSearch, setArRefundClearingSearch] = useState('');
+  const [arRefundClearingPickerOpen, setArRefundClearingPickerOpen] = useState(false);
+
+  const [arCashClearingAccountId, setArCashClearingAccountId] = useState<string>('');
+  const [arCashClearingSearch, setArCashClearingSearch] = useState('');
+  const [arCashClearingPickerOpen, setArCashClearingPickerOpen] = useState(false);
 
   const [arControlAccountId, setArControlAccountId] = useState<string>('');
   const [arControlSearch, setArControlSearch] = useState('');
@@ -136,6 +145,14 @@ export function SettingsSystemPage() {
       setBankClearingSearch('');
       setBankClearingPickerOpen(false);
 
+      setArRefundClearingAccountId(s.arRefundClearingAccountId ?? '');
+      setArRefundClearingSearch('');
+      setArRefundClearingPickerOpen(false);
+
+      setArCashClearingAccountId(s.arCashClearingAccountId ?? '');
+      setArCashClearingSearch('');
+      setArCashClearingPickerOpen(false);
+
       setArControlAccountId(s.arControlAccountId ?? '');
       setArControlSearch('');
       setArControlPickerOpen(false);
@@ -192,6 +209,14 @@ export function SettingsSystemPage() {
     ? accountById.get(defaultBankClearingAccountId)
     : undefined;
 
+  const selectedArRefundClearingAccount = arRefundClearingAccountId
+    ? accountById.get(arRefundClearingAccountId)
+    : undefined;
+
+  const selectedArCashClearingAccount = arCashClearingAccountId
+    ? accountById.get(arCashClearingAccountId)
+    : undefined;
+
   const selectedArControlAccount = arControlAccountId ? accountById.get(arControlAccountId) : undefined;
 
   const bankClearingCandidates = useMemo(() => {
@@ -205,6 +230,30 @@ export function SettingsSystemPage() {
     });
     return filtered.slice(0, 12);
   }, [accounts, bankClearingSearch]);
+
+  const arRefundClearingCandidates = useMemo(() => {
+    const q = arRefundClearingSearch.trim().toLowerCase();
+    const base = (accounts ?? []).filter((a) => a.isActive && a.type === 'ASSET');
+    if (!q) return base.slice(0, 12);
+    const filtered = base.filter((a) => {
+      const code = String(a.code ?? '').toLowerCase();
+      const name = String(a.name ?? '').toLowerCase();
+      return code.includes(q) || name.includes(q);
+    });
+    return filtered.slice(0, 12);
+  }, [accounts, arRefundClearingSearch]);
+
+  const arCashClearingCandidates = useMemo(() => {
+    const q = arCashClearingSearch.trim().toLowerCase();
+    const base = (accounts ?? []).filter((a) => a.isActive && a.type === 'ASSET');
+    if (!q) return base.slice(0, 12);
+    const filtered = base.filter((a) => {
+      const code = String(a.code ?? '').toLowerCase();
+      const name = String(a.name ?? '').toLowerCase();
+      return code.includes(q) || name.includes(q);
+    });
+    return filtered.slice(0, 12);
+  }, [accounts, arCashClearingSearch]);
 
   const arControlCandidates = useMemo(() => {
     const q = arControlSearch.trim().toLowerCase();
@@ -258,13 +307,49 @@ export function SettingsSystemPage() {
       (system.receiptBankBranch ?? '') !== receiptBankBranch.trim() ||
       (system.receiptBankSwiftCode ?? '') !== receiptBankSwiftCode.trim() ||
       Boolean(system.requiresDepartmentOnInvoices) !== Boolean(requiresDepartmentOnInvoices) ||
-      Boolean(system.requiresProjectOnInvoices) !== Boolean(requiresProjectOnInvoices) ||
-      Boolean(system.requiresFundOnInvoices) !== Boolean(requiresFundOnInvoices) ||
+      Boolean(system.requiresProjectOnInvoices ?? false) !== requiresProjectOnInvoices ||
+      (system.requiresFundOnInvoices ?? false) !== requiresFundOnInvoices ||
       (system.arControlAccountId ?? '') !== arControlAccountId.trim() ||
       (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
+      (system.arRefundClearingAccountId ?? '') !== arRefundClearingAccountId.trim() ||
+      (system.arCashClearingAccountId ?? '') !== arCashClearingAccountId.trim() ||
       Boolean(pendingFaviconFile)
     );
-  }, [accentColor, allowSelfPosting, arControlAccountId, country, dateFormat, defaultBankClearingAccountId, defaultCurrency, defaultDashboard, defaultLandingPage, defaultLanguage, defaultUserRoleCode, demoModeEnabled, financialYearStartMonth, legalName, numberFormat, organisationName, organisationShortName, pendingFaviconFile, primaryColor, receiptBankAccountName, receiptBankAccountNumber, receiptBankBranch, receiptBankName, receiptBankSwiftCode, requiresDepartmentOnInvoices, requiresFundOnInvoices, requiresProjectOnInvoices, secondaryAccentColor, secondaryColor, system, timezone]);
+  }, [
+    accentColor,
+    allowSelfPosting,
+    arCashClearingAccountId,
+    arControlAccountId,
+    arRefundClearingAccountId,
+    country,
+    dateFormat,
+    defaultBankClearingAccountId,
+    defaultCurrency,
+    defaultDashboard,
+    defaultLandingPage,
+    defaultLanguage,
+    defaultUserRoleCode,
+    demoModeEnabled,
+    financialYearStartMonth,
+    legalName,
+    numberFormat,
+    organisationName,
+    organisationShortName,
+    pendingFaviconFile,
+    primaryColor,
+    receiptBankAccountName,
+    receiptBankAccountNumber,
+    receiptBankBranch,
+    receiptBankName,
+    receiptBankSwiftCode,
+    requiresDepartmentOnInvoices,
+    requiresFundOnInvoices,
+    requiresProjectOnInvoices,
+    secondaryAccentColor,
+    secondaryColor,
+    system,
+    timezone,
+  ]);
 
   async function onPickFavicon() {
     faviconInputRef.current?.click();
@@ -335,6 +420,8 @@ export function SettingsSystemPage() {
         requiresFundOnInvoices,
         arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
         defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
+        arRefundClearingAccountId: arRefundClearingAccountId.trim() ? arRefundClearingAccountId.trim() : null,
+        arCashClearingAccountId: arCashClearingAccountId.trim() ? arCashClearingAccountId.trim() : null,
       });
 
       setSystem(updated);
@@ -389,7 +476,7 @@ export function SettingsSystemPage() {
           </Button>
           <Button
             variant="accent"
-            disabled={loading || saving || !system || !isDirty || !organisationName.trim()}
+            disabled={loading || saving || !system || !isDirty || !organisationName.trim() || !canSystemConfigUpdate}
             onClick={() => void onSave()}
             title={!organisationName.trim() ? 'Organisation name is required' : !isDirty ? 'No changes to save' : undefined}
           >
@@ -653,6 +740,194 @@ export function SettingsSystemPage() {
                           setDefaultBankClearingAccountId(a.id);
                           setBankClearingSearch(`${a.code} – ${a.name}`);
                           setBankClearingPickerOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          background: 'transparent',
+                          border: 0,
+                          borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary }}>{a.code}</div>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{a.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Field>
+
+            <Field
+              label="AR Refund Clearing Account"
+              hint="Required to post BANK refunds. This is AR_REFUND_CLEARING_ACCOUNT_ID. Search by account code or name. Asset accounts only."
+            >
+              <div
+                style={{ position: 'relative' }}
+                onFocus={() => setArRefundClearingPickerOpen(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setArRefundClearingPickerOpen(false), 150);
+                }}
+              >
+                <Input
+                  value={arRefundClearingSearch}
+                  disabled={loading || saving || !system || accountsLoading}
+                  onChange={(e) => {
+                    setArRefundClearingSearch(e.target.value);
+                    setArRefundClearingPickerOpen(true);
+                  }}
+                  placeholder={
+                    selectedArRefundClearingAccount
+                      ? `${selectedArRefundClearingAccount.code} – ${selectedArRefundClearingAccount.name}`
+                      : 'Search account…'
+                  }
+                />
+
+                {accountsError ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.status.errorBorder }}>
+                    {accountsError}
+                  </div>
+                ) : null}
+
+                {selectedArRefundClearingAccount ? (
+                  <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+                      Selected: <b>{selectedArRefundClearingAccount.code}</b> — {selectedArRefundClearingAccount.name}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      disabled={loading || saving || !system}
+                      onClick={() => {
+                        setArRefundClearingAccountId('');
+                        setArRefundClearingSearch('');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                ) : null}
+
+                {arRefundClearingPickerOpen && !accountsLoading && arRefundClearingCandidates.length > 0 ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      left: 0,
+                      right: 0,
+                      marginTop: 6,
+                      border: `1px solid ${tokens.colors.border.default}`,
+                      borderRadius: 10,
+                      background: '#fff',
+                      boxShadow: '0 10px 24px rgba(11,12,30,0.12)',
+                      overflow: 'hidden',
+                      maxHeight: 280,
+                    }}
+                  >
+                    {arRefundClearingCandidates.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setArRefundClearingAccountId(a.id);
+                          setArRefundClearingSearch(`${a.code} – ${a.name}`);
+                          setArRefundClearingPickerOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          background: 'transparent',
+                          border: 0,
+                          borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary }}>{a.code}</div>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{a.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Field>
+
+            <Field
+              label="AR Cash Clearing Account"
+              hint="Required to post CASH refunds. This is AR_CASH_CLEARING_ACCOUNT_ID. Search by account code or name. Asset accounts only."
+            >
+              <div
+                style={{ position: 'relative' }}
+                onFocus={() => setArCashClearingPickerOpen(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setArCashClearingPickerOpen(false), 150);
+                }}
+              >
+                <Input
+                  value={arCashClearingSearch}
+                  disabled={loading || saving || !system || accountsLoading}
+                  onChange={(e) => {
+                    setArCashClearingSearch(e.target.value);
+                    setArCashClearingPickerOpen(true);
+                  }}
+                  placeholder={
+                    selectedArCashClearingAccount
+                      ? `${selectedArCashClearingAccount.code} – ${selectedArCashClearingAccount.name}`
+                      : 'Search account…'
+                  }
+                />
+
+                {accountsError ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.status.errorBorder }}>
+                    {accountsError}
+                  </div>
+                ) : null}
+
+                {selectedArCashClearingAccount ? (
+                  <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+                      Selected: <b>{selectedArCashClearingAccount.code}</b> — {selectedArCashClearingAccount.name}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      disabled={loading || saving || !system}
+                      onClick={() => {
+                        setArCashClearingAccountId('');
+                        setArCashClearingSearch('');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                ) : null}
+
+                {arCashClearingPickerOpen && !accountsLoading && arCashClearingCandidates.length > 0 ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      zIndex: 20,
+                      left: 0,
+                      right: 0,
+                      marginTop: 6,
+                      border: `1px solid ${tokens.colors.border.default}`,
+                      borderRadius: 10,
+                      background: '#fff',
+                      boxShadow: '0 10px 24px rgba(11,12,30,0.12)',
+                      overflow: 'hidden',
+                      maxHeight: 280,
+                    }}
+                  >
+                    {arCashClearingCandidates.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setArCashClearingAccountId(a.id);
+                          setArCashClearingSearch(`${a.code} – ${a.name}`);
+                          setArCashClearingPickerOpen(false);
                         }}
                         style={{
                           width: '100%',

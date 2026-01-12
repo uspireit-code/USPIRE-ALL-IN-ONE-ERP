@@ -4,7 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
-import { createCreditNote, getInvoiceById, type CustomerInvoice } from '../../services/ar';
+import { createCreditNote, getInvoiceById, listEligibleCreditNoteCustomers, listEligibleCreditNoteInvoices, type CustomerInvoice, type EligibleCreditNoteCustomerRow, type EligibleCreditNoteInvoiceRow } from '../../services/ar';
 
 function round2(n: number) {
   return Math.round(Number(n ?? 0) * 100) / 100;
@@ -21,7 +21,16 @@ export function CreditNoteCreatePage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('AR_CREDIT_NOTE_CREATE');
+  const canCreate = hasPermission('CREDIT_NOTE_CREATE');
+
+  const [customers, setCustomers] = useState<EligibleCreditNoteCustomerRow[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customersError, setCustomersError] = useState<string | null>(null);
+  const [customerId, setCustomerId] = useState('');
+
+  const [postedInvoices, setPostedInvoices] = useState<EligibleCreditNoteInvoiceRow[]>([]);
+  const [postedInvoicesLoading, setPostedInvoicesLoading] = useState(false);
+  const [postedInvoicesError, setPostedInvoicesError] = useState<string | null>(null);
 
   const [invoiceId, setInvoiceId] = useState('');
   const [invoice, setInvoice] = useState<CustomerInvoice | null>(null);
@@ -40,6 +49,61 @@ export function CreditNoteCreatePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+    setCustomersLoading(true);
+    setCustomersError(null);
+    listEligibleCreditNoteCustomers()
+      .then((resp) => {
+        if (!mounted) return;
+        setCustomers(resp.items ?? []);
+      })
+      .catch((e: any) => {
+        if (!mounted) return;
+        setCustomers([]);
+        setCustomersError(getApiErrorMessage(e, 'Failed to load customers'));
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setCustomersLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!customerId) {
+      setPostedInvoices([]);
+      setInvoiceId('');
+      setInvoice(null);
+      return;
+    }
+
+    let mounted = true;
+    setPostedInvoicesLoading(true);
+    setPostedInvoicesError(null);
+
+    listEligibleCreditNoteInvoices(customerId)
+      .then((res) => {
+        if (!mounted) return;
+        setPostedInvoices(res.items ?? []);
+      })
+      .catch((e: any) => {
+        if (!mounted) return;
+        setPostedInvoices([]);
+        setPostedInvoicesError(getApiErrorMessage(e, 'Failed to load posted invoices'));
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setPostedInvoicesLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [customerId]);
+
+  useEffect(() => {
     if (!invoiceId) {
       setInvoice(null);
       return;
@@ -55,6 +119,16 @@ export function CreditNoteCreatePage() {
         setInvoice(inv);
         setCurrency(inv.currency);
         setExchangeRate(String(inv.exchangeRate ?? 1));
+
+        const defaultLines = (inv.lines ?? []).map((l) => ({
+          description: String(l.description ?? '').trim(),
+          quantity: String(Number(l.quantity ?? 1)),
+          unitPrice: String(Number(l.unitPrice ?? 0)),
+          revenueAccountId: String(l.accountId ?? '').trim(),
+        }));
+        if (defaultLines.length > 0) {
+          setLines(defaultLines);
+        }
       })
       .catch((e: any) => {
         if (!mounted) return;
@@ -83,14 +157,24 @@ export function CreditNoteCreatePage() {
 
   async function onSave() {
     if (!canCreate) {
-      setError('Permission denied');
+      setError('You don’t have permission to create credit notes. Required: CREDIT_NOTE_CREATE.');
       return;
     }
 
     setError(null);
 
+    if (!customerId) {
+      setError('Customer is required');
+      return;
+    }
+
     if (!invoiceId) {
       setError('Original invoice is required');
+      return;
+    }
+
+    if (!invoice || String(invoice.status ?? '').toUpperCase() !== 'POSTED') {
+      setError('Invoice must be POSTED');
       return;
     }
 
@@ -133,17 +217,11 @@ export function CreditNoteCreatePage() {
       }
     }
 
-    const invCustomerId = invoice?.customerId;
-    if (!invCustomerId) {
-      setError('Invoice customer could not be resolved');
-      return;
-    }
-
     setSaving(true);
     try {
       const created = await createCreditNote({
         creditNoteDate,
-        customerId: invCustomerId,
+        customerId,
         invoiceId,
         memo: memo || undefined,
         currency: currency || 'ZAR',
@@ -174,14 +252,43 @@ export function CreditNoteCreatePage() {
       {error ? <div style={{ color: 'crimson', marginBottom: 12 }}>{error}</div> : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
-        <div>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Original Invoice (required)</div>
-          <input
+        <div style={{ gridColumn: '1 / span 2' }}>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Customer (required)</div>
+          <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ width: '100%' }} disabled={customersLoading}>
+            <option value="">(select customer)</option>
+            {(customers ?? []).map((c) => (
+              <option key={c.customerId} value={c.customerId}>
+                {c.customerName}{c.customerCode ? ` (${c.customerCode})` : ''}
+              </option>
+            ))}
+          </select>
+          {customersLoading ? <div style={{ fontSize: 12, marginTop: 4 }}>Loading customers…</div> : null}
+          {customersError ? <div style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{customersError}</div> : null}
+          {!customersLoading && !customersError && (customers ?? []).length === 0 ? (
+            <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>No customers with posted invoices found.</div>
+          ) : null}
+        </div>
+
+        <div style={{ gridColumn: '1 / span 2' }}>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Original Invoice (POSTED) (required)</div>
+          <select
             value={invoiceId}
             onChange={(e) => setInvoiceId(e.target.value)}
-            placeholder="Paste Invoice ID (POSTED)"
             style={{ width: '100%' }}
-          />
+            disabled={!customerId || postedInvoicesLoading}
+          >
+            <option value="">(select posted invoice)</option>
+            {(postedInvoices ?? []).map((inv) => (
+              <option key={inv.invoiceId} value={inv.invoiceId}>
+                {inv.invoiceNumber} - bal {formatMoney(Number(inv.outstandingBalance ?? 0))} {inv.currency}
+              </option>
+            ))}
+          </select>
+          {postedInvoicesLoading ? <div style={{ fontSize: 12, marginTop: 4 }}>Loading posted invoices…</div> : null}
+          {postedInvoicesError ? <div style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{postedInvoicesError}</div> : null}
+          {customerId && !postedInvoicesLoading && !postedInvoicesError && (postedInvoices ?? []).length === 0 ? (
+            <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>No posted invoices found for this customer.</div>
+          ) : null}
           {loadingInvoices ? <div style={{ fontSize: 12, marginTop: 4 }}>Loading invoice…</div> : null}
           {invoiceError ? <div style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{invoiceError}</div> : null}
         </div>
@@ -275,6 +382,7 @@ export function CreditNoteCreatePage() {
                       }
                       placeholder="Revenue account ID"
                       style={{ width: '100%' }}
+                      disabled
                     />
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(amount)}</td>

@@ -123,8 +123,12 @@ function ModalShell(props: {
 }
 
 export function SettingsUsersPage() {
-  const { state } = useAuth();
+  const { state, hasPermission } = useAuth();
   const me = state.me?.user;
+
+  const canCreateUser = hasPermission('USER_CREATE');
+  const canEditUser = hasPermission('USER_EDIT');
+  const canAssignRoles = hasPermission('ROLE_ASSIGN');
 
   const [users, setUsers] = useState<SettingsUser[]>([]);
   const [roles, setRoles] = useState<SettingsRole[]>([]);
@@ -290,7 +294,12 @@ export function SettingsUsersPage() {
           <div style={{ fontSize: 22, fontWeight: 750, color: '#0B0C1E' }}>Users</div>
           <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(11,12,30,0.62)' }}>Manage system users and assign roles.</div>
         </div>
-        <Button variant="accent" onClick={() => setShowCreate(true)}>
+        <Button
+          variant="accent"
+          onClick={() => setShowCreate(true)}
+          disabled={!canCreateUser}
+          title={!canCreateUser ? 'You do not have permission to create users. Required: USER_CREATE.' : undefined}
+        >
           Add User
         </Button>
       </div>
@@ -366,13 +375,30 @@ export function SettingsUsersPage() {
                       <Button
                         size="sm"
                         variant={u.status === 'ACTIVE' ? 'destructive' : 'secondary'}
-                        disabled={!canActOn(u)}
-                        title={!canActOn(u) ? 'You cannot change your own status' : undefined}
+                        disabled={!canActOn(u) || !canEditUser}
+                        title={
+                          !canActOn(u)
+                            ? 'You cannot change your own status'
+                            : !canEditUser
+                              ? 'You do not have permission to edit users. Required: USER_EDIT.'
+                              : undefined
+                        }
                         onClick={() => onToggleStatus(u)}
                       >
                         {u.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                       </Button>
-                      <Button size="sm" disabled={!canActOn(u)} title={!canActOn(u) ? 'You cannot change your own roles' : undefined} onClick={() => openAssignRoles(u)}>
+                      <Button
+                        size="sm"
+                        disabled={!canActOn(u) || !canAssignRoles}
+                        title={
+                          !canActOn(u)
+                            ? 'You cannot change your own roles'
+                            : !canAssignRoles
+                              ? 'You do not have permission to assign roles. Required: ROLE_ASSIGN.'
+                              : undefined
+                        }
+                        onClick={() => openAssignRoles(u)}
+                      >
                         Assign Roles
                       </Button>
                     </div>

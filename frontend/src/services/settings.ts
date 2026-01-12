@@ -44,6 +44,8 @@ export type TenantSystemConfig = {
   requiresFundOnInvoices?: boolean;
   arControlAccountId?: string | null;
   defaultBankClearingAccountId?: string | null;
+  arRefundClearingAccountId?: string | null;
+  arCashClearingAccountId?: string | null;
   unappliedReceiptsAccountId?: string | null;
   updatedAt: string;
 };

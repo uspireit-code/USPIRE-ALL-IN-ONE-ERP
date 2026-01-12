@@ -4,16 +4,31 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
-import { createRefund, getRefundableForCreditNote, type RefundPaymentMethod } from '../../services/ar';
+import { createRefund, getRefundableForCreditNote, listRefundableCreditNotes, listRefundableCustomers, type RefundableCustomerRow, type RefundPaymentMethod, type RefundableCreditNoteRow } from '../../services/ar';
 import { listBankAccounts, type BankAccount } from '../../services/payments';
 
 export function RefundCreatePage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('AR_REFUND_CREATE');
+  const canCreate = hasPermission('REFUND_CREATE');
 
-  const [creditNoteId, setCreditNoteId] = useState('');
+  const [form, setForm] = useState(() => ({
+    customerId: '',
+    postedCreditNoteId: '',
+    refundDate: new Date().toISOString().slice(0, 10),
+    amount: '0',
+    currency: '',
+    exchangeRate: 1,
+    paymentMethod: 'BANK' as RefundPaymentMethod,
+    bankAccountId: '',
+  }));
+
+  const [customers, setCustomers] = useState<RefundableCustomerRow[]>([]);
+
+  const [creditNotes, setCreditNotes] = useState<RefundableCreditNoteRow[]>([]);
+  const [creditNotesLoading, setCreditNotesLoading] = useState(false);
+  const [creditNotesError, setCreditNotesError] = useState<string | null>(null);
   const [refundable, setRefundable] = useState<null | {
     creditNoteNumber: string;
     creditNoteDate?: string | null;
@@ -23,11 +38,6 @@ export function RefundCreatePage() {
     refunded: number;
     refundable: number;
   }>(null);
-
-  const [refundDate, setRefundDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [amount, setAmount] = useState('0');
-  const [paymentMethod, setPaymentMethod] = useState<RefundPaymentMethod>('BANK');
-  const [bankAccountId, setBankAccountId] = useState('');
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
@@ -42,8 +52,74 @@ export function RefundCreatePage() {
   }, []);
 
   useEffect(() => {
-    if (!creditNoteId) {
+    let mounted = true;
+    listRefundableCustomers()
+      .then((resp) => {
+        if (!mounted) return;
+        setCustomers(resp.items ?? []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCustomers([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!form.customerId) {
+      setCreditNotes([]);
+      setForm((prev) => ({
+        ...prev,
+        postedCreditNoteId: '',
+        currency: '',
+        exchangeRate: 1,
+      }));
       setRefundable(null);
+      return;
+    }
+
+    let mounted = true;
+    setCreditNotesLoading(true);
+    setCreditNotesError(null);
+
+    listRefundableCreditNotes(form.customerId)
+      .then((res) => {
+        if (!mounted) return;
+        const items = res.items ?? [];
+        setCreditNotes(items);
+
+        if (items.length === 1) {
+          setForm((prev) => ({
+            ...prev,
+            postedCreditNoteId: items[0].id,
+          }));
+        }
+      })
+      .catch((e: any) => {
+        if (!mounted) return;
+        setCreditNotes([]);
+        setCreditNotesError(getApiErrorMessage(e, 'Failed to load refundable credit notes'));
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setCreditNotesLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [form.customerId]);
+
+  useEffect(() => {
+    if (!form.postedCreditNoteId) {
+      setRefundable(null);
+      setForm((prev) => ({
+        ...prev,
+        currency: '',
+        exchangeRate: 1,
+      }));
       return;
     }
 
@@ -51,7 +127,7 @@ export function RefundCreatePage() {
     setLoading(true);
     setError(null);
 
-    getRefundableForCreditNote(creditNoteId)
+    getRefundableForCreditNote(form.postedCreditNoteId)
       .then((res) => {
         if (!mounted) return;
         setRefundable({
@@ -63,6 +139,12 @@ export function RefundCreatePage() {
           refunded: Number(res.refunded ?? 0),
           refundable: Number(res.refundable ?? 0),
         });
+        setForm((prev) => ({
+          ...prev,
+          amount: String(Number(res.refundable ?? 0)),
+          currency: String(res.creditNote.currency ?? ''),
+          exchangeRate: Number((res.creditNote as any).exchangeRate ?? 1),
+        }));
       })
       .catch((e: any) => {
         if (!mounted) return;
@@ -77,24 +159,29 @@ export function RefundCreatePage() {
     return () => {
       mounted = false;
     };
-  }, [creditNoteId]);
+  }, [form.postedCreditNoteId]);
 
-  const requireBankAccount = paymentMethod === 'BANK';
+  const requireBankAccount = form.paymentMethod === 'BANK';
 
   const selectedBank = useMemo(() => {
-    if (!bankAccountId) return null;
-    return (bankAccounts ?? []).find((b) => b.id === bankAccountId) ?? null;
-  }, [bankAccountId, bankAccounts]);
+    if (!form.bankAccountId) return null;
+    return (bankAccounts ?? []).find((b) => b.id === form.bankAccountId) ?? null;
+  }, [form.bankAccountId, bankAccounts]);
 
   async function onSave() {
     if (!canCreate) {
-      setError('Permission denied');
+      setError('You don’t have permission to create refunds. Required: REFUND_CREATE.');
       return;
     }
 
     setError(null);
 
-    if (!creditNoteId) {
+    if (!form.customerId) {
+      setError('Customer is required');
+      return;
+    }
+
+    if (!form.postedCreditNoteId) {
       setError('Posted credit note is required');
       return;
     }
@@ -104,13 +191,13 @@ export function RefundCreatePage() {
       return;
     }
 
-    const amt = Number(amount || 0);
+    const amt = Number(form.amount || 0);
     if (!(amt > 0)) {
       setError('Refund amount must be > 0');
       return;
     }
 
-    if (requireBankAccount && !bankAccountId) {
+    if (requireBankAccount && !form.bankAccountId) {
       setError('Bank account is required for BANK refunds');
       return;
     }
@@ -118,14 +205,14 @@ export function RefundCreatePage() {
     setSaving(true);
     try {
       const created = await createRefund({
-        refundDate,
+        refundDate: form.refundDate,
         customerId: refundable.customerId,
-        creditNoteId,
-        currency: refundable.currency,
-        exchangeRate: 1,
+        creditNoteId: form.postedCreditNoteId,
+        currency: form.currency || refundable.currency,
+        exchangeRate: form.exchangeRate,
         amount: amt,
-        paymentMethod,
-        bankAccountId: requireBankAccount ? bankAccountId : undefined,
+        paymentMethod: form.paymentMethod,
+        bankAccountId: requireBankAccount ? form.bankAccountId : undefined,
       });
 
       navigate(`/finance/ar/refunds/${created.id}`);
@@ -152,8 +239,52 @@ export function RefundCreatePage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
         <div style={{ gridColumn: '1 / span 2' }}>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Posted Credit Note ID (required)</div>
-          <input value={creditNoteId} onChange={(e) => setCreditNoteId(e.target.value)} placeholder="Paste POSTED creditNoteId" style={{ width: '100%' }} />
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Customer (required)</div>
+          <select
+            value={form.customerId}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                customerId: e.target.value,
+              }))
+            }
+            style={{ width: '100%' }}
+            disabled={Boolean(form.postedCreditNoteId)}
+          >
+            <option value="">(select customer)</option>
+            {(customers ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ gridColumn: '1 / span 2' }}>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Posted Credit Note (required)</div>
+          <select
+            value={form.postedCreditNoteId ?? ''}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                postedCreditNoteId: e.target.value,
+              }))
+            }
+            style={{ width: '100%' }}
+            disabled={!form.customerId || creditNotesLoading}
+          >
+            <option value="">(select posted credit note)</option>
+            {(creditNotes ?? []).map((cn) => (
+              <option key={cn.id} value={cn.id}>
+                {cn.creditNoteNumber} {cn.creditNoteDate ? `(${cn.creditNoteDate})` : ''} - refundable {formatMoney(Number(cn.refundable ?? 0))}
+              </option>
+            ))}
+          </select>
+          {creditNotesLoading ? <div style={{ fontSize: 12, marginTop: 4 }}>Loading refundable credit notes…</div> : null}
+          {creditNotesError ? <div style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>{creditNotesError}</div> : null}
+          {form.customerId && !creditNotesLoading && !creditNotesError && (creditNotes ?? []).length === 0 ? (
+            <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>No refundable credit notes available.</div>
+          ) : null}
           {loading ? <div style={{ fontSize: 12, marginTop: 4 }}>Loading refundable balance…</div> : null}
         </div>
 
@@ -181,17 +312,30 @@ export function RefundCreatePage() {
 
         <div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>Refund Date</div>
-          <input type="date" value={refundDate} onChange={(e) => setRefundDate(e.target.value)} style={{ width: '100%' }} />
+          <input
+            type="date"
+            value={form.refundDate}
+            onChange={(e) => setForm((prev) => ({ ...prev, refundDate: e.target.value }))}
+            style={{ width: '100%' }}
+          />
         </div>
 
         <div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>Refund Amount</div>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: '100%' }} />
+          <input
+            value={form.amount}
+            onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+            style={{ width: '100%' }}
+          />
         </div>
 
         <div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>Payment Method</div>
-          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as RefundPaymentMethod)} style={{ width: '100%' }}>
+          <select
+            value={form.paymentMethod}
+            onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value as RefundPaymentMethod }))}
+            style={{ width: '100%' }}
+          >
             <option value="BANK">BANK</option>
             <option value="CASH">CASH</option>
           </select>
@@ -200,8 +344,8 @@ export function RefundCreatePage() {
         <div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>Bank Account (required for BANK)</div>
           <select
-            value={bankAccountId}
-            onChange={(e) => setBankAccountId(e.target.value)}
+            value={form.bankAccountId}
+            onChange={(e) => setForm((prev) => ({ ...prev, bankAccountId: e.target.value }))}
             style={{ width: '100%' }}
             disabled={!requireBankAccount}
           >

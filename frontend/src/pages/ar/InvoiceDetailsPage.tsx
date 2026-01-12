@@ -13,7 +13,7 @@ export function InvoiceDetailsPage() {
   const { id } = useParams();
   const { hasPermission } = useAuth();
 
-  const canPost = hasPermission('AR_INVOICE_POST');
+  const canPost = hasPermission('INVOICE_POST');
 
   const [invoice, setInvoice] = useState<CustomerInvoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -226,7 +226,14 @@ export function InvoiceDetailsPage() {
         setInvoice(refreshed);
       }
     } catch (err: any) {
-      setActionError(getApiErrorMessage(err, 'Action failed'));
+      const msg = getApiErrorMessage(err, 'Action failed');
+      if (String(msg).includes('Missing permission: INVOICE_POST')) {
+        setActionError(
+          "You don’t have permission to post this invoice. Required: INVOICE_POST.",
+        );
+      } else {
+        setActionError(msg);
+      }
     } finally {
       setActing(false);
     }
@@ -324,9 +331,14 @@ export function InvoiceDetailsPage() {
       </div>
 
       <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-        <button onClick={() => runAction()} disabled={!allowed.post || acting || Boolean(postBlockedReason)}>
-          Post
-        </button>
+        {allowed.post ? (
+          <button
+            onClick={() => runAction()}
+            disabled={acting || Boolean(postBlockedReason)}
+          >
+            Post
+          </button>
+        ) : null}
         {allowed.export ? (
           <>
             <button type="button" onClick={() => void onExport('html')} disabled={exportBusy}>

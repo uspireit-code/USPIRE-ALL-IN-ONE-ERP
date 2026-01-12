@@ -79,33 +79,26 @@ export class PermissionsGuard implements CanActivate {
       }
     }
 
-    const hasSystemViewAll = codes.has('SYSTEM_VIEW_ALL');
     const satisfiedBySystemView = new Set<string>();
-    if (hasSystemViewAll) {
-      for (const p of required) {
-        if (permissionIsView(p)) satisfiedBySystemView.add(p);
-      }
-    }
 
     if (mode === 'all') {
       const missing = required.filter(
         (p) => !codes.has(p) && !satisfiedBySystemView.has(p),
       );
       if (missing.length > 0) {
-        throw new ForbiddenException({
-          error: 'Access denied',
-          missingPermissions: missing,
-        });
+        if (missing[0] === 'RECEIPT_POST') {
+          throw new ForbiddenException(
+            'You do not have permission to post receipts. Required: RECEIPT_POST.',
+          );
+        }
+        throw new ForbiddenException(`Missing permission: ${missing[0]}`);
       }
     } else {
       const hasAny = required.some(
         (p) => codes.has(p) || satisfiedBySystemView.has(p),
       );
       if (!hasAny) {
-        throw new ForbiddenException({
-          error: 'Access denied',
-          missingAnyOfPermissions: required,
-        });
+        throw new ForbiddenException(`Missing permission: ${required[0]}`);
       }
     }
 

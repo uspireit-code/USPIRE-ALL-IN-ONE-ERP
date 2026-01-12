@@ -1338,6 +1338,14 @@ export class ArReceiptsService {
     });
     if (!existing) throw new NotFoundException('Receipt not found');
 
+    const roleNames = await this.prisma.userRole
+      .findMany({
+        where: { userId: user.id, role: { tenantId: tenant.id } },
+        select: { role: { select: { name: true } } },
+      })
+      .then((rows) => rows.map((r) => r.role.name))
+      .catch(() => [] as string[]);
+
     if (existing.status === 'POSTED') {
       return this.getReceiptById(req, id);
     }
@@ -1712,15 +1720,19 @@ export class ArReceiptsService {
             eventType: 'AR_POST',
             entityType: 'CUSTOMER_RECEIPT',
             entityId: id,
-            action: 'AR_RECEIPT_POST',
+            action: 'RECEIPT_POSTED',
             outcome: 'SUCCESS',
             reason: JSON.stringify({
+              receiptId: id,
+              previousStatus: String(existing.status),
+              newStatus: 'POSTED',
               journalId: postedJournal.id,
               preparedById: existing.createdById,
-              postedById: user.id,
+              performedById: user.id,
+              performedByRoles: roleNames,
             }),
             userId: user.id,
-            permissionUsed: 'AR_RECEIPTS_CREATE',
+            permissionUsed: 'RECEIPT_POST',
           } as any,
         })
         .catch(() => undefined);

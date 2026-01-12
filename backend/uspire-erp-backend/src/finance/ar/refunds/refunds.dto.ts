@@ -40,6 +40,9 @@ export class CreateCustomerRefundDto {
   bankAccountId?: string;
 }
 
+export class SubmitRefundDto {
+}
+
 export class ApproveRefundDto {
 }
 
@@ -54,7 +57,7 @@ export class VoidRefundDto {
 export class ListRefundsQueryDto {
   @IsOptional()
   @IsString()
-  status?: 'DRAFT' | 'APPROVED' | 'POSTED' | 'VOID';
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'POSTED' | 'VOID';
 
   @IsOptional()
   @IsUUID()

@@ -21,8 +21,8 @@ export function RefundsListPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('AR_REFUND_VIEW');
-  const canCreate = hasPermission('AR_REFUND_CREATE');
+  const canView = hasPermission('REFUND_VIEW') || hasPermission('REFUND_CREATE');
+  const canCreate = hasPermission('REFUND_CREATE');
 
   const [rows, setRows] = useState<RefundListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +69,7 @@ export function RefundsListPage() {
   }, [canView]);
 
   const content = useMemo(() => {
-    if (!canView) return <div style={{ color: 'crimson' }}>Permission denied</div>;
+    if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view refunds. Required: REFUND_VIEW.</div>;
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 

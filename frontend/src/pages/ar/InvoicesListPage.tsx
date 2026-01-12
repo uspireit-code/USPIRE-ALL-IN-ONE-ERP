@@ -18,9 +18,9 @@ import { formatMoney } from '../../money';
 
 export function InvoicesListPage() {
   const { hasPermission } = useAuth();
-  const canCreateInvoice = hasPermission('AR_INVOICE_CREATE');
-  const canImportInvoices = hasPermission('AR_INVOICE_CREATE');
-  const canPostInvoices = hasPermission('AR_INVOICE_POST');
+  const canCreateInvoice = hasPermission('INVOICE_CREATE');
+  const canImportInvoices = hasPermission('INVOICE_CREATE');
+  const canPostInvoices = hasPermission('INVOICE_POST');
 
   const [rows, setRows] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);

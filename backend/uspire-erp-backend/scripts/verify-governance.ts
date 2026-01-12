@@ -269,34 +269,38 @@ async function main() {
   console.log('\nGovernance verification PASSED');
 
   const creditRefundForbiddenAdmin = [
-    'AR_CREDIT_NOTE_CREATE',
-    'AR_CREDIT_NOTE_VIEW',
-    'AR_CREDIT_NOTE_SUBMIT',
-    'AR_CREDIT_NOTE_APPROVE',
-    'AR_CREDIT_NOTE_POST',
-    'AR_CREDIT_NOTE_VOID',
-    'AR_REFUND_VIEW',
-    'AR_REFUND_CREATE',
-    'AR_REFUND_APPROVE',
-    'AR_REFUND_POST',
-    'AR_REFUND_VOID',
+    'CREDIT_NOTE_CREATE',
+    'CREDIT_NOTE_VIEW',
+    'CREDIT_NOTE_APPROVE',
+    'CREDIT_NOTE_POST',
+    'CREDIT_NOTE_VOID',
+    'REFUND_VIEW',
+    'REFUND_CREATE',
+    'REFUND_SUBMIT',
+    'REFUND_APPROVE',
+    'REFUND_POST',
+    'REFUND_VOID',
   ];
 
-  const expectedOfficerCreditNote = ['AR_CREDIT_NOTE_CREATE', 'AR_CREDIT_NOTE_VIEW'];
-  const expectedOfficerRefund = ['AR_REFUND_VIEW', 'AR_REFUND_CREATE'];
+  const expectedOfficerCreditNote = ['CREDIT_NOTE_CREATE', 'CREDIT_NOTE_VIEW', 'CREDIT_NOTE_SUBMIT'];
+  const expectedOfficerRefund = ['REFUND_VIEW', 'REFUND_CREATE', 'REFUND_SUBMIT'];
 
-  const expectedManagerCreditNote = ['AR_CREDIT_NOTE_APPROVE', 'AR_CREDIT_NOTE_VIEW'];
-  const expectedManagerRefund = ['AR_REFUND_VIEW', 'AR_REFUND_APPROVE'];
+  const expectedManagerCreditNote = ['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_APPROVE'];
+  const expectedManagerRefund = ['REFUND_VIEW', 'REFUND_APPROVE'];
 
-  const expectedControllerCreditNote = ['AR_CREDIT_NOTE_POST', 'AR_CREDIT_NOTE_VOID', 'AR_CREDIT_NOTE_VIEW'];
-  const expectedControllerRefund = ['AR_REFUND_VIEW', 'AR_REFUND_POST', 'AR_REFUND_VOID'];
+  const expectedControllerCreditNote = ['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_POST'];
+  const expectedControllerRefund = ['REFUND_VIEW', 'REFUND_POST'];
+
+  const expectedSuperadminCreditNote = ['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_VOID'];
+  const expectedSuperadminRefund: string[] = [];
 
   let hasCreditRefundFailure = false;
 
   if (superadmin) {
     const perms = flattenUserPermissions(superadmin);
-    const present = requireNone(perms, creditRefundForbiddenAdmin, 'SUPERADMIN');
-    if (present.length > 0) hasCreditRefundFailure = true;
+    const r1 = requireExactSubset(perms, expectedSuperadminCreditNote, 'CREDIT_NOTE_', 'SUPERADMIN');
+    const r2 = requireExactSubset(perms, expectedSuperadminRefund, 'REFUND_', 'SUPERADMIN');
+    if (r1.missing.length || r1.extra.length || r2.missing.length || r2.extra.length) hasCreditRefundFailure = true;
   }
   if (sysadmin) {
     const perms = flattenUserPermissions(sysadmin);
@@ -306,22 +310,22 @@ async function main() {
 
   if (officer) {
     const perms = flattenUserPermissions(officer);
-    const r1 = requireExactSubset(perms, expectedOfficerCreditNote, 'AR_CREDIT_NOTE_', 'FINANCE_OFFICER');
-    const r2 = requireExactSubset(perms, expectedOfficerRefund, 'AR_REFUND_', 'FINANCE_OFFICER');
+    const r1 = requireExactSubset(perms, expectedOfficerCreditNote, 'CREDIT_NOTE_', 'FINANCE_OFFICER');
+    const r2 = requireExactSubset(perms, expectedOfficerRefund, 'REFUND_', 'FINANCE_OFFICER');
     if (r1.missing.length || r1.extra.length || r2.missing.length || r2.extra.length) hasCreditRefundFailure = true;
   }
 
   if (manager) {
     const perms = flattenUserPermissions(manager);
-    const r1 = requireExactSubset(perms, expectedManagerCreditNote, 'AR_CREDIT_NOTE_', 'FINANCE_MANAGER');
-    const r2 = requireExactSubset(perms, expectedManagerRefund, 'AR_REFUND_', 'FINANCE_MANAGER');
+    const r1 = requireExactSubset(perms, expectedManagerCreditNote, 'CREDIT_NOTE_', 'FINANCE_MANAGER');
+    const r2 = requireExactSubset(perms, expectedManagerRefund, 'REFUND_', 'FINANCE_MANAGER');
     if (r1.missing.length || r1.extra.length || r2.missing.length || r2.extra.length) hasCreditRefundFailure = true;
   }
 
   if (controller) {
     const perms = flattenUserPermissions(controller);
-    const r1 = requireExactSubset(perms, expectedControllerCreditNote, 'AR_CREDIT_NOTE_', 'FINANCE_CONTROLLER');
-    const r2 = requireExactSubset(perms, expectedControllerRefund, 'AR_REFUND_', 'FINANCE_CONTROLLER');
+    const r1 = requireExactSubset(perms, expectedControllerCreditNote, 'CREDIT_NOTE_', 'FINANCE_CONTROLLER');
+    const r2 = requireExactSubset(perms, expectedControllerRefund, 'REFUND_', 'FINANCE_CONTROLLER');
     if (r1.missing.length || r1.extra.length || r2.missing.length || r2.extra.length) hasCreditRefundFailure = true;
   }
 

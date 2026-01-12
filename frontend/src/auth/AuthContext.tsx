@@ -40,6 +40,26 @@ export function AuthProvider(props: { children: React.ReactNode }) {
   const refreshMe = useCallback(async () => {
     if (!state.accessToken) return;
     const me = await apiFetch<AuthMeResponse>('/auth/me', { method: 'GET' });
+
+    if (import.meta.env.DEV) {
+      const perms = me?.permissions ?? [];
+      const arPerms = perms
+        .filter((p) =>
+          /^(AR_)?(INVOICE|RECEIPT|RECEIPTS|CREDIT_NOTE|REFUND)_(VIEW|CREATE|EDIT_DRAFT|POST)/i.test(p ?? ''),
+        )
+        .sort();
+
+      // TEMP DEBUG: prove what the UI received from /auth/me.
+      // eslint-disable-next-line no-console
+      console.log('[auth.me][frontend]', {
+        email: me?.user?.email,
+        tenantId: me?.tenant?.id,
+        permissionCount: perms.length,
+        arPermissionCount: arPerms.length,
+        arPermissions: arPerms,
+      });
+    }
+
     setState((s) => ({
       ...s,
       me,

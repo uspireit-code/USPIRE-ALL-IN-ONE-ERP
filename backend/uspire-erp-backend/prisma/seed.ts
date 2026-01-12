@@ -61,6 +61,39 @@ async function main() {
     update: {},
   });
 
+  const arControlAccount = await prisma.account.upsert({
+    where: {
+      tenantId_code: {
+        tenantId: tenant.id,
+        code: '11000',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      code: '11000',
+      name: 'Accounts Receivable Control',
+      type: 'ASSET' as any,
+      normalBalance: 'DEBIT' as any,
+      isActive: true,
+      isPosting: true,
+      isControlAccount: true,
+    } as any,
+    update: {
+      name: 'Accounts Receivable Control',
+      type: 'ASSET' as any,
+      normalBalance: 'DEBIT' as any,
+      isActive: true,
+      isPosting: true,
+      isControlAccount: true,
+    } as any,
+    select: { id: true },
+  });
+
+  await prisma.tenant.update({
+    where: { id: tenant.id },
+    data: { arControlAccountId: arControlAccount.id },
+  });
+
   const baselineChecklistItems: Array<{ code: string; label: string }> = [
     { code: 'BANK_RECONCILIATION', label: 'Bank reconciliations completed and reviewed' },
     { code: 'AP_RECONCILIATION', label: 'AP subledger reconciled to GL' },
@@ -110,12 +143,19 @@ async function main() {
     { code: 'SYSTEM_CONFIG_CHANGE', description: 'Change system configuration (non-finance)' },
     { code: 'FINANCE_CONFIG_CHANGE', description: 'Change finance configuration (governed)' },
 
+    { code: 'SYSTEM_CONFIG_VIEW', description: 'View system configuration' },
+    { code: 'SYSTEM_CONFIG_UPDATE', description: 'Update system configuration' },
+
     { code: 'USER_CREATE', description: 'Create users' },
     { code: 'USER_VIEW', description: 'View users' },
     { code: 'USER_EDIT', description: 'Edit users (status/profile)' },
     { code: 'USER_ASSIGN_ROLE', description: 'Assign roles to users' },
     { code: 'ROLE_VIEW', description: 'View roles' },
     { code: 'ROLE_ASSIGN', description: 'Assign permissions to roles' },
+
+    { code: 'RECEIPT_POST', description: 'Post receipts' },
+    { code: 'CREDIT_NOTE_POST', description: 'Post credit notes' },
+    { code: 'REFUND_POST', description: 'Post refunds' },
 
     { code: 'FINANCE_GL_VIEW', description: 'View General Ledger' },
     { code: 'FINANCE_GL_CREATE', description: 'Create draft journal entries and accounts' },
@@ -198,14 +238,19 @@ async function main() {
     { code: 'AP_INVOICE_VIEW', description: 'View supplier invoices' },
     { code: 'AR_CUSTOMER_CREATE', description: 'Create customers' },
     { code: 'AR_INVOICE_CREATE', description: 'Create customer invoices' },
+    { code: 'INVOICE_CREATE', description: 'Create customer invoices (alias)' },
     { code: 'AR_INVOICE_EDIT_DRAFT', description: 'Edit draft customer invoices' },
     { code: 'AR_INVOICE_SUBMIT', description: 'Submit customer invoices' },
     { code: 'AR_INVOICE_APPROVE', description: 'Approve customer invoices' },
     { code: 'AR_INVOICE_POST', description: 'Post customer invoices to GL' },
+    { code: 'INVOICE_POST', description: 'Post customer invoices to GL (governed)' },
     { code: 'AR_INVOICE_VIEW', description: 'View customer invoices' },
+    { code: 'INVOICE_VIEW', description: 'View customer invoices (alias)' },
     { code: 'AR_RECEIPTS_VIEW', description: 'View customer receipts' },
     { code: 'AR_RECEIPTS_CREATE', description: 'Create customer receipts' },
+    { code: 'RECEIPT_CREATE', description: 'Create customer receipts (alias)' },
     { code: 'AR_RECEIPT_VOID', description: 'Void customer receipts' },
+    { code: 'RECEIPT_VIEW', description: 'View customer receipts (alias)' },
 
     { code: 'AR_AGING_VIEW', description: 'View Accounts Receivable aging report' },
 
@@ -249,18 +294,32 @@ async function main() {
     { code: 'INVOICE_CATEGORY_UPDATE', description: 'Update invoice categories' },
     { code: 'INVOICE_CATEGORY_DISABLE', description: 'Disable invoice categories' },
 
+    { code: 'FINANCE_CONFIG_VIEW', description: 'View finance configuration (posting controls)' },
+    { code: 'FINANCE_CONFIG_UPDATE', description: 'Update finance configuration (posting controls)' },
+
     { code: 'AR_CREDIT_NOTE_CREATE', description: 'Create customer credit notes (draft)' },
+    { code: 'CREDIT_NOTE_CREATE', description: 'Create customer credit notes (alias)' },
     { code: 'AR_CREDIT_NOTE_VIEW', description: 'View customer credit notes' },
+    { code: 'CREDIT_NOTE_VIEW', description: 'View customer credit notes (alias)' },
     { code: 'AR_CREDIT_NOTE_SUBMIT', description: 'Submit customer credit notes for approval' },
+    { code: 'CREDIT_NOTE_SUBMIT', description: 'Submit customer credit notes for approval (alias)' },
     { code: 'AR_CREDIT_NOTE_APPROVE', description: 'Approve customer credit notes' },
+    { code: 'CREDIT_NOTE_APPROVE', description: 'Approve customer credit notes (alias)' },
     { code: 'AR_CREDIT_NOTE_POST', description: 'Post customer credit notes' },
     { code: 'AR_CREDIT_NOTE_VOID', description: 'Void customer credit notes' },
+    { code: 'CREDIT_NOTE_VOID', description: 'Void customer credit notes (alias)' },
 
     { code: 'AR_REFUND_VIEW', description: 'View customer refunds' },
+    { code: 'REFUND_VIEW', description: 'View customer refunds (alias)' },
     { code: 'AR_REFUND_CREATE', description: 'Create customer refunds (draft)' },
+    { code: 'REFUND_CREATE', description: 'Create customer refunds (alias)' },
+    { code: 'AR_REFUND_SUBMIT', description: 'Submit customer refunds for approval' },
+    { code: 'REFUND_SUBMIT', description: 'Submit customer refunds for approval (alias)' },
     { code: 'AR_REFUND_APPROVE', description: 'Approve customer refunds' },
+    { code: 'REFUND_APPROVE', description: 'Approve customer refunds (alias)' },
     { code: 'AR_REFUND_POST', description: 'Post customer refunds' },
     { code: 'AR_REFUND_VOID', description: 'Void customer refunds' },
+    { code: 'REFUND_VOID', description: 'Void customer refunds (alias)' },
   ];
 
   await prisma.permission.createMany({
@@ -421,6 +480,7 @@ async function main() {
           p.code !== 'FINANCE_GL_POST' &&
           p.code !== 'FINANCE_COA_UNLOCK' &&
           p.code !== 'AR_INVOICE_POST' &&
+          p.code !== 'INVOICE_POST' &&
           p.code !== 'AP_INVOICE_POST' &&
           p.code !== 'PAYMENT_POST' &&
           p.code !== 'FINANCE_PERIOD_CLOSE_APPROVE' &&
@@ -448,6 +508,7 @@ async function main() {
     'AR_INVOICE_SUBMIT',
     'AR_INVOICE_APPROVE',
     'AR_INVOICE_POST',
+    'INVOICE_POST',
 
     'AP_INVOICE_CREATE',
     'AP_INVOICE_SUBMIT',
@@ -468,18 +529,18 @@ async function main() {
 
     'TAX_CONFIG_UPDATE',
     'CREDIT_NOTE_APPROVE',
-    'REFUND_APPROVE',
     'AR_CREDIT_NOTE_CREATE',
     'AR_CREDIT_NOTE_VIEW',
     'AR_CREDIT_NOTE_SUBMIT',
     'AR_CREDIT_NOTE_APPROVE',
-    'AR_CREDIT_NOTE_POST',
     'AR_CREDIT_NOTE_VOID',
     'AR_REFUND_VIEW',
     'AR_REFUND_CREATE',
-    'AR_REFUND_APPROVE',
-    'AR_REFUND_POST',
     'AR_REFUND_VOID',
+
+    'RECEIPT_POST',
+    'CREDIT_NOTE_POST',
+    'REFUND_POST',
   ] as const;
 
   await removePermissionsByCode([superAdminRole.id, systemAdminRole.id, adminRole.id], Array.from(forbiddenAdminBypassPermCodes));
@@ -487,25 +548,24 @@ async function main() {
   await assignPermissionsByCode(superAdminRole.id, [
     'SYSTEM_VIEW_ALL',
     'FINANCE_VIEW_ALL',
-    'SETTINGS_VIEW',
-    'SYSTEM_CONFIG_CHANGE',
+    'SYSTEM_CONFIG_VIEW',
+    'SYSTEM_CONFIG_UPDATE',
     'USER_CREATE',
     'USER_VIEW',
     'USER_EDIT',
-    'USER_ASSIGN_ROLE',
     'ROLE_VIEW',
     'ROLE_ASSIGN',
+    'CREDIT_NOTE_VIEW',
+    'CREDIT_NOTE_VOID',
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
     'SYSTEM_VIEW_ALL',
-    'FINANCE_VIEW_ALL',
-    'SETTINGS_VIEW',
-    'SYSTEM_CONFIG_CHANGE',
+    'SYSTEM_CONFIG_VIEW',
+    'SYSTEM_CONFIG_UPDATE',
     'USER_CREATE',
     'USER_VIEW',
     'USER_EDIT',
-    'USER_ASSIGN_ROLE',
     'ROLE_VIEW',
     'ROLE_ASSIGN',
   ]);
@@ -513,7 +573,6 @@ async function main() {
   // AR Aging (AR-1) RBAC backfill (idempotent):
   // Allow view-only AR aging report access for governed roles.
   await assignPermissionsByCode(superAdminRole.id, ['AR_AGING_VIEW']);
-  await assignPermissionsByCode(systemAdminRole.id, ['AR_AGING_VIEW']);
   await assignPermissionsByCode(financeManagerRole.id, ['AR_AGING_VIEW']);
   await assignPermissionsByCode(financeControllerRole.id, ['AR_AGING_VIEW']);
 
@@ -554,22 +613,7 @@ async function main() {
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
-    'AUDIT_VIEW',
-    'dashboard.view',
-    'MASTER_DATA_DEPARTMENT_VIEW',
-    'MASTER_DATA_DEPARTMENT_CREATE',
-    'MASTER_DATA_DEPARTMENT_EDIT',
-    'MASTER_DATA_PROJECT_VIEW',
-    'MASTER_DATA_PROJECT_CREATE',
-    'MASTER_DATA_PROJECT_EDIT',
-    'MASTER_DATA_PROJECT_CLOSE',
-    'MASTER_DATA_FUND_VIEW',
-    'MASTER_DATA_FUND_CREATE',
-    'MASTER_DATA_FUND_EDIT',
-    'INVOICE_CATEGORY_VIEW',
-    'INVOICE_CATEGORY_CREATE',
-    'INVOICE_CATEGORY_UPDATE',
-    'INVOICE_CATEGORY_DISABLE',
+    // SYSTEM_ADMIN is system-only (no finance configuration/posting permissions).
   ]);
 
   const forecastCreatePerm = await prisma.permission.findUnique({ where: { code: 'forecast.create' }, select: { id: true } });
@@ -930,26 +974,64 @@ async function main() {
 
     await assignPermissionsByCode(financeOfficerRole.id, [
       'AR_INVOICE_CREATE',
+      'INVOICE_CREATE',
       'AR_INVOICE_EDIT_DRAFT',
       'AR_INVOICE_VIEW',
+      'INVOICE_VIEW',
       'AR_RECEIPTS_CREATE',
+      'RECEIPT_CREATE',
       'AR_RECEIPTS_VIEW',
+      'RECEIPT_VIEW',
       'AR_CREDIT_NOTE_CREATE',
+      'CREDIT_NOTE_CREATE',
       'AR_CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_VIEW',
+      'AR_CREDIT_NOTE_SUBMIT',
+      'CREDIT_NOTE_SUBMIT',
       'AR_REFUND_CREATE',
+      'REFUND_CREATE',
+      'AR_REFUND_SUBMIT',
+      'REFUND_SUBMIT',
       'AR_REFUND_VIEW',
+      'REFUND_VIEW',
+
+      'INVOICE_CATEGORY_VIEW',
+      'TAX_RATE_VIEW',
+      'FINANCE_GL_VIEW',
+      'MASTER_DATA_DEPARTMENT_VIEW',
+      'MASTER_DATA_PROJECT_VIEW',
+      'MASTER_DATA_FUND_VIEW',
     ]);
 
     const financeOfficerAllowedCodes = [
       'AR_INVOICE_CREATE',
+      'INVOICE_CREATE',
       'AR_INVOICE_EDIT_DRAFT',
       'AR_INVOICE_VIEW',
+      'INVOICE_VIEW',
       'AR_RECEIPTS_CREATE',
+      'RECEIPT_CREATE',
       'AR_RECEIPTS_VIEW',
+      'RECEIPT_VIEW',
       'AR_CREDIT_NOTE_CREATE',
+      'CREDIT_NOTE_CREATE',
       'AR_CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_VIEW',
+      'AR_CREDIT_NOTE_SUBMIT',
+      'CREDIT_NOTE_SUBMIT',
       'AR_REFUND_CREATE',
+      'REFUND_CREATE',
+      'AR_REFUND_SUBMIT',
+      'REFUND_SUBMIT',
       'AR_REFUND_VIEW',
+      'REFUND_VIEW',
+
+      'INVOICE_CATEGORY_VIEW',
+      'TAX_RATE_VIEW',
+      'FINANCE_GL_VIEW',
+      'MASTER_DATA_DEPARTMENT_VIEW',
+      'MASTER_DATA_PROJECT_VIEW',
+      'MASTER_DATA_FUND_VIEW',
       'AR_STATEMENT_VIEW',
       'AR_REMINDER_VIEW',
       'AR_REMINDER_TRIGGER',
@@ -1087,16 +1169,54 @@ async function main() {
     });
 
     await assignPermissionsByCode(financeManagerRole.id, [
+      'INVOICE_VIEW',
       'AR_INVOICE_APPROVE',
       'AP_INVOICE_APPROVE',
       'PAYMENT_APPROVE',
+      'PAYMENT_RELEASE',
+      'FINANCE_GL_APPROVE',
+      'FINANCE_GL_RECURRING_MANAGE',
+      'FINANCE_GL_RECURRING_GENERATE',
+      'FINANCE_PERIOD_CHECKLIST_VIEW',
+      'FINANCE_PERIOD_CHECKLIST_COMPLETE',
       'FINANCE_PERIOD_CLOSE',
 
-      'AR_CREDIT_NOTE_VIEW',
-      'AR_CREDIT_NOTE_APPROVE',
+      'RECEIPT_VIEW',
+      'RECEIPT_POST',
 
-      'AR_REFUND_VIEW',
-      'AR_REFUND_APPROVE',
+      'CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_APPROVE',
+      
+      'REFUND_VIEW',
+      'REFUND_APPROVE',
+
+      // Manager must not post refunds
+    ]);
+
+    // Governance: FINANCE_MANAGER must not have AP invoice posting permissions.
+    // Additive-only seeds won't remove historical grants, so we explicitly remove here.
+    await removePermissionsByCode([financeManagerRole.id], ['AP_INVOICE_POST']);
+
+    // Governance: FINANCE_MANAGER must not have AR invoice posting permissions.
+    // This is explicit cleanup for historical grants.
+    await removePermissionsByCode([financeManagerRole.id], ['AR_INVOICE_POST', 'INVOICE_POST']);
+
+    // Governance: FINANCE_MANAGER must not have credit note posting permissions.
+    await removePermissionsByCode([financeManagerRole.id], [
+      'CREDIT_NOTE_POST',
+      'AR_CREDIT_NOTE_POST',
+    ]);
+
+    // Governance: manager must not have maker/poster refund permissions.
+    await removePermissionsByCode([financeManagerRole.id], [
+      'REFUND_CREATE',
+      'AR_REFUND_CREATE',
+      'REFUND_SUBMIT',
+      'AR_REFUND_SUBMIT',
+      'REFUND_POST',
+      'AR_REFUND_POST',
+      'REFUND_VOID',
+      'AR_REFUND_VOID',
     ]);
   }
 
@@ -1170,6 +1290,21 @@ async function main() {
     });
 
     await assignPermissionsByCode(financeControllerRole.id, [
+      'SYSTEM_CONFIG_VIEW',
+      'SYSTEM_CONFIG_UPDATE',
+      'FINANCE_CONFIG_CHANGE',
+      'FINANCE_CONFIG_VIEW',
+      'FINANCE_CONFIG_UPDATE',
+      'RECEIPT_VIEW',
+      'RECEIPT_POST',
+
+      'CREDIT_NOTE_VIEW',
+      'CREDIT_NOTE_POST',
+
+      'REFUND_VIEW',
+      'REFUND_POST',
+      'INVOICE_VIEW',
+      'INVOICE_POST',
       'AR_INVOICE_POST',
       'AP_INVOICE_POST',
       'PAYMENT_POST',
@@ -1177,18 +1312,29 @@ async function main() {
       'FINANCE_PERIOD_CORRECT',
 
       'AR_CREDIT_NOTE_VIEW',
-      'AR_CREDIT_NOTE_POST',
-      'AR_CREDIT_NOTE_VOID',
 
       'AR_REFUND_VIEW',
-      'AR_REFUND_POST',
+    ]);
+
+    // Governance: controller must not be able to void credit notes or refunds.
+    await removePermissionsByCode([financeControllerRole.id], [
+      'CREDIT_NOTE_VOID',
+      'AR_CREDIT_NOTE_VOID',
+      'REFUND_VOID',
       'AR_REFUND_VOID',
+      'REFUND_APPROVE',
+      'AR_REFUND_APPROVE',
+      'REFUND_CREATE',
+      'AR_REFUND_CREATE',
+      'REFUND_SUBMIT',
+      'AR_REFUND_SUBMIT',
     ]);
   }
 
   // AR Receipts (AR-2) RBAC backfill (idempotent):
   // - ADMIN / FINANCE_OFFICER / FINANCE_MANAGER / FINANCE_CONTROLLER must have:
   //   - AR_RECEIPTS_VIEW
+  // - FINANCE_OFFICER must have:
   //   - AR_RECEIPTS_CREATE
   const arReceiptsViewPerm = await prisma.permission.findUnique({
     where: { code: 'AR_RECEIPTS_VIEW' },
@@ -1199,8 +1345,8 @@ async function main() {
     select: { id: true },
   });
 
-  const arReceiptsPermIds = [arReceiptsViewPerm?.id, arReceiptsCreatePerm?.id].filter(Boolean) as string[];
-  if (arReceiptsPermIds.length > 0) {
+  const arReceiptsViewId = arReceiptsViewPerm?.id ? [arReceiptsViewPerm.id] : [];
+  if (arReceiptsViewId.length > 0) {
     const arReceiptsRoles = await prisma.role.findMany({
       where: {
         name: {
@@ -1213,7 +1359,26 @@ async function main() {
     if (arReceiptsRoles.length > 0) {
       await prisma.rolePermission.createMany({
         data: arReceiptsRoles.flatMap((r) =>
-          arReceiptsPermIds.map((permissionId) => ({
+          arReceiptsViewId.map((permissionId) => ({
+            roleId: r.id,
+            permissionId,
+          })),
+        ),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  const arReceiptsCreateId = arReceiptsCreatePerm?.id ? [arReceiptsCreatePerm.id] : [];
+  if (arReceiptsCreateId.length > 0) {
+    const officerRoles = await prisma.role.findMany({
+      where: { name: 'FINANCE_OFFICER' },
+      select: { id: true },
+    });
+    if (officerRoles.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: officerRoles.flatMap((r) =>
+          arReceiptsCreateId.map((permissionId) => ({
             roleId: r.id,
             permissionId,
           })),
@@ -1905,6 +2070,57 @@ async function main() {
       forbiddenPermissionA: 'FINANCE_GL_CREATE',
       forbiddenPermissionB: 'FINANCE_GL_POST',
       description: 'Finance GL maker vs poster conflict',
+    },
+    update: {},
+  });
+
+  await prisma.soDRule.upsert({
+    where: {
+      tenantId_forbiddenPermissionA_forbiddenPermissionB: {
+        tenantId: tenant.id,
+        forbiddenPermissionA: 'REFUND_CREATE',
+        forbiddenPermissionB: 'REFUND_APPROVE',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      forbiddenPermissionA: 'REFUND_CREATE',
+      forbiddenPermissionB: 'REFUND_APPROVE',
+      description: 'Refund maker vs approver conflict',
+    },
+    update: {},
+  });
+
+  await prisma.soDRule.upsert({
+    where: {
+      tenantId_forbiddenPermissionA_forbiddenPermissionB: {
+        tenantId: tenant.id,
+        forbiddenPermissionA: 'REFUND_CREATE',
+        forbiddenPermissionB: 'REFUND_POST',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      forbiddenPermissionA: 'REFUND_CREATE',
+      forbiddenPermissionB: 'REFUND_POST',
+      description: 'Refund maker vs poster conflict',
+    },
+    update: {},
+  });
+
+  await prisma.soDRule.upsert({
+    where: {
+      tenantId_forbiddenPermissionA_forbiddenPermissionB: {
+        tenantId: tenant.id,
+        forbiddenPermissionA: 'REFUND_APPROVE',
+        forbiddenPermissionB: 'REFUND_POST',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      forbiddenPermissionA: 'REFUND_APPROVE',
+      forbiddenPermissionB: 'REFUND_POST',
+      description: 'Refund approver vs poster conflict',
     },
     update: {},
   });

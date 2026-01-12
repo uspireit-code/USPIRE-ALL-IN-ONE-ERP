@@ -21,8 +21,8 @@ export function CreditNotesListPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('AR_CREDIT_NOTE_VIEW');
-  const canCreate = hasPermission('AR_CREDIT_NOTE_CREATE');
+  const canView = hasPermission('CREDIT_NOTE_VIEW') || hasPermission('CREDIT_NOTE_CREATE');
+  const canCreate = hasPermission('CREDIT_NOTE_CREATE');
   const canSubmit = hasPermission('AR_CREDIT_NOTE_SUBMIT');
   const canApprove = hasPermission('AR_CREDIT_NOTE_APPROVE');
   const canPost = hasPermission('AR_CREDIT_NOTE_POST');
@@ -73,7 +73,7 @@ export function CreditNotesListPage() {
   }, [canView]);
 
   const content = useMemo(() => {
-    if (!canView) return <div style={{ color: 'crimson' }}>Permission denied</div>;
+    if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view credit notes. Required: CREDIT_NOTE_VIEW.</div>;
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 

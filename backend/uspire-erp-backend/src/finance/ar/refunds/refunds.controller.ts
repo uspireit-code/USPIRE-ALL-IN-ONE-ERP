@@ -13,10 +13,11 @@ import { JwtAuthGuard } from '../../../rbac/jwt-auth.guard';
 import { Permissions } from '../../../rbac/permissions.decorator';
 import { PermissionsGuard } from '../../../rbac/permissions.guard';
 import {
-  ApproveRefundDto,
   CreateCustomerRefundDto,
   ListRefundsQueryDto,
+  ApproveRefundDto,
   PostRefundDto,
+  SubmitRefundDto,
   VoidRefundDto,
 } from './refunds.dto';
 import { FinanceArRefundsService } from './refunds.service';
@@ -27,13 +28,28 @@ export class FinanceArRefundsController {
   constructor(private readonly refunds: FinanceArRefundsService) {}
 
   @Get()
-  @Permissions('AR_REFUND_VIEW')
+  @Permissions('REFUND_VIEW')
   async list(@Req() req: Request, @Query() q: ListRefundsQueryDto) {
     return this.refunds.list(req, q);
   }
 
+  @Get('refundable-credit-notes')
+  @Permissions('REFUND_CREATE')
+  async listRefundableCreditNotes(
+    @Req() req: Request,
+    @Query('customerId') customerId: string,
+  ) {
+    return this.refunds.listRefundableCreditNotes(req, customerId);
+  }
+
+  @Get('refundable-customers')
+  @Permissions('REFUND_CREATE')
+  async listRefundableCustomers(@Req() req: Request) {
+    return this.refunds.listRefundableCustomers(req);
+  }
+
   @Get('credit-notes/:creditNoteId/refundable')
-  @Permissions('AR_REFUND_VIEW')
+  @Permissions('REFUND_CREATE')
   async refundable(
     @Req() req: Request,
     @Param('creditNoteId') creditNoteId: string,
@@ -42,29 +58,39 @@ export class FinanceArRefundsController {
   }
 
   @Get(':id')
-  @Permissions('AR_REFUND_VIEW')
+  @Permissions('REFUND_VIEW')
   async getById(@Req() req: Request, @Param('id') id: string) {
     return this.refunds.getById(req, id);
   }
 
   @Post()
-  @Permissions('AR_REFUND_CREATE')
+  @Permissions('REFUND_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateCustomerRefundDto) {
     return this.refunds.create(req, dto);
   }
 
+  @Post(':id/submit')
+  @Permissions('REFUND_SUBMIT')
+  async submit(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() _dto: SubmitRefundDto,
+  ) {
+    return this.refunds.submit(req, id);
+  }
+
   @Post(':id/approve')
-  @Permissions('AR_REFUND_APPROVE')
+  @Permissions('REFUND_APPROVE')
   async approve(
     @Req() req: Request,
     @Param('id') id: string,
-    @Body() dto: ApproveRefundDto,
+    @Body() _dto: ApproveRefundDto,
   ) {
-    return this.refunds.approve(req, id, dto);
+    return this.refunds.approve(req, id);
   }
 
   @Post(':id/post')
-  @Permissions('AR_REFUND_POST')
+  @Permissions('REFUND_POST')
   async post(
     @Req() req: Request,
     @Param('id') id: string,
@@ -74,7 +100,7 @@ export class FinanceArRefundsController {
   }
 
   @Post(':id/void')
-  @Permissions('AR_REFUND_VOID')
+  @Permissions('REFUND_VOID')
   async void(
     @Req() req: Request,
     @Param('id') id: string,

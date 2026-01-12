@@ -12,63 +12,84 @@ export function SettingsPage() {
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
 
+  const canSystemConfigView = hasPermission('SYSTEM_CONFIG_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
+  const canFinanceConfigView = hasPermission('FINANCE_CONFIG_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
+  const canUserView = hasPermission('USER_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
+  const canRoleView = hasPermission('ROLE_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
+
   const sections: Array<{ key: string; title: string; description: string; to: string; icon: React.ReactNode }> = [
-    {
-      key: 'org',
-      title: 'Organisation & Branding',
-      description: 'Manage organisation information, branding, and identity.',
-      to: '/settings/organisation',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 21h18" />
-          <path d="M5 21V7l7-4 7 4v14" />
-          <path d="M9 21v-8h6v8" />
-        </svg>
-      ),
-    },
-    {
-      key: 'users',
-      title: 'Users',
-      description: 'Create and manage system users and access.',
-      to: '/settings/users',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 21a8 8 0 1 0-16 0" />
-          <path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
-        </svg>
-      ),
-    },
-    {
-      key: 'roles',
-      title: 'Roles & Permissions',
-      description: 'Define roles, permissions, and segregation of duties.',
-      to: '/settings/roles',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2l8 4v6c0 5-3.4 9.4-8 10-4.6-.6-8-5-8-10V6l8-4Z" />
-          <path d="M9 12l2 2 4-4" />
-        </svg>
-      ),
-    },
-    {
-      key: 'system',
-      title: 'System Configuration',
-      description: 'System configuration, environment details, and security settings.',
-      to: '/settings/system',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2v2" />
-          <path d="M12 20v2" />
-          <path d="M4.93 4.93l1.41 1.41" />
-          <path d="M17.66 17.66l1.41 1.41" />
-          <path d="M2 12h2" />
-          <path d="M20 12h2" />
-          <path d="M4.93 19.07l1.41-1.41" />
-          <path d="M17.66 6.34l1.41-1.41" />
-          <circle cx="12" cy="12" r="4" />
-        </svg>
-      ),
-    },
+    ...((canSystemConfigView || canFinanceConfigView)
+      ? [
+          {
+            key: 'org',
+            title: 'Organisation & Branding',
+            description: 'Manage organisation information, branding, and identity.',
+            to: '/settings/organisation',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18" />
+                <path d="M5 21V7l7-4 7 4v14" />
+                <path d="M9 21v-8h6v8" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...(canUserView
+      ? [
+          {
+            key: 'users',
+            title: 'Users',
+            description: 'Create and manage system users and access.',
+            to: '/settings/users',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21a8 8 0 1 0-16 0" />
+                <path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...(canRoleView
+      ? [
+          {
+            key: 'roles',
+            title: 'Roles & Permissions',
+            description: 'Define roles, permissions, and segregation of duties.',
+            to: '/settings/roles',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l8 4v6c0 5-3.4 9.4-8 10-4.6-.6-8-5-8-10V6l8-4Z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...((canSystemConfigView || canFinanceConfigView)
+      ? [
+          {
+            key: 'system',
+            title: 'System Configuration',
+            description: 'System configuration, environment details, and security settings.',
+            to: '/settings/system',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v2" />
+                <path d="M12 20v2" />
+                <path d="M4.93 4.93l1.41 1.41" />
+                <path d="M17.66 17.66l1.41 1.41" />
+                <path d="M2 12h2" />
+                <path d="M20 12h2" />
+                <path d="M4.93 19.07l1.41-1.41" />
+                <path d="M17.66 6.34l1.41-1.41" />
+                <circle cx="12" cy="12" r="4" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
     ...(hasPermission('TAX_RATE_VIEW')
       ? [
           {

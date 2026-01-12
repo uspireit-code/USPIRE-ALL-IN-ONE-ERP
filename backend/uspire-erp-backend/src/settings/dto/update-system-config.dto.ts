@@ -159,7 +159,17 @@ export class UpdateSystemConfigDto {
   @IsOptional()
   @ValidateIf(isNotNull)
   @IsString()
+  arRefundClearingAccountId?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
   cashClearingAccountId?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
+  arCashClearingAccountId?: string | null;
 
   @IsOptional()
   @ValidateIf(isNotNull)

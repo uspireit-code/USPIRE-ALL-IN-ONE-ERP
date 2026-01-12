@@ -49,8 +49,8 @@ export declare class SettingsController {
         createdAt: Date;
     }[]>;
     listRoles(req: Request): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         description: string | null;
     }[]>;

@@ -17,8 +17,9 @@ export function ReceiptDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canRead = hasPermission('AR_RECEIPTS_VIEW');
-  const canCreate = hasPermission('AR_RECEIPTS_CREATE');
+  const canRead = hasPermission('RECEIPT_VIEW') || hasPermission('RECEIPT_POST');
+  const canCreate = hasPermission('RECEIPT_CREATE');
+  const canPost = hasPermission('RECEIPT_POST');
   const canVoid = hasPermission('AR_RECEIPT_VOID');
 
   const [receipt, setReceipt] = useState<ArReceipt | null>(null);
@@ -165,7 +166,7 @@ export function ReceiptDetailsPage() {
   async function onSaveDraft() {
     if (!receipt || !id) return;
     if (!canCreate) {
-      setError('Permission denied');
+      setError('You don’t have permission to edit receipts. Required: RECEIPT_CREATE.');
       return;
     }
     if (!isDraft) {
@@ -215,8 +216,8 @@ export function ReceiptDetailsPage() {
 
   async function onPost() {
     if (!receipt || !id) return;
-    if (!canCreate) {
-      setError('Permission denied');
+    if (!canPost) {
+      setError('You do not have permission to post receipts. Required: RECEIPT_POST.');
       return;
     }
 
@@ -302,7 +303,7 @@ export function ReceiptDetailsPage() {
               Save Draft
             </button>
           ) : null}
-          {receipt.status === 'DRAFT' && canCreate ? (
+          {receipt.status === 'DRAFT' && canPost ? (
             <button type="button" disabled={acting} onClick={onPost}>
               Post Receipt
             </button>

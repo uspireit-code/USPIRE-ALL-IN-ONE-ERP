@@ -22,7 +22,7 @@ export function CreateReceiptPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('AR_RECEIPTS_CREATE');
+  const canCreate = hasPermission('RECEIPT_CREATE');
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
@@ -85,7 +85,7 @@ export function CreateReceiptPage() {
 
   async function onSaveDraft() {
     if (!canCreate) {
-      setError('Permission denied');
+      setError('You don’t have permission to create receipts. Required: RECEIPT_CREATE.');
       return;
     }
 

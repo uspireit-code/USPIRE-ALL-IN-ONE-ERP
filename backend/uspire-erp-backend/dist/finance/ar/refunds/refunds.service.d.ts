@@ -26,6 +26,9 @@ export declare class FinanceArRefundsService {
         refunded: number;
         refundable: number;
     }>;
+    listRefundableCreditNotes(req: Request, customerId: string): Promise<{
+        items: any;
+    }>;
     list(req: Request, q: ListRefundsQueryDto): Promise<{
         items: any;
         total: any;
@@ -63,6 +66,7 @@ export declare class FinanceArRefundsService {
     }>;
     private resolveClearingAccountId;
     create(req: Request, dto: CreateCustomerRefundDto): Promise<any>;
+    submit(req: Request, id: string): Promise<any>;
     approve(req: Request, id: string, _dto: ApproveRefundDto): Promise<any>;
     post(req: Request, id: string): Promise<any>;
     void(req: Request, id: string, dto: VoidRefundDto): Promise<any>;

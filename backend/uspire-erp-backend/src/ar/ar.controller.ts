@@ -28,19 +28,19 @@ export class ArController {
   }
 
   @Get('customers')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('CUSTOMERS_VIEW')
   async listCustomers(@Req() req: Request) {
     return this.ar.listCustomers(req);
   }
 
   @Get('accounts')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('FINANCE_GL_VIEW')
   async listEligibleAccounts(@Req() req: Request) {
     return this.ar.listEligibleAccounts(req);
   }
 
   @Post('invoices')
-  @Permissions('AR_INVOICE_CREATE')
+  @Permissions('INVOICE_CREATE')
   async createInvoice(
     @Req() req: Request,
     @Body() dto: CreateCustomerInvoiceDto,
@@ -49,7 +49,7 @@ export class ArController {
   }
 
   @Post('invoices/:id/post')
-  @Permissions('AR_INVOICE_POST')
+  @Permissions('INVOICE_POST')
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -59,7 +59,7 @@ export class ArController {
   }
 
   @Get('invoices')
-  @Permissions('AR_INVOICE_VIEW')
+  @Permissions('INVOICE_VIEW')
   async listInvoices(@Req() req: Request) {
     return this.ar.listInvoices(req);
   }

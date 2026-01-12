@@ -28,25 +28,37 @@ export class FinanceArCreditNotesController {
   constructor(private readonly creditNotes: FinanceArCreditNotesService) {}
 
   @Get()
-  @Permissions('AR_CREDIT_NOTE_VIEW')
+  @Permissions('CREDIT_NOTE_VIEW')
   async list(@Req() req: Request, @Query() q: ListCreditNotesQueryDto) {
     return this.creditNotes.list(req, q);
   }
 
+  @Get('eligible-customers')
+  @Permissions('CREDIT_NOTE_CREATE')
+  async eligibleCustomers(@Req() req: Request) {
+    return this.creditNotes.listEligibleCustomers(req);
+  }
+
+  @Get('eligible-invoices')
+  @Permissions('CREDIT_NOTE_CREATE')
+  async eligibleInvoices(@Req() req: Request, @Query('customerId') customerId: string) {
+    return this.creditNotes.listEligibleInvoices(req, customerId);
+  }
+
   @Get(':id')
-  @Permissions('AR_CREDIT_NOTE_VIEW')
+  @Permissions('CREDIT_NOTE_VIEW')
   async getById(@Req() req: Request, @Param('id') id: string) {
     return this.creditNotes.getById(req, id);
   }
 
   @Post()
-  @Permissions('AR_CREDIT_NOTE_CREATE')
+  @Permissions('CREDIT_NOTE_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateCustomerCreditNoteDto) {
     return this.creditNotes.create(req, dto);
   }
 
   @Post(':id/submit')
-  @Permissions('AR_CREDIT_NOTE_SUBMIT')
+  @Permissions('CREDIT_NOTE_CREATE')
   async submit(
     @Req() req: Request,
     @Param('id') id: string,
@@ -56,7 +68,7 @@ export class FinanceArCreditNotesController {
   }
 
   @Post(':id/approve')
-  @Permissions('AR_CREDIT_NOTE_APPROVE')
+  @Permissions('CREDIT_NOTE_APPROVE')
   async approve(
     @Req() req: Request,
     @Param('id') id: string,
@@ -66,7 +78,7 @@ export class FinanceArCreditNotesController {
   }
 
   @Post(':id/post')
-  @Permissions('AR_CREDIT_NOTE_POST')
+  @Permissions('CREDIT_NOTE_POST')
   async post(
     @Req() req: Request,
     @Param('id') id: string,
@@ -76,7 +88,7 @@ export class FinanceArCreditNotesController {
   }
 
   @Post(':id/void')
-  @Permissions('AR_CREDIT_NOTE_VOID')
+  @Permissions('CREDIT_NOTE_VOID')
   async void(
     @Req() req: Request,
     @Param('id') id: string,

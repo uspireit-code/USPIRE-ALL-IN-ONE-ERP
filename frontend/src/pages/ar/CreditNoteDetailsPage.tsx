@@ -38,11 +38,11 @@ export function CreditNoteDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('AR_CREDIT_NOTE_VIEW');
-  const canSubmit = hasPermission('AR_CREDIT_NOTE_SUBMIT');
-  const canApprove = hasPermission('AR_CREDIT_NOTE_APPROVE');
-  const canPost = hasPermission('AR_CREDIT_NOTE_POST');
-  const canVoid = hasPermission('AR_CREDIT_NOTE_VOID');
+  const canView = hasPermission('CREDIT_NOTE_VIEW') || hasPermission('CREDIT_NOTE_POST');
+  const canSubmit = hasPermission('CREDIT_NOTE_CREATE');
+  const canApprove = hasPermission('CREDIT_NOTE_APPROVE');
+  const canPost = hasPermission('CREDIT_NOTE_POST');
+  const canVoid = hasPermission('CREDIT_NOTE_VOID');
 
   const [cn, setCn] = useState<CreditNote | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,7 +164,13 @@ export function CreditNoteDetailsPage() {
     }
   }
 
-  if (!canView) return <div style={{ color: 'crimson' }}>Permission denied</div>;
+  if (!canView) {
+    return (
+      <div style={{ color: 'crimson' }}>
+        You don’t have permission to view credit notes. Required: one of CREDIT_NOTE_VIEW, CREDIT_NOTE_POST.
+      </div>
+    );
+  }
   if (loading) return <div>Loading...</div>;
   if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
   if (!cn) return <div style={{ color: 'crimson' }}>Credit note not found</div>;

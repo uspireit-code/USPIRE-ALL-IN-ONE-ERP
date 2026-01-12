@@ -28,13 +28,13 @@ export class ArReceiptsController {
   constructor(private readonly receipts: ArReceiptsService) {}
 
   @Get()
-  @Permissions('AR_RECEIPTS_VIEW')
+  @Permissions('RECEIPT_VIEW')
   async list(@Req() req: Request) {
     return this.receipts.listReceipts(req);
   }
 
   @Get('customers/:customerId/outstanding-invoices')
-  @Permissions('AR_RECEIPTS_VIEW')
+  @Permissions('RECEIPT_VIEW')
   async listOutstandingInvoices(
     @Req() req: Request,
     @Param('customerId') customerId: string,
@@ -48,13 +48,13 @@ export class ArReceiptsController {
   }
 
   @Get(':id')
-  @Permissions('AR_RECEIPTS_VIEW')
+  @Permissions('RECEIPT_VIEW')
   async getById(@Param('id') id: string, @Req() req: Request) {
     return this.receipts.getReceiptById(req, id);
   }
 
   @Get(':id/export')
-  @Permissions('AR_RECEIPTS_VIEW')
+  @Permissions('RECEIPT_VIEW')
   async exportReceipt(
     @Req() req: Request,
     @Param('id') id: string,
@@ -74,13 +74,13 @@ export class ArReceiptsController {
   }
 
   @Get(':id/allocations')
-  @Permissions('AR_RECEIPTS_VIEW')
+  @Permissions('RECEIPT_VIEW')
   async listAllocations(@Param('id') id: string, @Req() req: Request) {
     return this.receipts.listAllocations(req, id);
   }
 
   @Put(':id/allocations')
-  @Permissions('AR_RECEIPTS_CREATE')
+  @Permissions('RECEIPT_CREATE')
   async setAllocations(
     @Param('id') id: string,
     @Req() req: Request,
@@ -90,13 +90,13 @@ export class ArReceiptsController {
   }
 
   @Post()
-  @Permissions('AR_RECEIPTS_CREATE')
+  @Permissions('RECEIPT_CREATE')
   async create(@Req() req: Request, @Body() dto: CreateReceiptDto) {
     return this.receipts.createReceipt(req, dto);
   }
 
   @Patch(':id')
-  @Permissions('AR_RECEIPTS_CREATE')
+  @Permissions('RECEIPT_CREATE')
   async update(
     @Req() req: Request,
     @Param('id') id: string,
@@ -106,7 +106,7 @@ export class ArReceiptsController {
   }
 
   @Post(':id/post')
-  @Permissions('AR_RECEIPTS_CREATE')
+  @Permissions('RECEIPT_POST')
   async post(@Req() req: Request, @Param('id') id: string) {
     return this.receipts.postReceipt(req, id);
   }

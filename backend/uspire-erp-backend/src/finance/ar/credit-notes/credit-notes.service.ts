@@ -238,6 +238,78 @@ export class FinanceArCreditNotesService {
     };
   }
 
+  async listEligibleCustomers(req: Request) {
+    const tenant = this.ensureTenant(req);
+
+    const customers = await (this.prisma as any).customer.findMany({
+      where: {
+        tenantId: tenant.id,
+        invoices: {
+          some: {
+            tenantId: tenant.id,
+            status: 'POSTED',
+          },
+        },
+      } as any,
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        customerCode: true,
+      } as any,
+    });
+
+    return {
+      items: (customers ?? []).map((c: any) => ({
+        customerId: c.id,
+        customerName: c.name,
+        customerCode: c.customerCode ?? null,
+      })),
+    };
+  }
+
+  async listEligibleInvoices(req: Request, customerId: string) {
+    const tenant = this.ensureTenant(req);
+
+    const cid = String(customerId ?? '').trim();
+    if (!cid) throw new BadRequestException('customerId is required');
+
+    const invoices = await (this.prisma as any).customerInvoice.findMany({
+      where: {
+        tenantId: tenant.id,
+        customerId: cid,
+        status: 'POSTED',
+      } as any,
+      orderBy: [{ invoiceDate: 'desc' }, { invoiceNumber: 'desc' }],
+      select: {
+        id: true,
+        invoiceNumber: true,
+        currency: true,
+      } as any,
+    });
+
+    const computed = await Promise.all(
+      (invoices ?? []).map(async (inv: any) => {
+        const out = await this.computeInvoiceOutstanding({
+          tenantId: tenant.id,
+          invoiceId: String(inv.id),
+        });
+        return {
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          currency: String(inv.currency ?? '').trim(),
+          outstandingBalance: Number(out.outstanding ?? 0),
+        };
+      }),
+    );
+
+    const items = (computed ?? [])
+      .filter((x: any) => Number(x.outstandingBalance ?? 0) > 0)
+      .sort((a: any, b: any) => String(b.invoiceNumber ?? '').localeCompare(String(a.invoiceNumber ?? '')));
+
+    return { items };
+  }
+
   async list(req: Request, q: ListCreditNotesQueryDto) {
     const tenant = this.ensureTenant(req);
 
@@ -619,7 +691,7 @@ export class FinanceArCreditNotesService {
       amount: this.normalizeMoney(Number((cn as any).totalAmount ?? 0)),
       previousStatus: String(cn.status),
       newStatus: 'SUBMITTED',
-      permissionUsed: 'AR_CREDIT_NOTE_SUBMIT',
+      permissionUsed: 'CREDIT_NOTE_CREATE',
       outcome: 'SUCCESS',
     });
 
@@ -643,12 +715,12 @@ export class FinanceArCreditNotesService {
     if (String(cn.createdById) === String(user.id)) {
       await this.logSoDBlocked({
         req,
-        permissionAttempted: 'AR_CREDIT_NOTE_APPROVE',
-        conflictingPermission: 'AR_CREDIT_NOTE_CREATE',
+        permissionAttempted: 'CREDIT_NOTE_APPROVE',
+        conflictingPermission: 'CREDIT_NOTE_CREATE',
         creditNoteId: cn.id,
         reason: 'Creator cannot approve their own credit note',
       });
-      throw new ForbiddenException('Creator cannot approve their own credit note');
+      throw new ConflictException('Creator cannot approve their own credit note');
     }
 
     const creditNoteDate = new Date(cn.creditNoteDate);
@@ -697,7 +769,7 @@ export class FinanceArCreditNotesService {
       amount: this.normalizeMoney(Number((cn as any).totalAmount ?? 0)),
       previousStatus: String(cn.status),
       newStatus: 'APPROVED',
-      permissionUsed: 'AR_CREDIT_NOTE_APPROVE',
+      permissionUsed: 'CREDIT_NOTE_APPROVE',
       outcome: 'SUCCESS',
     });
 
@@ -726,15 +798,26 @@ export class FinanceArCreditNotesService {
       throw new BadRequestException(`Credit note cannot be posted from status: ${cn.status}`);
     }
 
+    if (String(cn.createdById) === String(user.id)) {
+      await this.logSoDBlocked({
+        req,
+        permissionAttempted: 'CREDIT_NOTE_POST',
+        conflictingPermission: 'CREDIT_NOTE_CREATE',
+        creditNoteId: cn.id,
+        reason: 'Creator cannot post their own credit note',
+      });
+      throw new ConflictException('Creator cannot post their own credit note');
+    }
+
     if (cn.approvedById && String(cn.approvedById) === String(user.id)) {
       await this.logSoDBlocked({
         req,
-        permissionAttempted: 'AR_CREDIT_NOTE_POST',
-        conflictingPermission: 'AR_CREDIT_NOTE_APPROVE',
+        permissionAttempted: 'CREDIT_NOTE_POST',
+        conflictingPermission: 'CREDIT_NOTE_APPROVE',
         creditNoteId: cn.id,
         reason: 'Approver cannot post the same credit note',
       });
-      throw new ForbiddenException('Approver cannot post the same credit note');
+      throw new ConflictException('Approver cannot post the same credit note');
     }
 
     const creditNoteDate = new Date(cn.creditNoteDate);
@@ -804,7 +887,7 @@ export class FinanceArCreditNotesService {
         description: `AR credit note posting: ${cn.creditNoteNumber}`,
         createdById: cn.createdById,
         status: 'REVIEWED',
-        reviewedById: cn.approvedById,
+        reviewedById: cn.approvedById ?? user.id,
         reviewedAt: cn.approvedAt ?? new Date(),
         lines: {
           create: [
@@ -859,7 +942,7 @@ export class FinanceArCreditNotesService {
       amount: totalAmount,
       previousStatus: String(cn.status),
       newStatus: 'POSTED',
-      permissionUsed: 'AR_CREDIT_NOTE_POST',
+      permissionUsed: 'CREDIT_NOTE_POST',
       outcome: 'SUCCESS',
     });
 
@@ -885,6 +968,17 @@ export class FinanceArCreditNotesService {
 
     if (String(cn.status) !== 'POSTED') {
       throw new BadRequestException(`Credit note cannot be voided from status: ${cn.status}`);
+    }
+
+    if (cn.postedById && String(cn.postedById) === String(user.id)) {
+      await this.logSoDBlocked({
+        req,
+        permissionAttempted: 'CREDIT_NOTE_VOID',
+        conflictingPermission: 'CREDIT_NOTE_POST',
+        creditNoteId: cn.id,
+        reason: 'Poster cannot void the same credit note',
+      });
+      throw new ConflictException('Poster cannot void the same credit note');
     }
 
     const creditNoteDate = new Date(cn.creditNoteDate);
@@ -983,10 +1077,26 @@ export class FinanceArCreditNotesService {
       amount: totalAmount,
       previousStatus: String(cn.status),
       newStatus: 'VOID',
-      permissionUsed: 'AR_CREDIT_NOTE_VOID',
+      permissionUsed: 'CREDIT_NOTE_VOID',
       outcome: 'SUCCESS',
       reason,
     });
+
+    await (this.prisma as any).auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'AR_POST',
+          entityType: 'CUSTOMER_CREDIT_NOTE',
+          entityId: cn.id,
+          action: 'CREDIT_NOTE_VOIDED',
+          outcome: 'SUCCESS',
+          reason,
+          userId: user.id,
+          permissionUsed: 'CREDIT_NOTE_VOID',
+        } as any,
+      })
+      .catch(() => undefined);
 
     return this.getById(req, cn.id);
   }

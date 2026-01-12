@@ -32,13 +32,13 @@ export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
   @Get('organisation')
-  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL', 'FINANCE_VIEW_ALL')
+  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
   async getOrganisation(@Req() req: Request) {
     return this.settings.getOrganisation(req);
   }
 
   @Put('organisation')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('SYSTEM_CONFIG_UPDATE')
   async updateOrganisation(
     @Req() req: Request,
     @Body() dto: UpdateOrganisationDto,
@@ -47,7 +47,7 @@ export class SettingsController {
   }
 
   @Post('organisation/logo')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('SYSTEM_CONFIG_UPDATE')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -59,7 +59,7 @@ export class SettingsController {
   }
 
   @Get('organisation/logo')
-  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL', 'FINANCE_VIEW_ALL')
+  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
   async downloadLogo(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadOrganisationLogo(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -68,13 +68,13 @@ export class SettingsController {
   }
 
   @Get('system')
-  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'FINANCE_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
   async getSystemConfig(@Req() req: Request) {
     return this.settings.getSystemConfig(req);
   }
 
   @Put('system')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @PermissionsAny('SYSTEM_CONFIG_UPDATE', 'FINANCE_CONFIG_UPDATE', 'FINANCE_CONFIG_CHANGE', 'SYSTEM_VIEW_ALL')
   async updateSystemConfig(
     @Req() req: Request,
     @Body() dto: UpdateSystemConfigDto,
@@ -83,7 +83,7 @@ export class SettingsController {
   }
 
   @Post('system/favicon')
-  @Permissions('SYSTEM_CONFIG_CHANGE')
+  @Permissions('SYSTEM_CONFIG_UPDATE')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -95,7 +95,7 @@ export class SettingsController {
   }
 
   @Get('system/favicon')
-  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
   async downloadFavicon(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadTenantFavicon(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -138,7 +138,7 @@ export class SettingsController {
   }
 
   @Patch('users/:id/roles')
-  @Permissions('USER_ASSIGN_ROLE')
+  @Permissions('ROLE_ASSIGN')
   async updateUserRoles(
     @Req() req: Request,
     @Param('id') id: string,
@@ -148,13 +148,13 @@ export class SettingsController {
   }
 
   @Get('roles')
-  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
+  @Permissions('ROLE_VIEW')
   async listRolesWithPermissions(@Req() req: Request) {
     return this.settings.listRolesWithPermissions(req);
   }
 
   @Get('roles/:id')
-  @PermissionsAny('SETTINGS_VIEW', 'SYSTEM_VIEW_ALL')
+  @Permissions('ROLE_VIEW')
   async getRoleDetails(@Req() req: Request, @Param('id') id: string) {
     return this.settings.getRoleDetails(req, id);
   }
