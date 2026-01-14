@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { ApiError } from '../../services/api';
-import { listCustomers, type Customer } from '../../services/ar';
+import { useCustomers } from '../../hooks/useCustomers';
 import { getArStatement, type ArStatementResponse, type ArStatementTransaction } from '../../services/arStatements';
 
 function todayIsoDate() {
@@ -24,8 +24,7 @@ export function ArStatementsPage() {
     hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
     hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [customersLoading, setCustomersLoading] = useState(false);
+  const { customers, isLoading: customersLoading } = useCustomers({ enabled: canView, source: 'statements' });
 
   const [customerId, setCustomerId] = useState('');
   const [mode, setMode] = useState<Mode>('range');
@@ -39,15 +38,6 @@ export function ArStatementsPage() {
   const [error, setError] = useState<any>(null);
 
   const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase() === 'true';
-
-  useEffect(() => {
-    if (!canView) return;
-    setCustomersLoading(true);
-    void listCustomers({ page: 1, pageSize: 200, status: 'ACTIVE' })
-      .then((resp) => setCustomers((resp as any)?.items ?? []))
-      .catch(() => undefined)
-      .finally(() => setCustomersLoading(false));
-  }, [canView]);
 
   const clientValidationError = useMemo(() => {
     if (!canView) return '';
@@ -134,7 +124,7 @@ export function ArStatementsPage() {
             <option value="">Select customer…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.name} ({c.customerCode ?? '-'})
               </option>
             ))}
           </select>

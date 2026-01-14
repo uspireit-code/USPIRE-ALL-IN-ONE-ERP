@@ -27,6 +27,35 @@ export type ArStatementResponse = {
 export class ArStatementsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listCustomersForStatements(req: Request) {
+    const tenant = req.tenant;
+    const user = req.user;
+
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const customers = await this.prisma.customer.findMany({
+      where: { tenantId: tenant.id } as any,
+      orderBy: [{ name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        customerCode: true,
+        status: true,
+      } as any,
+    });
+
+    return {
+      items: (customers ?? []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        customerCode: c.customerCode ?? null,
+        status: c.status,
+      })),
+    };
+  }
+
   private round2(n: number) {
     return Math.round(Number(n ?? 0) * 100) / 100;
   }

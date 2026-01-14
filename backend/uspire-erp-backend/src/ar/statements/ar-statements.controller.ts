@@ -11,6 +11,16 @@ import { ArStatementsService } from './ar-statements.service';
 export class ArStatementsController {
   constructor(private readonly statements: ArStatementsService) {}
 
+  @Get('customers')
+  @PermissionsAny(
+    PERMISSIONS.AR_STATEMENT.VIEW,
+    PERMISSIONS.FINANCE.VIEW_ALL,
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
+  async customers(@Req() req: Request) {
+    return this.statements.listCustomersForStatements(req);
+  }
+
   @Get()
   @PermissionsAny(
     PERMISSIONS.AR_STATEMENT.VIEW,
