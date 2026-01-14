@@ -4,7 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
 import type { Request } from 'express';
+import { randomUUID, createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
@@ -12,13 +14,615 @@ import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { assertCanPost } from '../periods/period-guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
+import type { StorageProvider } from '../storage/storage.provider';
+import { STORAGE_PROVIDER } from '../storage/storage.provider';
+import { UploadSupplierDocumentDto } from './dto/upload-supplier-document.dto';
+import { CreateSupplierBankAccountDto } from './dto/create-supplier-bank-account.dto';
+import { UpdateSupplierBankAccountDto } from './dto/update-supplier-bank-account.dto';
 
 @Injectable()
 export class ApService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+  ) {}
 
   private round2(n: number) {
     return Math.round(n * 100) / 100;
+  }
+
+  private async assertActiveSupplier(params: { tenantId: string; supplierId: string }) {
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id: params.supplierId, tenantId: params.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!supplier) {
+      throw new NotFoundException('Supplier not found or inactive');
+    }
+    return supplier;
+  }
+
+  private async createSupplierChangeLog(params: {
+    tenantId: string;
+    supplierId: string;
+    changeType: string;
+    actorUserId: string;
+    field?: string;
+    oldValue?: string;
+    newValue?: string;
+    refId?: string;
+  }) {
+    await this.prisma.supplierChangeLog.create({
+      data: {
+        tenantId: params.tenantId,
+        supplierId: params.supplierId,
+        changeType: params.changeType,
+        field: params.field,
+        oldValue: params.oldValue,
+        newValue: params.newValue,
+        refId: params.refId,
+        actorUserId: params.actorUserId,
+      },
+    });
+  }
+
+  // Supplier documents
+  async listSupplierDocuments(req: Request, supplierId: string) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    return this.prisma.supplierDocument.findMany({
+      where: { tenantId: tenant.id, supplierId, isActive: true },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        tenantId: true,
+        supplierId: true,
+        docType: true,
+        filename: true,
+        mimeType: true,
+        storageKey: true,
+        fileSize: true,
+        notes: true,
+        createdById: true,
+        createdAt: true,
+        isActive: true,
+      },
+    });
+  }
+
+  async uploadSupplierDocument(
+    req: Request,
+    supplierId: string,
+    dto: UploadSupplierDocumentDto,
+    file?: any,
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+    if (!file) throw new BadRequestException('Missing file');
+    if (!file.originalname) throw new BadRequestException('Missing fileName');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const sha256 = createHash('sha256').update(file.buffer).digest('hex');
+    const docId = randomUUID();
+    const safeName = String(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `${tenant.id}/supplier/${supplierId}/${docId}_${safeName}`;
+    await this.storage.put(storageKey, file.buffer);
+
+    const created = await this.prisma.supplierDocument.create({
+      data: {
+        id: docId,
+        tenantId: tenant.id,
+        supplierId,
+        docType: dto.docType,
+        filename: file.originalname,
+        mimeType: file.mimetype || 'application/octet-stream',
+        storageKey,
+        fileSize: file.size,
+        notes: dto.notes,
+        createdById: user.id,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        supplierId: true,
+        docType: true,
+        filename: true,
+        mimeType: true,
+        storageKey: true,
+        fileSize: true,
+        notes: true,
+        createdById: true,
+        createdAt: true,
+        isActive: true,
+      },
+    });
+
+    await this.createSupplierChangeLog({
+      tenantId: tenant.id,
+      supplierId,
+      changeType: 'DOC_UPLOAD',
+      actorUserId: user.id,
+      refId: created.id,
+      newValue: `${created.docType}:${created.filename}`,
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_DOC_UPLOAD',
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_CREATE,
+        lifecycleType: 'UPDATE',
+        metadata: { supplierId, supplierDocumentId: created.id, sha256Hash: sha256 },
+      },
+      this.prisma,
+    );
+
+    return created;
+  }
+
+  async deactivateSupplierDocument(req: Request, supplierId: string, docId: string) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const row = await this.prisma.supplierDocument.findFirst({
+      where: { id: docId, tenantId: tenant.id, supplierId },
+      select: { id: true, isActive: true, docType: true, filename: true },
+    });
+    if (!row) throw new NotFoundException('Supplier document not found');
+    if (!row.isActive) return { ok: true };
+
+    await this.prisma.supplierDocument.update({
+      where: { id: row.id },
+      data: { isActive: false },
+    });
+
+    await this.createSupplierChangeLog({
+      tenantId: tenant.id,
+      supplierId,
+      changeType: 'DOC_DEACTIVATE',
+      actorUserId: user.id,
+      refId: row.id,
+      oldValue: `${row.docType}:${row.filename}`,
+      newValue: 'DEACTIVATED',
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_DOC_DEACTIVATE',
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_CREATE,
+        lifecycleType: 'UPDATE',
+        metadata: { supplierId, supplierDocumentId: row.id },
+      },
+      this.prisma,
+    );
+
+    return { ok: true };
+  }
+
+  async downloadSupplierDocument(req: Request, supplierId: string, docId: string) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const row = await this.prisma.supplierDocument.findFirst({
+      where: { id: docId, tenantId: tenant.id, supplierId, isActive: true },
+      select: {
+        id: true,
+        filename: true,
+        mimeType: true,
+        fileSize: true,
+        storageKey: true,
+      },
+    });
+    if (!row) throw new NotFoundException('Supplier document not found');
+
+    const exists = await this.storage.exists(row.storageKey);
+    if (!exists) throw new NotFoundException('Supplier document file not found in storage');
+
+    const buf = await this.storage.get(row.storageKey);
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_DOC_DOWNLOAD',
+        permissionUsed: PERMISSIONS.AP.INVOICE_CREATE,
+        metadata: { supplierId, supplierDocumentId: row.id },
+      },
+      this.prisma,
+    );
+
+    return {
+      fileName: row.filename,
+      mimeType: row.mimeType || 'application/octet-stream',
+      size: row.fileSize ?? buf.length,
+      body: buf,
+    };
+  }
+
+  // Supplier bank accounts
+  async listSupplierBankAccounts(req: Request, supplierId: string) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    return this.prisma.supplierBankAccount.findMany({
+      where: { tenantId: tenant.id, supplierId, isActive: true },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createSupplierBankAccount(req: Request, supplierId: string, dto: CreateSupplierBankAccountDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const created = await this.prisma.supplierBankAccount.create({
+      data: {
+        tenantId: tenant.id,
+        supplierId,
+        bankName: dto.bankName,
+        branchName: dto.branchName,
+        accountName: dto.accountName,
+        accountNumber: dto.accountNumber,
+        currency: dto.currency,
+        swiftCode: dto.swiftCode,
+        notes: dto.notes,
+        isPrimary: Boolean(dto.isPrimary),
+        isActive: true,
+        createdById: user.id,
+      },
+    });
+
+    if (created.isPrimary) {
+      await this.prisma.supplierBankAccount.updateMany({
+        where: {
+          tenantId: tenant.id,
+          supplierId,
+          isActive: true,
+          id: { not: created.id },
+        },
+        data: { isPrimary: false },
+      });
+    }
+
+    await this.createSupplierChangeLog({
+      tenantId: tenant.id,
+      supplierId,
+      changeType: 'BANK_CREATE',
+      actorUserId: user.id,
+      refId: created.id,
+      newValue: `${created.bankName}:${created.accountNumber}`,
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_BANK_CREATE',
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_CREATE,
+        lifecycleType: 'CREATE',
+        metadata: { supplierId, supplierBankAccountId: created.id },
+      },
+      this.prisma,
+    );
+
+    return created;
+  }
+
+  async updateSupplierBankAccount(
+    req: Request,
+    supplierId: string,
+    bankId: string,
+    dto: UpdateSupplierBankAccountDto,
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const existing = await this.prisma.supplierBankAccount.findFirst({
+      where: { id: bankId, tenantId: tenant.id, supplierId },
+    });
+    if (!existing) throw new NotFoundException('Supplier bank account not found');
+
+    const updated = await this.prisma.supplierBankAccount.update({
+      where: { id: existing.id },
+      data: {
+        bankName: dto.bankName ?? existing.bankName,
+        branchName: dto.branchName ?? existing.branchName,
+        accountName: dto.accountName ?? existing.accountName,
+        accountNumber: dto.accountNumber ?? existing.accountNumber,
+        currency: dto.currency ?? existing.currency,
+        swiftCode: dto.swiftCode ?? existing.swiftCode,
+        notes: dto.notes ?? existing.notes,
+        isPrimary: typeof dto.isPrimary === 'boolean' ? dto.isPrimary : existing.isPrimary,
+        updatedById: user.id,
+      },
+    });
+
+    if (updated.isPrimary) {
+      await this.prisma.supplierBankAccount.updateMany({
+        where: {
+          tenantId: tenant.id,
+          supplierId,
+          isActive: true,
+          id: { not: updated.id },
+        },
+        data: { isPrimary: false },
+      });
+    }
+
+    if (existing.bankName !== updated.bankName) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'bankName',
+        oldValue: existing.bankName,
+        newValue: updated.bankName,
+        refId: updated.id,
+      });
+    }
+    if (existing.branchName !== updated.branchName) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'branchName',
+        oldValue: existing.branchName ?? '',
+        newValue: updated.branchName ?? '',
+        refId: updated.id,
+      });
+    }
+    if (existing.accountName !== updated.accountName) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'accountName',
+        oldValue: existing.accountName,
+        newValue: updated.accountName,
+        refId: updated.id,
+      });
+    }
+    if (existing.accountNumber !== updated.accountNumber) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'accountNumber',
+        oldValue: existing.accountNumber,
+        newValue: updated.accountNumber,
+        refId: updated.id,
+      });
+    }
+    if ((existing.currency ?? '') !== (updated.currency ?? '')) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'currency',
+        oldValue: existing.currency ?? '',
+        newValue: updated.currency ?? '',
+        refId: updated.id,
+      });
+    }
+    if ((existing.swiftCode ?? '') !== (updated.swiftCode ?? '')) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'swiftCode',
+        oldValue: existing.swiftCode ?? '',
+        newValue: updated.swiftCode ?? '',
+        refId: updated.id,
+      });
+    }
+    if ((existing.notes ?? '') !== (updated.notes ?? '')) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'notes',
+        oldValue: existing.notes ?? '',
+        newValue: updated.notes ?? '',
+        refId: updated.id,
+      });
+    }
+    if (existing.isPrimary !== updated.isPrimary) {
+      await this.createSupplierChangeLog({
+        tenantId: tenant.id,
+        supplierId,
+        changeType: 'BANK_UPDATE',
+        actorUserId: user.id,
+        field: 'isPrimary',
+        oldValue: String(existing.isPrimary),
+        newValue: String(updated.isPrimary),
+        refId: updated.id,
+      });
+    }
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_BANK_UPDATE',
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_CREATE,
+        lifecycleType: 'UPDATE',
+        metadata: { supplierId, supplierBankAccountId: updated.id },
+      },
+      this.prisma,
+    );
+
+    return updated;
+  }
+
+  async deactivateSupplierBankAccount(req: Request, supplierId: string, bankId: string) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const existing = await this.prisma.supplierBankAccount.findFirst({
+      where: { id: bankId, tenantId: tenant.id, supplierId },
+      select: { id: true, isActive: true, isPrimary: true, bankName: true, accountNumber: true },
+    });
+    if (!existing) throw new NotFoundException('Supplier bank account not found');
+    if (!existing.isActive) return { ok: true };
+
+    await this.prisma.supplierBankAccount.update({
+      where: { id: existing.id },
+      data: { isActive: false, isPrimary: false, updatedById: user.id },
+    });
+
+    await this.createSupplierChangeLog({
+      tenantId: tenant.id,
+      supplierId,
+      changeType: 'BANK_DEACTIVATE',
+      actorUserId: user.id,
+      refId: existing.id,
+      oldValue: `${existing.bankName}:${existing.accountNumber}`,
+      newValue: 'DEACTIVATED',
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_BANK_DEACTIVATE',
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_CREATE,
+        lifecycleType: 'UPDATE',
+        metadata: { supplierId, supplierBankAccountId: existing.id },
+      },
+      this.prisma,
+    );
+
+    return { ok: true };
+  }
+
+  async setPrimarySupplierBankAccount(req: Request, supplierId: string, bankId: string) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) throw new BadRequestException('Missing tenant or user context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    const existing = await this.prisma.supplierBankAccount.findFirst({
+      where: { id: bankId, tenantId: tenant.id, supplierId, isActive: true },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Supplier bank account not found or inactive');
+
+    await this.prisma.$transaction([
+      this.prisma.supplierBankAccount.updateMany({
+        where: { tenantId: tenant.id, supplierId, isActive: true },
+        data: { isPrimary: false, updatedById: user.id },
+      }),
+      this.prisma.supplierBankAccount.update({
+        where: { id: existing.id },
+        data: { isPrimary: true, updatedById: user.id },
+      }),
+    ]);
+
+    await this.createSupplierChangeLog({
+      tenantId: tenant.id,
+      supplierId,
+      changeType: 'BANK_SET_PRIMARY',
+      actorUserId: user.id,
+      refId: existing.id,
+      field: 'isPrimary',
+      newValue: 'true',
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AP_POST,
+        entityType: AuditEntityType.SUPPLIER_INVOICE,
+        entityId: supplierId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'AP_SUPPLIER_BANK_SET_PRIMARY',
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_CREATE,
+        lifecycleType: 'UPDATE',
+        metadata: { supplierId, supplierBankAccountId: existing.id },
+      },
+      this.prisma,
+    );
+
+    return { ok: true };
+  }
+
+  // Supplier change history
+  async listSupplierChangeHistory(req: Request, supplierId: string) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId });
+
+    return this.prisma.supplierChangeLog.findMany({
+      where: { tenantId: tenant.id, supplierId },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
   }
 
   async createSupplier(req: Request, dto: CreateSupplierDto) {

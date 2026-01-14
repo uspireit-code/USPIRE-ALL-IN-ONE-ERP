@@ -15,6 +15,7 @@ import { CreateInvoicePage } from './pages/ap/CreateInvoicePage';
 import { CreateSupplierPage } from './pages/ap/CreateSupplierPage';
 import { InvoiceDetailsPage } from './pages/ap/InvoiceDetailsPage';
 import { InvoicesListPage } from './pages/ap/InvoicesListPage';
+import { SupplierDetailsPage } from './pages/ap/SupplierDetailsPage';
 import { SuppliersListPage } from './pages/ap/SuppliersListPage';
 import { ArHomePage } from './pages/ar/ArHomePage';
 import { CreateCustomerPage } from './pages/ar/CreateCustomerPage';
@@ -161,6 +162,7 @@ export default function App() {
               <Route path="dashboard" element={<ManagementDashboardPage />} />
               <Route path="ap" element={<ApHomePage />} />
               <Route path="ap/suppliers" element={<SuppliersListPage />} />
+              <Route path="ap/suppliers/:id" element={<SupplierDetailsPage />} />
               <Route path="ap/suppliers/new" element={<CreateSupplierPage />} />
               <Route path="ap/invoices" element={<InvoicesListPage />} />
               <Route path="ap/invoices/new" element={<CreateInvoicePage />} />

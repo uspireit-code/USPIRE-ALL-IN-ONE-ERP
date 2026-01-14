@@ -841,6 +841,9 @@ model Supplier {
   fixedAssets FixedAsset[]
   tenant      Tenant            @relation(fields: [tenantId], references: [id])
   invoices    SupplierInvoice[]
+  documents   SupplierDocument[]
+  bankAccounts SupplierBankAccount[]
+  changeLogs  SupplierChangeLog[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -885,6 +888,75 @@ model SupplierInvoiceLine {
 
   @@index([supplierInvoiceId])
   @@index([accountId])
+}
+
+model SupplierDocument {
+  id          String   @id @default(uuid())
+  tenantId    String
+  supplierId  String
+
+  docType     String
+  filename    String
+  mimeType    String
+  storageKey  String
+  fileSize    Int?
+  notes       String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  isActive    Boolean  @default(true)
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([tenantId, supplierId])
+  @@index([tenantId, supplierId, createdAt])
+}
+
+model SupplierBankAccount {
+  id            String   @id @default(uuid())
+  tenantId      String
+  supplierId    String
+
+  bankName      String
+  branchName    String?
+  accountName   String
+  accountNumber String
+  currency      String?
+  swiftCode     String?
+  notes         String?
+
+  isPrimary     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedById   String?
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([tenantId, supplierId])
+  @@index([tenantId, supplierId, isActive])
+}
+
+model SupplierChangeLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  supplierId  String
+
+  changeType  String
+  field       String?
+  oldValue    String?
+  newValue    String?
+  refId       String?
+
+  actorUserId String
+  createdAt   DateTime @default(now())
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([tenantId, supplierId, createdAt])
+  @@index([tenantId, supplierId, changeType])
 }
 
 model Tenant {

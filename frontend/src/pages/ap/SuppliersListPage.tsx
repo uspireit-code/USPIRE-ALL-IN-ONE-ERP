@@ -47,6 +47,7 @@ export function SuppliersListPage() {
           <tr>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Name</th>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -54,6 +55,9 @@ export function SuppliersListPage() {
             <tr key={s.id}>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{s.name}</td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{s.isActive ? 'ACTIVE' : 'INACTIVE'}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                <Link to={`/ap/suppliers/${s.id}`}>View</Link>
+              </td>
             </tr>
           ))}
         </tbody>

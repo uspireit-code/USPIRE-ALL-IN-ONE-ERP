@@ -1,0 +1,23 @@
+AP-1 DISCOVERY CHECKLIST (completed before coding):
+
+1) Existing attachment/evidence models:
+   - Found: prisma model `AuditEvidence` (tenantId, entityType: AuditEntityType enum, entityId, fileName, mimeType, size, storageKey, sha256Hash, uploadedById, createdAt)
+   - Storage is implemented via `StorageProvider` (put/get/exists) with a default `LocalStorageProvider` writing under `STORAGE_LOCAL_PATH` (default ./storage) into an `evidence/` folder.
+   - Upload/list/download endpoints exist under `AuditEvidenceController` at `/audit/evidence` using `multer` memory storage.
+
+2) Supplier-link patterns:
+   - `AuditEvidence` links to entities via `(entityType, entityId)`.
+   - Current allowed entity types for evidence are validated in DTOs (`AuditEvidenceUploadDto` / `AuditEvidenceQueryDto`) via a hardcoded allowlist.
+   - `AuditEntityType` enum currently includes `SUPPLIER_INVOICE` but does NOT include `SUPPLIER`.
+
+3) Reuse assessment (generic attachment system):
+   - We can reuse the existing *storage infrastructure* (StorageProvider + key pattern + multer upload approach) safely.
+   - We cannot directly reuse the existing `AuditEvidence` table for Supplier KYC without adding a new `AuditEntityType` enum value (`SUPPLIER`) and extending the DTO allowlist. That would be an audit-schema/contract change, which this phase should avoid.
+
+4) Conclusion / recommendation:
+   - Proceed with new AP-scoped tables for supplier documents and bank accounts.
+   - For KYC file storage, reuse the existing StorageProvider and the existing storageKey pattern (store under the same provider), but persist metadata in a new `SupplierDocument` table.
+
+Other findings:
+- AP Supplier currently exists under `backend/src/ap` (ApController/ApService) and Supplier is a shared master (`prisma Supplier` model).
+- Tenant scoping in AP services uses `req.tenant` (required) and user context via `req.user`.

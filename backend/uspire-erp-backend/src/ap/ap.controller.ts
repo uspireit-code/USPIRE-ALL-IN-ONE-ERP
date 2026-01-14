@@ -3,11 +3,18 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Req,
+  Res,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import type { Response } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
@@ -16,6 +23,9 @@ import { ApService } from './ap.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
+import { UploadSupplierDocumentDto } from './dto/upload-supplier-document.dto';
+import { CreateSupplierBankAccountDto } from './dto/create-supplier-bank-account.dto';
+import { UpdateSupplierBankAccountDto } from './dto/update-supplier-bank-account.dto';
 
 @Controller('ap')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -32,6 +42,113 @@ export class ApController {
   @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
   async listSuppliers(@Req() req: Request) {
     return this.ap.listSuppliers(req);
+  }
+
+  // Supplier documents
+  @Get('suppliers/:id/documents')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  async listSupplierDocuments(@Req() req: Request, @Param('id') id: string) {
+    return this.ap.listSupplierDocuments(req, id);
+  }
+
+  @Post('suppliers/:id/documents')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 25 * 1024 * 1024 },
+    }),
+  )
+  async uploadSupplierDocument(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+    @Body() dto: UploadSupplierDocumentDto,
+  ) {
+    return this.ap.uploadSupplierDocument(req, id, dto, file);
+  }
+
+  @Patch('suppliers/:id/documents/:docId/deactivate')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
+  async deactivateSupplierDocument(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+  ) {
+    return this.ap.deactivateSupplierDocument(req, id, docId);
+  }
+
+  @Get('suppliers/:id/documents/:docId/download')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  async downloadSupplierDocument(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Res() res: Response,
+  ) {
+    const out = await this.ap.downloadSupplierDocument(req, id, docId);
+    res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Length', String(out.size ?? out.body.length));
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${out.fileName}"`,
+    );
+    res.send(out.body);
+  }
+
+  // Supplier bank accounts
+  @Get('suppliers/:id/bank-accounts')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  async listSupplierBankAccounts(@Req() req: Request, @Param('id') id: string) {
+    return this.ap.listSupplierBankAccounts(req, id);
+  }
+
+  @Post('suppliers/:id/bank-accounts')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
+  async createSupplierBankAccount(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: CreateSupplierBankAccountDto,
+  ) {
+    return this.ap.createSupplierBankAccount(req, id, dto);
+  }
+
+  @Patch('suppliers/:id/bank-accounts/:bankId')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
+  async updateSupplierBankAccount(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('bankId') bankId: string,
+    @Body() dto: UpdateSupplierBankAccountDto,
+  ) {
+    return this.ap.updateSupplierBankAccount(req, id, bankId, dto);
+  }
+
+  @Patch('suppliers/:id/bank-accounts/:bankId/deactivate')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
+  async deactivateSupplierBankAccount(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('bankId') bankId: string,
+  ) {
+    return this.ap.deactivateSupplierBankAccount(req, id, bankId);
+  }
+
+  @Patch('suppliers/:id/bank-accounts/:bankId/set-primary')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
+  async setPrimarySupplierBankAccount(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('bankId') bankId: string,
+  ) {
+    return this.ap.setPrimarySupplierBankAccount(req, id, bankId);
+  }
+
+  // Supplier change history
+  @Get('suppliers/:id/change-history')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  async listSupplierChangeHistory(@Req() req: Request, @Param('id') id: string) {
+    return this.ap.listSupplierChangeHistory(req, id);
   }
 
   @Get('accounts')

@@ -1,10 +1,57 @@
-import { apiFetch } from './api';
+import { apiFetch, apiFetchRaw } from './api';
 
 export type Supplier = {
   id: string;
   name: string;
   taxNumber?: string | null;
   isActive: boolean;
+};
+
+export type SupplierDocument = {
+  id: string;
+  tenantId: string;
+  supplierId: string;
+  docType: string;
+  filename: string;
+  mimeType: string;
+  storageKey: string;
+  fileSize?: number | null;
+  notes?: string | null;
+  createdById: string;
+  createdAt: string;
+  isActive: boolean;
+};
+
+export type SupplierBankAccount = {
+  id: string;
+  tenantId: string;
+  supplierId: string;
+  bankName: string;
+  branchName?: string | null;
+  accountName: string;
+  accountNumber: string;
+  currency?: string | null;
+  swiftCode?: string | null;
+  notes?: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
+  createdById: string;
+  createdAt: string;
+  updatedById?: string | null;
+  updatedAt: string;
+};
+
+export type SupplierChangeLog = {
+  id: string;
+  tenantId: string;
+  supplierId: string;
+  changeType: string;
+  field?: string | null;
+  oldValue?: string | null;
+  newValue?: string | null;
+  refId?: string | null;
+  actorUserId: string;
+  createdAt: string;
 };
 
 export type AccountLookup = {
@@ -48,6 +95,100 @@ export async function createSupplier(params: { name: string; taxNumber?: string 
     method: 'POST',
     body: JSON.stringify({ name: params.name, taxNumber: params.taxNumber || undefined }),
   });
+}
+
+// Supplier documents
+export async function listSupplierDocuments(supplierId: string) {
+  return apiFetch<SupplierDocument[]>(`/ap/suppliers/${supplierId}/documents`, { method: 'GET' });
+}
+
+export async function uploadSupplierDocument(
+  supplierId: string,
+  payload: { docType: string; notes?: string },
+  file: File,
+) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('docType', payload.docType);
+  if (payload.notes) form.append('notes', payload.notes);
+
+  const res = await apiFetchRaw(`/ap/suppliers/${supplierId}/documents`, {
+    method: 'POST',
+    body: form,
+  });
+  return (await res.json()) as SupplierDocument;
+}
+
+export async function deactivateSupplierDocument(supplierId: string, docId: string) {
+  return apiFetch<{ ok: true }>(`/ap/suppliers/${supplierId}/documents/${docId}/deactivate`, {
+    method: 'PATCH',
+  });
+}
+
+export async function downloadSupplierDocument(supplierId: string, docId: string) {
+  const res = await apiFetchRaw(`/ap/suppliers/${supplierId}/documents/${docId}/download`, { method: 'GET' });
+  return res.blob();
+}
+
+// Supplier bank accounts
+export async function listSupplierBankAccounts(supplierId: string) {
+  return apiFetch<SupplierBankAccount[]>(`/ap/suppliers/${supplierId}/bank-accounts`, { method: 'GET' });
+}
+
+export async function createSupplierBankAccount(
+  supplierId: string,
+  payload: {
+    bankName: string;
+    branchName?: string;
+    accountName: string;
+    accountNumber: string;
+    currency?: string;
+    swiftCode?: string;
+    notes?: string;
+    isPrimary?: boolean;
+  },
+) {
+  return apiFetch<SupplierBankAccount>(`/ap/suppliers/${supplierId}/bank-accounts`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateSupplierBankAccount(
+  supplierId: string,
+  bankId: string,
+  payload: {
+    bankName?: string;
+    branchName?: string;
+    accountName?: string;
+    accountNumber?: string;
+    currency?: string;
+    swiftCode?: string;
+    notes?: string;
+    isPrimary?: boolean;
+  },
+) {
+  return apiFetch<SupplierBankAccount>(`/ap/suppliers/${supplierId}/bank-accounts/${bankId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deactivateSupplierBankAccount(supplierId: string, bankId: string) {
+  return apiFetch<{ ok: true }>(`/ap/suppliers/${supplierId}/bank-accounts/${bankId}/deactivate`, {
+    method: 'PATCH',
+  });
+}
+
+export async function setPrimarySupplierBankAccount(supplierId: string, bankId: string) {
+  return apiFetch<{ ok: true }>(`/ap/suppliers/${supplierId}/bank-accounts/${bankId}/set-primary`, {
+    method: 'PATCH',
+  });
+}
+
+// Supplier change history
+export async function listSupplierChangeHistory(supplierId: string) {
+  return apiFetch<SupplierChangeLog[]>(`/ap/suppliers/${supplierId}/change-history`, { method: 'GET' });
 }
 
 export async function listEligibleAccounts() {
