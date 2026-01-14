@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
+import { PERMISSIONS as SECURITY_PERMISSIONS } from '@/security/permissionCatalog';
 import { Card } from '../components/Card';
 
 export function DashboardPage() {
@@ -25,39 +27,53 @@ export function DashboardPage() {
     transition: 'transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease, color 220ms ease',
   };
 
-  const glVisible = hasPermission('FINANCE_GL_VIEW') || hasPermission('FINANCE_GL_CREATE') || hasPermission('FINANCE_GL_POST');
-  const apVisible = hasPermission('AP_INVOICE_VIEW') || hasPermission('AP_INVOICE_CREATE');
-  const arVisible = hasPermission('INVOICE_VIEW') || hasPermission('INVOICE_CREATE') || hasPermission('FINANCE_VIEW_ALL') || hasPermission('SYSTEM_VIEW_ALL');
-  const paymentsVisible = hasPermission('PAYMENT_VIEW') || hasPermission('PAYMENT_CREATE');
-  const periodsVisible = hasPermission('FINANCE_PERIOD_VIEW');
+  const glVisible =
+    hasPermission(PERMISSIONS.GL.VIEW) ||
+    hasPermission(PERMISSIONS.GL.CREATE) ||
+    hasPermission(PERMISSIONS.GL.POST);
+  const apVisible =
+    hasPermission(PERMISSIONS.AP.INVOICE_VIEW) ||
+    hasPermission(PERMISSIONS.AP.INVOICE_CREATE);
+  const arVisible =
+    hasPermission(PERMISSIONS.AR.INVOICE_VIEW) ||
+    hasPermission(PERMISSIONS.AR.INVOICE_CREATE) ||
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const paymentsVisible =
+    hasPermission(PERMISSIONS.PAYMENT.VIEW) ||
+    hasPermission(PERMISSIONS.PAYMENT.CREATE);
+  const periodsVisible = hasPermission(PERMISSIONS.PERIOD.VIEW);
 
   const budgetsVisible =
-    hasPermission('BUDGET_VIEW') || hasPermission('BUDGET_CREATE') || hasPermission('BUDGET_APPROVE') || hasPermission('FINANCE_BUDGET_VIEW');
-  const budgetVsActualVisible = hasPermission('FINANCE_BUDGET_VIEW');
-  const forecastsVisible = hasPermission('forecast.view');
+    hasPermission(PERMISSIONS.BUDGET.VIEW) ||
+    hasPermission(PERMISSIONS.BUDGET.CREATE) ||
+    hasPermission(PERMISSIONS.BUDGET.APPROVE) ||
+    hasPermission(PERMISSIONS.BUDGET.FINANCE_VIEW);
+  const budgetVsActualVisible = hasPermission(PERMISSIONS.BUDGET.FINANCE_VIEW);
+  const forecastsVisible = hasPermission(PERMISSIONS.FORECAST.VIEW);
 
   const fixedAssetsVisible =
-    hasPermission('FA_CATEGORY_MANAGE') ||
-    hasPermission('FA_ASSET_CREATE') ||
-    hasPermission('FA_ASSET_CAPITALIZE') ||
-    hasPermission('FA_DEPRECIATION_RUN') ||
-    hasPermission('FA_DISPOSE');
+    hasPermission(PERMISSIONS.FA.CATEGORY_MANAGE) ||
+    hasPermission(PERMISSIONS.FA.ASSET_CREATE) ||
+    hasPermission(PERMISSIONS.FA.ASSET_CAPITALIZE) ||
+    hasPermission(PERMISSIONS.FA.DEPRECIATION_RUN) ||
+    hasPermission(PERMISSIONS.FA.DISPOSE);
 
   const bankReconciliationVisible =
-    hasPermission('BANK_RECONCILIATION_VIEW') ||
-    hasPermission('BANK_RECONCILE') ||
-    hasPermission('BANK_STATEMENT_IMPORT') ||
-    hasPermission('PAYMENT_CREATE');
+    hasPermission(SECURITY_PERMISSIONS.BANK.RECONCILIATION.VIEW) ||
+    hasPermission(SECURITY_PERMISSIONS.BANK.RECONCILIATION.MATCH) ||
+    hasPermission(SECURITY_PERMISSIONS.BANK.STATEMENT.IMPORT) ||
+    hasPermission(PERMISSIONS.PAYMENT.CREATE);
 
   const reportsVisible =
-    hasPermission('FINANCE_TB_VIEW') ||
-    hasPermission('FINANCE_PL_VIEW') ||
-    hasPermission('FINANCE_BS_VIEW') ||
-    hasPermission('FINANCE_AP_AGING_VIEW') ||
-    hasPermission('FINANCE_AR_AGING_VIEW') ||
-    hasPermission('TAX_REPORT_VIEW');
+    hasPermission(PERMISSIONS.REPORT.TB_VIEW) ||
+    hasPermission(PERMISSIONS.REPORT.PL_VIEW_LEGACY) ||
+    hasPermission(PERMISSIONS.REPORT.BS_VIEW_LEGACY) ||
+    hasPermission(PERMISSIONS.REPORT.AP_AGING_VIEW) ||
+    hasPermission(PERMISSIONS.REPORT.AR_AGING_VIEW) ||
+    hasPermission(PERMISSIONS.TAX.REPORT_VIEW);
 
-  const auditVisible = hasPermission('AUDIT_VIEW');
+  const auditVisible = hasPermission(PERMISSIONS.AUDIT_VIEW);
 
   const sections: Array<{
     key: string;

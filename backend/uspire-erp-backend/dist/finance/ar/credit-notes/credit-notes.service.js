@@ -12,16 +12,41 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FinanceArCreditNotesService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../../prisma/prisma.service");
+const gl_service_1 = require("../../../gl/gl.service");
+const permission_catalog_1 = require("../../../rbac/permission-catalog");
+const audit_writer_1 = require("../../../audit/audit-writer");
+const client_1 = require("@prisma/client");
 const accounting_period_guard_1 = require("../../common/accounting-period.guard");
 const resolve_ar_control_account_1 = require("../../common/resolve-ar-control-account");
-const gl_service_1 = require("../../../gl/gl.service");
+const report_export_service_1 = require("../../../reports/report-export.service");
 let FinanceArCreditNotesService = class FinanceArCreditNotesService {
     prisma;
     gl;
+    exports;
     CREDIT_NOTE_NUMBER_SEQUENCE_NAME = 'AR_CREDIT_NOTE_NUMBER';
-    constructor(prisma, gl) {
+    constructor(prisma, gl, exports) {
         this.prisma = prisma;
         this.gl = gl;
+        this.exports = exports;
+    }
+    async exportPdf(req, id) {
+        const tenant = req.tenant;
+        const entityLegalName = String(tenant?.legalName ?? '').trim();
+        const currencyIsoCode = String(tenant?.defaultCurrency ?? '').trim();
+        if (!entityLegalName || !currencyIsoCode) {
+            throw new common_1.BadRequestException('Missing tenant PDF metadata (legalName/defaultCurrency). Configure tenant settings before exporting.');
+        }
+        const cn = await this.getById(req, id);
+        return this.exports.creditNoteToPdf({
+            creditNote: cn,
+            header: {
+                entityLegalName,
+                reportName: 'Customer Credit Note',
+                periodLine: `Credit Note Date: ${String(cn?.creditNoteDate ?? '')}`,
+                currencyIsoCode,
+                headerFooterLine: `Currency: ${String(cn?.currency ?? currencyIsoCode)}`,
+            },
+        });
     }
     round2(n) {
         return Math.round(Number(n ?? 0) * 100) / 100;
@@ -52,59 +77,37 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
     async auditLifecycle(params) {
         const tenant = this.ensureTenant(params.req);
         const user = this.ensureUser(params.req);
-        await this.prisma.auditEvent
-            .create({
-            data: {
-                tenantId: tenant.id,
-                eventType: params.eventType,
-                entityType: 'CUSTOMER_CREDIT_NOTE',
-                entityId: params.creditNoteId,
-                action: params.eventType,
-                outcome: params.outcome,
-                reason: params.reason,
-                metadata: {
-                    creditNoteId: params.creditNoteId,
-                    invoiceId: params.invoiceId,
-                    amount: params.amount,
-                    performedBy: user.id,
-                    previousStatus: params.previousStatus,
-                    newStatus: params.newStatus,
-                },
-                userId: user.id,
-                permissionUsed: params.permissionUsed,
+        const lifecycleType = params.eventType === 'AR_CREDIT_NOTE_CREATED'
+            ? 'CREATE'
+            : params.eventType === 'AR_CREDIT_NOTE_SUBMITTED'
+                ? 'SUBMIT'
+                : params.eventType === 'AR_CREDIT_NOTE_APPROVED'
+                    ? 'APPROVE'
+                    : params.eventType === 'AR_CREDIT_NOTE_POSTED'
+                        ? 'POST'
+                        : 'VOID';
+        await (0, audit_writer_1.writeAuditEventWithPrisma)({
+            tenantId: tenant.id,
+            eventType: client_1.AuditEventType.AR_POST,
+            entityType: client_1.AuditEntityType.CUSTOMER_INVOICE,
+            entityId: params.creditNoteId,
+            actorUserId: user.id,
+            timestamp: new Date(),
+            outcome: params.outcome,
+            action: params.eventType,
+            permissionUsed: params.permissionUsed,
+            lifecycleType: lifecycleType,
+            reason: params.reason,
+            metadata: {
+                entityTypeRaw: 'CUSTOMER_CREDIT_NOTE',
+                creditNoteId: params.creditNoteId,
+                invoiceId: params.invoiceId,
+                amount: params.amount,
+                performedBy: user.id,
+                previousStatus: params.previousStatus,
+                newStatus: params.newStatus,
             },
-        })
-            .catch(() => undefined);
-    }
-    async logSoDBlocked(params) {
-        const tenant = this.ensureTenant(params.req);
-        const user = this.ensureUser(params.req);
-        await this.prisma.soDViolationLog.create({
-            data: {
-                tenantId: tenant.id,
-                userId: user.id,
-                permissionAttempted: params.permissionAttempted,
-                conflictingPermission: params.conflictingPermission,
-            },
-        });
-        await this.prisma.auditEvent
-            .create({
-            data: {
-                tenantId: tenant.id,
-                eventType: 'SOD_VIOLATION',
-                entityType: 'CUSTOMER_CREDIT_NOTE',
-                entityId: params.creditNoteId ?? user.id,
-                action: params.permissionAttempted,
-                outcome: 'BLOCKED',
-                reason: params.reason,
-                metadata: {
-                    creditNoteId: params.creditNoteId,
-                },
-                userId: user.id,
-                permissionUsed: params.permissionAttempted,
-            },
-        })
-            .catch(() => undefined);
+        }, this.prisma);
     }
     parseYmdToDateOrNull(s) {
         const v = String(s ?? '').trim();
@@ -152,12 +155,14 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
                 id: true,
                 customerId: true,
                 currency: true,
+                subtotal: true,
                 totalAmount: true,
             },
         });
         if (!inv)
             throw new common_1.NotFoundException('Invoice not found');
-        const invTotal = this.normalizeMoney(Number(inv.totalAmount ?? 0));
+        const invoiceSubtotalNet = this.normalizeMoney(Number(inv.subtotal ?? 0));
+        const invoiceTotalGross = this.normalizeMoney(Number(inv.totalAmount ?? 0));
         const receiptAppliedAgg = await this.prisma.customerReceiptLine.groupBy({
             by: ['invoiceId'],
             where: {
@@ -167,8 +172,8 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             },
             _sum: { appliedAmount: true },
         });
-        const receiptApplied = this.normalizeMoney(Number(receiptAppliedAgg?.[0]?._sum?.appliedAmount ?? 0));
-        const creditAgg = await this.prisma.customerCreditNote.aggregate({
+        const receiptAppliedGross = this.normalizeMoney(Number(receiptAppliedAgg?.[0]?._sum?.appliedAmount ?? 0));
+        const creditAggGross = await this.prisma.customerCreditNote.aggregate({
             where: {
                 tenantId: params.tenantId,
                 invoiceId: params.invoiceId,
@@ -176,17 +181,29 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             },
             _sum: { totalAmount: true },
         });
-        const creditApplied = this.normalizeMoney(Number(creditAgg?._sum?.totalAmount ?? 0));
-        const outstanding = this.normalizeMoney(invTotal - receiptApplied - creditApplied);
+        const creditAppliedGross = this.normalizeMoney(Number(creditAggGross?._sum?.totalAmount ?? 0));
+        const creditAggNet = await this.prisma.customerCreditNote.aggregate({
+            where: {
+                tenantId: params.tenantId,
+                invoiceId: params.invoiceId,
+                status: 'POSTED',
+            },
+            _sum: { subtotal: true },
+        });
+        const creditAppliedNet = this.normalizeMoney(Number(creditAggNet?._sum?.subtotal ?? 0));
+        const receiptAppliedNet = invoiceTotalGross > 0
+            ? this.normalizeMoney(receiptAppliedGross * (invoiceSubtotalNet / invoiceTotalGross))
+            : 0;
+        const outstanding = this.normalizeMoney(invoiceSubtotalNet - receiptAppliedNet - creditAppliedNet);
         return {
             invoice: {
                 id: inv.id,
                 customerId: inv.customerId,
                 currency: inv.currency,
-                totalAmount: invTotal,
+                totalAmount: invoiceTotalGross,
             },
-            receiptApplied,
-            creditApplied,
+            receiptApplied: receiptAppliedGross,
+            creditApplied: creditAppliedGross,
             outstanding,
         };
     }
@@ -547,7 +564,7 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             amount: totalAmount,
             previousStatus: null,
             newStatus: 'DRAFT',
-            permissionUsed: 'AR_CREDIT_NOTE_CREATE',
+            permissionUsed: permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_CREATE_RBAC,
             outcome: 'SUCCESS',
         });
         return this.getById(req, created.id);
@@ -563,6 +580,7 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
                 creditNoteDate: true,
                 invoiceId: true,
                 totalAmount: true,
+                subtotal: true,
             },
         });
         if (!cn)
@@ -584,6 +602,16 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
         catch {
             throw new common_1.ForbiddenException('Cannot submit in a closed period');
         }
+        if (cn.invoiceId) {
+            const outstanding = await this.computeInvoiceOutstanding({
+                tenantId: tenant.id,
+                invoiceId: cn.invoiceId,
+            });
+            const totalAmount = this.normalizeMoney(Number(cn.subtotal ?? 0));
+            if (totalAmount > outstanding.outstanding) {
+                throw new common_1.BadRequestException('Credit note exceeds the outstanding balance of the invoice.');
+            }
+        }
         await this.prisma.customerCreditNote.update({
             where: { id: cn.id },
             data: {
@@ -599,7 +627,7 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             amount: this.normalizeMoney(Number(cn.totalAmount ?? 0)),
             previousStatus: String(cn.status),
             newStatus: 'SUBMITTED',
-            permissionUsed: 'CREDIT_NOTE_CREATE',
+            permissionUsed: permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_CREATE,
             outcome: 'SUCCESS',
         });
         return this.getById(req, cn.id);
@@ -615,16 +643,6 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             throw new common_1.NotFoundException('Credit note not found');
         if (String(cn.status) !== 'SUBMITTED') {
             throw new common_1.BadRequestException(`Credit note cannot be approved from status: ${cn.status}`);
-        }
-        if (String(cn.createdById) === String(user.id)) {
-            await this.logSoDBlocked({
-                req,
-                permissionAttempted: 'CREDIT_NOTE_APPROVE',
-                conflictingPermission: 'CREDIT_NOTE_CREATE',
-                creditNoteId: cn.id,
-                reason: 'Creator cannot approve their own credit note',
-            });
-            throw new common_1.ConflictException('Creator cannot approve their own credit note');
         }
         const creditNoteDate = new Date(cn.creditNoteDate);
         try {
@@ -645,9 +663,9 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
                 tenantId: tenant.id,
                 invoiceId: cn.invoiceId,
             });
-            const totalAmount = this.normalizeMoney(Number(cn.totalAmount ?? 0));
+            const totalAmount = this.normalizeMoney(Number(cn.subtotal ?? 0));
             if (totalAmount > outstanding.outstanding) {
-                throw new common_1.ConflictException('Credit note total exceeds invoice outstanding balance');
+                throw new common_1.BadRequestException('Credit note exceeds the outstanding balance of the invoice.');
             }
         }
         await this.prisma.customerCreditNote.update({
@@ -667,7 +685,7 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             amount: this.normalizeMoney(Number(cn.totalAmount ?? 0)),
             previousStatus: String(cn.status),
             newStatus: 'APPROVED',
-            permissionUsed: 'CREDIT_NOTE_APPROVE',
+            permissionUsed: permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_APPROVE,
             outcome: 'SUCCESS',
         });
         return this.getById(req, cn.id);
@@ -689,26 +707,6 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
         }
         if (String(cn.status) !== 'APPROVED') {
             throw new common_1.BadRequestException(`Credit note cannot be posted from status: ${cn.status}`);
-        }
-        if (String(cn.createdById) === String(user.id)) {
-            await this.logSoDBlocked({
-                req,
-                permissionAttempted: 'CREDIT_NOTE_POST',
-                conflictingPermission: 'CREDIT_NOTE_CREATE',
-                creditNoteId: cn.id,
-                reason: 'Creator cannot post their own credit note',
-            });
-            throw new common_1.ConflictException('Creator cannot post their own credit note');
-        }
-        if (cn.approvedById && String(cn.approvedById) === String(user.id)) {
-            await this.logSoDBlocked({
-                req,
-                permissionAttempted: 'CREDIT_NOTE_POST',
-                conflictingPermission: 'CREDIT_NOTE_APPROVE',
-                creditNoteId: cn.id,
-                reason: 'Approver cannot post the same credit note',
-            });
-            throw new common_1.ConflictException('Approver cannot post the same credit note');
         }
         const creditNoteDate = new Date(cn.creditNoteDate);
         try {
@@ -738,7 +736,8 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
                 tenantId: tenant.id,
                 invoiceId: cn.invoiceId,
             });
-            if (totalAmount > outstanding.outstanding) {
+            const netAmount = this.normalizeMoney(Number(cn.subtotal ?? 0));
+            if (netAmount > outstanding.outstanding) {
                 throw new common_1.ConflictException('Credit note total exceeds invoice outstanding balance');
             }
         }
@@ -815,7 +814,7 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             amount: totalAmount,
             previousStatus: String(cn.status),
             newStatus: 'POSTED',
-            permissionUsed: 'CREDIT_NOTE_POST',
+            permissionUsed: permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_POST,
             outcome: 'SUCCESS',
         });
         return this.getById(req, cn.id);
@@ -923,7 +922,7 @@ let FinanceArCreditNotesService = class FinanceArCreditNotesService {
             amount: totalAmount,
             previousStatus: String(cn.status),
             newStatus: 'VOID',
-            permissionUsed: 'CREDIT_NOTE_VOID',
+            permissionUsed: permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_VOID,
             outcome: 'SUCCESS',
             reason,
         });
@@ -934,6 +933,7 @@ exports.FinanceArCreditNotesService = FinanceArCreditNotesService;
 exports.FinanceArCreditNotesService = FinanceArCreditNotesService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        gl_service_1.GlService])
+        gl_service_1.GlService,
+        report_export_service_1.ReportExportService])
 ], FinanceArCreditNotesService);
 //# sourceMappingURL=credit-notes.service.js.map

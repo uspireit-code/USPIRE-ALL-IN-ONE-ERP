@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { createSupplier } from '../../services/ap';
 
 export function CreateSupplierPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreateSupplier = hasPermission('AP_SUPPLIER_CREATE');
+  const canCreateSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.CREATE);
 
   const [name, setName] = useState('');
   const [status] = useState<'ACTIVE'>('ACTIVE');

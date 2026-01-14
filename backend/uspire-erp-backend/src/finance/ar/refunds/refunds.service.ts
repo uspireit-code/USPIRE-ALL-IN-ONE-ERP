@@ -7,9 +7,13 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { GlService } from '../../../gl/gl.service';
+import { PERMISSIONS } from '../../../rbac/permission-catalog';
+import { writeAuditEventWithPrisma } from '../../../audit/audit-writer';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
+import { GlService } from '../../../gl/gl.service';
 import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
+import { ReportExportService } from '../../../reports/report-export.service';
 import type {
   CreateCustomerRefundDto,
   ListRefundsQueryDto,
@@ -23,7 +27,31 @@ export class FinanceArRefundsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gl: GlService,
+    private readonly exports: ReportExportService,
   ) {}
+
+  async exportPdf(req: Request, id: string): Promise<Buffer> {
+    const tenant: any = (req as any).tenant;
+    const entityLegalName = String(tenant?.legalName ?? '').trim();
+    const currencyIsoCode = String(tenant?.defaultCurrency ?? '').trim();
+    if (!entityLegalName || !currencyIsoCode) {
+      throw new BadRequestException(
+        'Missing tenant PDF metadata (legalName/defaultCurrency). Configure tenant settings before exporting.',
+      );
+    }
+
+    const refund = await this.getById(req, id);
+    return this.exports.refundToPdf({
+      refund: refund as any,
+      header: {
+        entityLegalName,
+        reportName: 'Customer Refund',
+        periodLine: `Refund Date: ${String((refund as any)?.refundDate ?? '')}`,
+        currencyIsoCode,
+        headerFooterLine: `Currency: ${String((refund as any)?.currency ?? currencyIsoCode)}`,
+      },
+    });
+  }
 
   private round2(n: number) {
     return Math.round(Number(n ?? 0) * 100) / 100;
@@ -752,21 +780,26 @@ export class FinanceArRefundsService {
       } as any,
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'AR_POST',
-          entityType: 'CUSTOMER_REFUND',
-          entityId: refund.id,
-          action: 'REFUND_POSTED',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({ journalId: postedJournal.id }),
-          userId: user.id,
-          permissionUsed: 'REFUND_POST',
-        } as any,
-      })
-      .catch(() => undefined);
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.AR_POST,
+        entityType: AuditEntityType.CUSTOMER_INVOICE,
+        entityId: refund.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'REFUND_POSTED',
+        permissionUsed: PERMISSIONS.AR.REFUND_POST,
+        lifecycleType: 'POST',
+        metadata: {
+          entityTypeRaw: 'CUSTOMER_REFUND',
+          refundId: refund.id,
+          journalId: postedJournal.id,
+        },
+      },
+      this.prisma,
+    );
 
     return (this.prisma as any).customerRefund.findFirst({
       where: { id: refund.id, tenantId: tenant.id },

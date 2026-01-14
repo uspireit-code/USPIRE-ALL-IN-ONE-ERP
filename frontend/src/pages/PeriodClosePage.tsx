@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import type { ApiError } from '../services/api';
 import {
   completePeriodCloseChecklistItem,
@@ -12,7 +13,7 @@ export function PeriodClosePage() {
   const { periodId = '' } = useParams();
   const { hasPermission } = useAuth();
 
-  const canReview = hasPermission('FINANCE_PERIOD_REVIEW');
+  const canReview = hasPermission(PERMISSIONS.PERIOD.REVIEW);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);

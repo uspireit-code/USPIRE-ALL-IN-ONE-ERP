@@ -19,6 +19,7 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { CreateAccountingPeriodDto } from './dto/create-accounting-period.dto';
 import { CreateJournalDto } from './dto/create-journal.dto';
@@ -65,13 +66,13 @@ export class GlController {
   }
 
   @Post('accounts')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async createAccount(@Req() req: Request, @Body() dto: CreateAccountDto) {
     return this.gl.createAccount(req, dto);
   }
 
   @Get('accounts')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listAccounts(
     @Req() req: Request,
     @Query('balanceSheetOnly') balanceSheetOnly?: string,
@@ -82,7 +83,7 @@ export class GlController {
   }
 
   @Get('legal-entities')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listLegalEntities(
     @Req() req: Request,
     @Query('effectiveOn') effectiveOn?: string,
@@ -91,7 +92,7 @@ export class GlController {
   }
 
   @Get('departments')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listDepartments(
     @Req() req: Request,
     @Query('effectiveOn') effectiveOn?: string,
@@ -100,7 +101,7 @@ export class GlController {
   }
 
   @Get('projects')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listProjects(
     @Req() req: Request,
     @Query('effectiveOn') effectiveOn?: string,
@@ -109,7 +110,7 @@ export class GlController {
   }
 
   @Get('funds')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listFunds(
     @Req() req: Request,
     @Query('effectiveOn') effectiveOn?: string,
@@ -119,13 +120,13 @@ export class GlController {
   }
 
   @Post('journals')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async createJournal(@Req() req: Request, @Body() dto: CreateJournalDto) {
     return this.gl.createDraftJournal(req, dto);
   }
 
   @Post('journals/upload')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -137,7 +138,7 @@ export class GlController {
   }
 
   @Get('journals/upload/template.csv')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async downloadJournalUploadCsvTemplate(
     @Req() req: Request,
     @Res() res: Response,
@@ -152,7 +153,7 @@ export class GlController {
   }
 
   @Get('journals/upload/template.xlsx')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async downloadJournalUploadXlsxTemplate(
     @Req() req: Request,
     @Res() res: Response,
@@ -170,19 +171,19 @@ export class GlController {
   }
 
   @Get('journals/review-queue')
-  @Permissions('FINANCE_GL_APPROVE')
+  @Permissions(PERMISSIONS.GL.APPROVE)
   async listReviewQueue(@Req() req: Request) {
     return this.gl.listJournalReviewQueue(req);
   }
 
   @Get('journals/post-queue')
-  @Permissions('FINANCE_GL_FINAL_POST')
+  @Permissions(PERMISSIONS.GL.FINAL_POST)
   async listPostQueue(@Req() req: Request) {
     return this.gl.listJournalPostQueue(req);
   }
 
   @Post('recurring-templates')
-  @Permissions('FINANCE_GL_RECURRING_MANAGE')
+  @Permissions(PERMISSIONS.GL.RECURRING_MANAGE)
   async createRecurringTemplate(
     @Req() req: Request,
     @Body() dto: CreateRecurringTemplateDto,
@@ -192,15 +193,15 @@ export class GlController {
 
   @Get('recurring-templates')
   @PermissionsAny(
-    'FINANCE_GL_RECURRING_MANAGE',
-    'FINANCE_GL_RECURRING_GENERATE',
+    PERMISSIONS.GL.RECURRING_MANAGE,
+    PERMISSIONS.GL.RECURRING_GENERATE,
   )
   async listRecurringTemplates(@Req() req: Request) {
     return this.gl.listRecurringTemplates(req);
   }
 
   @Put('recurring-templates/:id')
-  @Permissions('FINANCE_GL_RECURRING_MANAGE')
+  @Permissions(PERMISSIONS.GL.RECURRING_MANAGE)
   async updateRecurringTemplate(
     @Req() req: Request,
     @Param('id') id: string,
@@ -210,7 +211,7 @@ export class GlController {
   }
 
   @Post('recurring-templates/:id/generate')
-  @Permissions('FINANCE_GL_RECURRING_GENERATE')
+  @Permissions(PERMISSIONS.GL.RECURRING_GENERATE)
   async generateRecurringTemplate(
     @Req() req: Request,
     @Param('id') id: string,
@@ -221,8 +222,8 @@ export class GlController {
 
   @Get('recurring-templates/:id/history')
   @PermissionsAny(
-    'FINANCE_GL_RECURRING_MANAGE',
-    'FINANCE_GL_RECURRING_GENERATE',
+    PERMISSIONS.GL.RECURRING_MANAGE,
+    PERMISSIONS.GL.RECURRING_GENERATE,
   )
   async getRecurringTemplateHistory(
     @Req() req: Request,
@@ -232,19 +233,19 @@ export class GlController {
   }
 
   @Get('journals/:id')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async getJournal(@Req() req: Request, @Param('id') id: string) {
     return this.gl.getJournal(req, id);
   }
 
   @Get('journals/:id/detail')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async getJournalDetail(@Req() req: Request, @Param('id') id: string) {
     return this.gl.getJournalDetail(req, id);
   }
 
   @Put('journals/:id')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async updateJournal(
     @Req() req: Request,
     @Param('id') id: string,
@@ -254,19 +255,19 @@ export class GlController {
   }
 
   @Post('journals/:id/submit')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async submitJournal(@Req() req: Request, @Param('id') id: string) {
     return this.gl.submitJournal(req, id);
   }
 
   @Post('journals/:id/review')
-  @Permissions('FINANCE_GL_APPROVE')
+  @Permissions(PERMISSIONS.GL.APPROVE)
   async reviewJournal(@Req() req: Request, @Param('id') id: string) {
     return this.gl.reviewJournal(req, id);
   }
 
   @Post('journals/:id/reject')
-  @Permissions('FINANCE_GL_APPROVE')
+  @Permissions(PERMISSIONS.GL.APPROVE)
   async rejectJournal(
     @Req() req: Request,
     @Param('id') id: string,
@@ -276,19 +277,19 @@ export class GlController {
   }
 
   @Post('journals/:id/park')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async parkJournal(@Req() req: Request, @Param('id') id: string) {
     return this.gl.parkJournal(req, id);
   }
 
   @Post('journals/:id/post')
-  @Permissions('FINANCE_GL_FINAL_POST')
+  @Permissions(PERMISSIONS.GL.FINAL_POST)
   async postJournal(@Req() req: Request, @Param('id') id: string) {
     return this.gl.postJournal(req, id);
   }
 
   @Post('journals/:id/return-to-review')
-  @Permissions('FINANCE_GL_FINAL_POST')
+  @Permissions(PERMISSIONS.GL.FINAL_POST)
   async returnToReview(
     @Req() req: Request,
     @Param('id') id: string,
@@ -298,7 +299,7 @@ export class GlController {
   }
 
   @Post('journals/:id/reverse')
-  @Permissions('FINANCE_GL_FINAL_POST')
+  @Permissions(PERMISSIONS.GL.FINAL_POST)
   async reverseJournal(
     @Req() req: Request,
     @Param('id') id: string,
@@ -308,7 +309,7 @@ export class GlController {
   }
 
   @Get('journals')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listJournals(
     @Req() req: Request,
     @Query('limit') limit?: string,
@@ -407,7 +408,7 @@ export class GlController {
   }
 
   @Post('periods')
-  @Permissions('FINANCE_PERIOD_CREATE')
+  @Permissions(PERMISSIONS.PERIOD.CREATE)
   async createPeriod(
     @Req() req: Request,
     @Body() dto: CreateAccountingPeriodDto,
@@ -416,13 +417,13 @@ export class GlController {
   }
 
   @Get('periods/:id/checklist')
-  @PermissionsAny('FINANCE_PERIOD_VIEW', 'FINANCE_PERIOD_REVIEW')
+  @PermissionsAny(PERMISSIONS.PERIOD.VIEW, PERMISSIONS.PERIOD.REVIEW)
   async getPeriodChecklist(@Req() req: Request, @Param('id') id: string) {
     return this.gl.getAccountingPeriodChecklist(req, id);
   }
 
   @Post('periods/:id/checklist/items/:itemId/complete')
-  @Permissions('FINANCE_PERIOD_CHECKLIST_COMPLETE')
+  @Permissions(PERMISSIONS.PERIOD.CHECKLIST_COMPLETE)
   async completePeriodChecklistItem(
     @Req() req: Request,
     @Param('id') id: string,
@@ -435,13 +436,13 @@ export class GlController {
   }
 
   @Post('periods/:id/close')
-  @Permissions('FINANCE_PERIOD_CLOSE_APPROVE')
+  @Permissions(PERMISSIONS.PERIOD.CLOSE_APPROVE)
   async closePeriod(@Req() req: Request, @Param('id') id: string) {
     return this.gl.closeAccountingPeriod(req, id);
   }
 
   @Post('periods/:id/reopen')
-  @Permissions('FINANCE_PERIOD_REOPEN')
+  @Permissions(PERMISSIONS.PERIOD.REOPEN)
   async reopenPeriod(
     @Req() req: Request,
     @Param('id') id: string,
@@ -451,25 +452,25 @@ export class GlController {
   }
 
   @Get('periods/:id/summary')
-  @PermissionsAny('FINANCE_PERIOD_VIEW', 'FINANCE_PERIOD_REVIEW')
+  @PermissionsAny(PERMISSIONS.PERIOD.VIEW, PERMISSIONS.PERIOD.REVIEW)
   async getPeriodSummary(@Req() req: Request, @Param('id') id: string) {
     return this.gl.getAccountingPeriodSummary(req, id);
   }
 
   @Post('periods/:id/review-packs')
-  @Permissions('AUDIT_REVIEW_PACK_GENERATE')
+  @Permissions(PERMISSIONS.AUDIT.REVIEW_PACK_GENERATE)
   async generateReviewPack(@Req() req: Request, @Param('id') id: string) {
     return this.reviewPacks.generateReviewPack(req, id);
   }
 
   @Get('periods/:id/review-packs')
-  @Permissions('AUDIT_REVIEW_PACK_VIEW')
+  @Permissions(PERMISSIONS.AUDIT.REVIEW_PACK_VIEW)
   async listReviewPacks(@Req() req: Request, @Param('id') id: string) {
     return this.reviewPacks.listReviewPacks(req, id);
   }
 
   @Get('periods/:id/review-packs/:packId/download')
-  @Permissions('AUDIT_REVIEW_PACK_VIEW')
+  @Permissions(PERMISSIONS.AUDIT.REVIEW_PACK_VIEW)
   async downloadReviewPack(
     @Req() req: Request,
     @Param('id') id: string,
@@ -487,19 +488,19 @@ export class GlController {
   }
 
   @Get('periods')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listPeriods(@Req() req: Request) {
     return this.gl.listAccountingPeriods(req);
   }
 
   @Get('trial-balance')
-  @Permissions('FINANCE_TB_VIEW')
+  @Permissions(PERMISSIONS.REPORT.TB_VIEW)
   async trialBalance(@Req() req: Request, @Query() dto: TrialBalanceQueryDto) {
     return this.gl.trialBalance(req, dto);
   }
 
   @Get('trial-balance/export')
-  @Permissions('FINANCE_REPORT_EXPORT', 'FINANCE_TB_VIEW')
+  @Permissions(PERMISSIONS.REPORT.REPORT_EXPORT, PERMISSIONS.REPORT.TB_VIEW)
   async exportTrialBalance(
     @Req() req: Request,
     @Query() dto: TrialBalanceQueryDto & ReportExportQueryDto,
@@ -555,13 +556,13 @@ export class GlController {
   }
 
   @Get('ledger')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async ledger(@Req() req: Request, @Query() dto: LedgerQueryDto) {
     return this.gl.ledger(req, dto);
   }
 
   @Get('opening-balances')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async getOpeningBalances(
     @Req() req: Request,
     @Query() dto: OpeningBalancesQueryDto,
@@ -570,7 +571,7 @@ export class GlController {
   }
 
   @Post('opening-balances')
-  @Permissions('FINANCE_GL_CREATE')
+  @Permissions(PERMISSIONS.GL.CREATE)
   async upsertOpeningBalances(
     @Req() req: Request,
     @Body() dto: UpsertOpeningBalancesJournalDto,
@@ -579,7 +580,7 @@ export class GlController {
   }
 
   @Post('opening-balances/post')
-  @Permissions('FINANCE_GL_FINAL_POST')
+  @Permissions(PERMISSIONS.GL.FINAL_POST)
   async postOpeningBalances(
     @Req() req: Request,
     @Body() dto: OpeningBalancesQueryDto,

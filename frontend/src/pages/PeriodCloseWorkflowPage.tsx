@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import type { ApiError } from '../services/api';
 import {
   closeAccountingPeriod,
@@ -16,9 +17,9 @@ export function PeriodCloseWorkflowPage() {
   const { id = '' } = useParams();
   const { hasPermission } = useAuth();
 
-  const canComplete = hasPermission('FINANCE_PERIOD_CHECKLIST_COMPLETE');
-  const canClose = hasPermission('FINANCE_PERIOD_CLOSE_APPROVE');
-  const canView = hasPermission('FINANCE_PERIOD_VIEW');
+  const canComplete = hasPermission(PERMISSIONS.PERIOD.CHECKLIST_COMPLETE);
+  const canClose = hasPermission(PERMISSIONS.PERIOD.CLOSE_APPROVE);
+  const canView = hasPermission(PERMISSIONS.PERIOD.VIEW);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);

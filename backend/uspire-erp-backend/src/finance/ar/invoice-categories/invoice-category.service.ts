@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import type {
   CreateInvoiceCategoryDto,
   UpdateInvoiceCategoryDto,
@@ -137,13 +138,13 @@ export class InvoiceCategoryService {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'INVOICE_CATEGORY_CREATED' as any,
-            entityType: 'INVOICE_CATEGORY' as any,
+            eventType: 'AR_CONFIG',
+            entityType: 'INVOICE_CATEGORY',
             entityId: created.id,
             action: 'INVOICE_CATEGORY_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'INVOICE_CATEGORY_CREATE',
+            permissionUsed: PERMISSIONS.AR.INVOICE_CATEGORY_CREATE,
           } as any,
         })
         .catch(() => undefined);
@@ -158,14 +159,14 @@ export class InvoiceCategoryService {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'INVOICE_CATEGORY_CREATED' as any,
-            entityType: 'INVOICE_CATEGORY' as any,
-            entityId: 'UNKNOWN',
+            eventType: 'AR_CONFIG',
+            entityType: 'INVOICE_CATEGORY',
+            entityId: '',
             action: 'INVOICE_CATEGORY_CREATE',
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to create invoice category'),
             userId: user.id,
-            permissionUsed: 'INVOICE_CATEGORY_CREATE',
+            permissionUsed: PERMISSIONS.AR.INVOICE_CATEGORY_CREATE,
           } as any,
         })
         .catch(() => undefined);
@@ -232,13 +233,13 @@ export class InvoiceCategoryService {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'INVOICE_CATEGORY_UPDATED' as any,
-            entityType: 'INVOICE_CATEGORY' as any,
+            eventType: 'AR_CONFIG',
+            entityType: 'INVOICE_CATEGORY',
             entityId: updated.id,
             action: 'INVOICE_CATEGORY_UPDATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'INVOICE_CATEGORY_UPDATE',
+            permissionUsed: PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE,
           } as any,
         })
         .catch(() => undefined);
@@ -253,14 +254,14 @@ export class InvoiceCategoryService {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'INVOICE_CATEGORY_UPDATED' as any,
-            entityType: 'INVOICE_CATEGORY' as any,
-            entityId: String(id ?? ''),
+            eventType: 'AR_CONFIG',
+            entityType: 'INVOICE_CATEGORY',
+            entityId: id,
             action: 'INVOICE_CATEGORY_UPDATE',
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to update invoice category'),
             userId: user.id,
-            permissionUsed: 'INVOICE_CATEGORY_UPDATE',
+            permissionUsed: PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE,
           } as any,
         })
         .catch(() => undefined);
@@ -295,13 +296,13 @@ export class InvoiceCategoryService {
       .create({
         data: {
           tenantId: tenant.id,
-          eventType: 'INVOICE_CATEGORY_STATUS_CHANGED' as any,
-          entityType: 'INVOICE_CATEGORY' as any,
-          entityId: updated.id,
+          eventType: 'AR_CONFIG',
+          entityType: 'INVOICE_CATEGORY',
+          entityId: id,
           action: 'INVOICE_CATEGORY_DISABLE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'INVOICE_CATEGORY_DISABLE',
+          permissionUsed: PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE,
         } as any,
       })
       .catch(() => undefined);

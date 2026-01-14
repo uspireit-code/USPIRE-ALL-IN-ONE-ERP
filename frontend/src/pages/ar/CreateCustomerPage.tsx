@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { createCustomer } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
 
@@ -8,7 +9,7 @@ export function CreateCustomerPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreateCustomer = hasPermission('CUSTOMERS_CREATE');
+  const canCreateCustomer = hasPermission(PERMISSIONS.AR.CUSTOMERS.CREATE);
 
   const [name, setName] = useState('');
   const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');

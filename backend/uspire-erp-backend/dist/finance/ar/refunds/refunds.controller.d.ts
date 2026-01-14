@@ -1,5 +1,6 @@
 import type { Request } from 'express';
-import { ApproveRefundDto, CreateCustomerRefundDto, ListRefundsQueryDto, PostRefundDto, SubmitRefundDto, VoidRefundDto } from './refunds.dto';
+import type { Response } from 'express';
+import { CreateCustomerRefundDto, ListRefundsQueryDto, ApproveRefundDto, PostRefundDto, SubmitRefundDto, VoidRefundDto } from './refunds.dto';
 import { FinanceArRefundsService } from './refunds.service';
 export declare class FinanceArRefundsController {
     private readonly refunds;
@@ -13,6 +14,9 @@ export declare class FinanceArRefundsController {
     listRefundableCreditNotes(req: Request, customerId: string): Promise<{
         items: any;
     }>;
+    listRefundableCustomers(req: Request): Promise<{
+        items: any;
+    }>;
     refundable(req: Request, creditNoteId: string): Promise<{
         creditNote: {
             creditNoteDate: any;
@@ -20,6 +24,7 @@ export declare class FinanceArRefundsController {
             creditNoteNumber: string;
             customerId: any;
             currency: string;
+            exchangeRate: number;
             totalAmount: number;
         };
         refunded: number;
@@ -54,9 +59,10 @@ export declare class FinanceArRefundsController {
         voidReason: any;
         postedJournalId: any;
     }>;
+    exportPdf(req: Request, id: string, res: Response): Promise<void>;
     create(req: Request, dto: CreateCustomerRefundDto): Promise<any>;
     submit(req: Request, id: string, _dto: SubmitRefundDto): Promise<any>;
-    approve(req: Request, id: string, dto: ApproveRefundDto): Promise<any>;
+    approve(req: Request, id: string, _dto: ApproveRefundDto): Promise<any>;
     post(req: Request, id: string, _dto: PostRefundDto): Promise<any>;
     void(req: Request, id: string, dto: VoidRefundDto): Promise<any>;
 }

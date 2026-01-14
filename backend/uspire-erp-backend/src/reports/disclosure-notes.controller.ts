@@ -19,6 +19,7 @@ import { TenantRateLimitGuard } from '../internal/tenant-rate-limit.guard';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { DisclosureNotesAuditService } from './disclosure-notes-audit.service';
 import { DisclosureNotesService } from './disclosure-notes.service';
 import { DisclosureNoteGenerateDto } from './dto/disclosure-note-generate.dto';
@@ -59,7 +60,7 @@ export class DisclosureNotesController {
   }
 
   @Post('generate')
-  @Permissions('FINANCE_DISCLOSURE_GENERATE')
+  @Permissions(PERMISSIONS.REPORT.DISCLOSURE_GENERATE)
   async generate(@Req() req: Request, @Body() dto: DisclosureNoteGenerateDto) {
     try {
       const note = await this.disclosureNotes.generateNote(
@@ -72,7 +73,7 @@ export class DisclosureNotesController {
         .disclosureNoteGenerate({
           req,
           noteId: note.id,
-          permissionUsed: 'FINANCE_DISCLOSURE_GENERATE',
+          permissionUsed: PERMISSIONS.REPORT.DISCLOSURE_GENERATE,
           outcome: 'SUCCESS',
           reason: JSON.stringify({
             periodId: dto.periodId,
@@ -94,7 +95,7 @@ export class DisclosureNotesController {
         .disclosureNoteGenerate({
           req,
           noteId: `period:${dto.periodId}:type:${dto.noteType}`,
-          permissionUsed: 'FINANCE_DISCLOSURE_GENERATE',
+          permissionUsed: PERMISSIONS.REPORT.DISCLOSURE_GENERATE,
           outcome,
           reason: JSON.stringify({
             periodId: dto.periodId,
@@ -109,19 +110,19 @@ export class DisclosureNotesController {
   }
 
   @Get()
-  @Permissions('FINANCE_DISCLOSURE_VIEW')
+  @Permissions(PERMISSIONS.REPORT.DISCLOSURE_VIEW)
   async list(@Req() req: Request, @Query() dto: DisclosureNoteListQueryDto) {
     return this.disclosureNotes.listNotes(req, dto.periodId);
   }
 
   @Get('ifrs')
-  @Permissions('FINANCE_DISCLOSURE_VIEW')
+  @Permissions(PERMISSIONS.REPORT.DISCLOSURE_VIEW)
   async listIfrs() {
     return this.ifrsDisclosureNotes.listNotes();
   }
 
   @Get('ifrs/:noteCode')
-  @Permissions('FINANCE_DISCLOSURE_VIEW')
+  @Permissions(PERMISSIONS.REPORT.DISCLOSURE_VIEW)
   async getIfrs(
     @Req() req: Request,
     @Param('noteCode') noteCode: string,
@@ -146,7 +147,7 @@ export class DisclosureNotesController {
   }
 
   @Get('ifrs/:noteCode/export')
-  @Permissions('FINANCE_REPORT_EXPORT', 'FINANCE_DISCLOSURE_VIEW')
+  @Permissions(PERMISSIONS.REPORT.REPORT_EXPORT, PERMISSIONS.REPORT.DISCLOSURE_VIEW)
   async exportIfrs(
     @Req() req: Request,
     @Param('noteCode') noteCode: string,
@@ -206,7 +207,7 @@ export class DisclosureNotesController {
   }
 
   @Get(':id')
-  @Permissions('FINANCE_DISCLOSURE_VIEW')
+  @Permissions(PERMISSIONS.REPORT.DISCLOSURE_VIEW)
   async get(@Req() req: Request, @Param('id') id: string) {
     const note = await this.disclosureNotes.getNote(req, id);
 
@@ -214,7 +215,7 @@ export class DisclosureNotesController {
       .disclosureNoteView({
         req,
         noteId: note.id,
-        permissionUsed: 'FINANCE_DISCLOSURE_VIEW',
+        permissionUsed: PERMISSIONS.REPORT.DISCLOSURE_VIEW,
         outcome: 'SUCCESS',
       })
       .catch(() => undefined);

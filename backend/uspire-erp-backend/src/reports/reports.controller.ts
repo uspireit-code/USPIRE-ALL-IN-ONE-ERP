@@ -12,6 +12,7 @@ import {
 import type { Request } from 'express';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { TimeoutInterceptor } from '../internal/timeout.interceptor';
@@ -65,7 +66,7 @@ export class ReportsController {
   }
 
   @Get('pl')
-  @Permissions('report.view.pl')
+  @Permissions(PERMISSIONS.REPORT.PRESENTATION_PL_VIEW)
   async plPresentation(
     @Req() req: Request,
     @Query() dto: PnlQueryDto & ReportCompareQueryDto,
@@ -92,7 +93,7 @@ export class ReportsController {
       .reportView({
         req,
         entityId: entity.entityId,
-        permissionUsed: 'report.view.pl',
+        permissionUsed: PERMISSIONS.REPORT.PRESENTATION_PL_VIEW,
         outcome,
         reason: presented.compareOmittedReason,
       })
@@ -102,7 +103,7 @@ export class ReportsController {
   }
 
   @Get('bs')
-  @Permissions('report.view.bs')
+  @Permissions(PERMISSIONS.REPORT.PRESENTATION_BS_VIEW)
   async bsPresentation(
     @Req() req: Request,
     @Query() dto: BalanceSheetQueryDto & ReportCompareQueryDto,
@@ -128,7 +129,7 @@ export class ReportsController {
       .reportView({
         req,
         entityId: entity.entityId,
-        permissionUsed: 'report.view.bs',
+        permissionUsed: PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
         outcome,
         reason: presented.compareOmittedReason,
       })
@@ -138,7 +139,7 @@ export class ReportsController {
   }
 
   @Get('soce')
-  @Permissions('FINANCE_SOE_VIEW', 'FINANCE_REPORT_GENERATE')
+  @Permissions(PERMISSIONS.REPORT.SOE_VIEW, PERMISSIONS.REPORT.REPORT_GENERATE)
   async socePresentation(
     @Req() req: Request,
     @Query() dto: SoceQueryDto & ReportCompareQueryDto,
@@ -165,7 +166,7 @@ export class ReportsController {
       .reportView({
         req,
         entityId: entity.entityId,
-        permissionUsed: 'FINANCE_REPORT_GENERATE',
+        permissionUsed: PERMISSIONS.REPORT.REPORT_GENERATE,
         outcome,
         reason: presented.compareOmittedReason,
       })
@@ -175,7 +176,10 @@ export class ReportsController {
   }
 
   @Get('cf')
-  @Permissions('FINANCE_CASHFLOW_VIEW', 'FINANCE_REPORT_GENERATE')
+  @Permissions(
+    PERMISSIONS.REPORT.CASHFLOW_VIEW,
+    PERMISSIONS.REPORT.REPORT_GENERATE,
+  )
   async cfPresentation(
     @Req() req: Request,
     @Query() dto: CashFlowQueryDto & ReportCompareQueryDto,
@@ -202,7 +206,7 @@ export class ReportsController {
       .reportView({
         req,
         entityId: entity.entityId,
-        permissionUsed: 'FINANCE_REPORT_GENERATE',
+        permissionUsed: PERMISSIONS.REPORT.REPORT_GENERATE,
         outcome,
         reason: presented.compareOmittedReason,
       })
@@ -212,7 +216,7 @@ export class ReportsController {
   }
 
   @Get('pl/export')
-  @Permissions('FINANCE_REPORT_EXPORT', 'report.view.pl')
+  @Permissions(PERMISSIONS.REPORT.REPORT_EXPORT, PERMISSIONS.REPORT.PRESENTATION_PL_VIEW)
   async exportPl(
     @Req() req: Request,
     @Query() dto: PnlQueryDto & ReportExportQueryDto,
@@ -245,7 +249,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'CSV',
           outcome: 'SUCCESS',
         })
@@ -265,7 +269,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'XLSX',
           outcome: 'SUCCESS',
         })
@@ -299,7 +303,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'PDF',
           outcome: 'SUCCESS',
         })
@@ -317,7 +321,10 @@ export class ReportsController {
   }
 
   @Get('bs/export')
-  @Permissions('FINANCE_REPORT_EXPORT', 'report.view.bs')
+  @Permissions(
+    PERMISSIONS.REPORT.REPORT_EXPORT,
+    PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
+  )
   async exportBs(
     @Req() req: Request,
     @Query() dto: BalanceSheetQueryDto & ReportExportQueryDto,
@@ -348,7 +355,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'CSV',
           outcome: 'SUCCESS',
         })
@@ -368,7 +375,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'XLSX',
           outcome: 'SUCCESS',
         })
@@ -401,7 +408,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'PDF',
           outcome: 'SUCCESS',
         })
@@ -420,9 +427,9 @@ export class ReportsController {
 
   @Get('soce/export')
   @Permissions(
-    'FINANCE_REPORT_EXPORT',
-    'FINANCE_REPORT_GENERATE',
-    'FINANCE_SOE_VIEW',
+    PERMISSIONS.REPORT.REPORT_EXPORT,
+    PERMISSIONS.REPORT.REPORT_GENERATE,
+    PERMISSIONS.REPORT.SOE_VIEW,
   )
   async exportSoce(
     @Req() req: Request,
@@ -456,7 +463,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'CSV',
           outcome: 'SUCCESS',
         })
@@ -476,7 +483,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'XLSX',
           outcome: 'SUCCESS',
         })
@@ -512,7 +519,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'PDF',
           outcome: 'SUCCESS',
         })
@@ -531,9 +538,9 @@ export class ReportsController {
 
   @Get('cf/export')
   @Permissions(
-    'FINANCE_REPORT_EXPORT',
-    'FINANCE_REPORT_GENERATE',
-    'FINANCE_CASHFLOW_VIEW',
+    PERMISSIONS.REPORT.REPORT_EXPORT,
+    PERMISSIONS.REPORT.REPORT_GENERATE,
+    PERMISSIONS.REPORT.CASHFLOW_VIEW,
   )
   async exportCf(
     @Req() req: Request,
@@ -567,7 +574,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'CSV',
           outcome: 'SUCCESS',
         })
@@ -587,7 +594,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'XLSX',
           outcome: 'SUCCESS',
         })
@@ -620,7 +627,7 @@ export class ReportsController {
         .reportExport({
           req,
           entityId: entity.entityId,
-          permissionUsed: 'FINANCE_REPORT_EXPORT',
+          permissionUsed: PERMISSIONS.REPORT.REPORT_EXPORT,
           format: 'PDF',
           outcome: 'SUCCESS',
         })
@@ -638,7 +645,7 @@ export class ReportsController {
   }
 
   @Get('profit-loss-legacy')
-  @Permissions('FINANCE_PL_VIEW')
+  @Permissions(PERMISSIONS.REPORT.PL_VIEW_LEGACY)
   async profitLossLegacy(
     @Req() req: Request,
     @Query() dto: ProfitLossQueryDto,
@@ -647,13 +654,13 @@ export class ReportsController {
   }
 
   @Get('pnl')
-  @Permissions('FINANCE_PNL_VIEW')
+  @Permissions(PERMISSIONS.REPORT.PNL_VIEW)
   async pnl(@Req() req: Request, @Query() dto: PnlQueryDto) {
     return this.financial.computeProfitAndLoss(req, dto);
   }
 
   @Get('balance-sheet-legacy')
-  @Permissions('FINANCE_BS_VIEW')
+  @Permissions(PERMISSIONS.REPORT.BS_VIEW_LEGACY)
   async balanceSheetLegacy(
     @Req() req: Request,
     @Query() dto: BalanceSheetQueryDto,
@@ -662,37 +669,37 @@ export class ReportsController {
   }
 
   @Get('balance-sheet')
-  @Permissions('FINANCE_BALANCE_SHEET_VIEW')
+  @Permissions(PERMISSIONS.REPORT.BALANCE_SHEET_VIEW)
   async balanceSheet(@Req() req: Request, @Query() dto: BalanceSheetQueryDto) {
     return this.financial.computeBalanceSheet(req, dto);
   }
 
   @Get('soce-engine')
-  @Permissions('FINANCE_SOE_VIEW')
+  @Permissions(PERMISSIONS.REPORT.SOE_VIEW)
   async soce(@Req() req: Request, @Query() dto: SoceQueryDto) {
     return this.financial.computeSOCE(req, dto);
   }
 
   @Get('cash-flow')
-  @Permissions('FINANCE_CASHFLOW_VIEW')
+  @Permissions(PERMISSIONS.REPORT.CASHFLOW_VIEW)
   async cashFlow(@Req() req: Request, @Query() dto: CashFlowQueryDto) {
     return this.financial.computeCashFlowIndirect(req, dto);
   }
 
   @Get('ap-aging')
-  @Permissions('FINANCE_AP_AGING_VIEW')
+  @Permissions(PERMISSIONS.REPORT.AP_AGING_VIEW)
   async apAging(@Req() req: Request, @Query() dto: AgingQueryDto) {
     return this.reports.apAging(req, dto);
   }
 
   @Get('ar-aging')
-  @Permissions('FINANCE_AR_AGING_VIEW')
+  @Permissions(PERMISSIONS.REPORT.AR_AGING_VIEW)
   async arAging(@Req() req: Request, @Query() dto: AgingQueryDto) {
     return this.reports.arAging(req, dto);
   }
 
   @Get('supplier-statement/:supplierId')
-  @Permissions('FINANCE_SUPPLIER_STATEMENT_VIEW')
+  @Permissions(PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW)
   async supplierStatement(
     @Req() req: Request,
     @Param('supplierId') supplierId: string,
@@ -702,7 +709,7 @@ export class ReportsController {
   }
 
   @Get('customer-statement/:customerId')
-  @Permissions('FINANCE_CUSTOMER_STATEMENT_VIEW')
+  @Permissions(PERMISSIONS.REPORT.CUSTOMER_STATEMENT_VIEW)
   async customerStatement(
     @Req() req: Request,
     @Param('customerId') customerId: string,
@@ -712,7 +719,7 @@ export class ReportsController {
   }
 
   @Get('vat-summary')
-  @Permissions('TAX_REPORT_VIEW')
+  @Permissions(PERMISSIONS.TAX.REPORT_VIEW)
   async vatSummary(@Req() req: Request, @Query() dto: VatSummaryQueryDto) {
     return this.reports.vatSummary(req, dto);
   }

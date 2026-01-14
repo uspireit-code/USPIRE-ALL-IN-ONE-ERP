@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Payment } from '../../services/payments';
 import { approvePayment, listPayments, postPayment } from '../../services/payments';
 import { listInvoices as listApInvoices, type SupplierInvoice } from '../../services/ap';
@@ -13,8 +14,8 @@ export function ApPaymentDetailsPage() {
   const { id } = useParams();
   const { hasPermission } = useAuth();
 
-  const canApprove = hasPermission('PAYMENT_APPROVE');
-  const canPost = hasPermission('PAYMENT_POST');
+  const canApprove = hasPermission(PERMISSIONS.PAYMENT.APPROVE);
+  const canPost = hasPermission(PERMISSIONS.PAYMENT.POST);
 
   const [payment, setPayment] = useState<Payment | null>(null);
   const [supplierName, setSupplierName] = useState<string | null>(null);

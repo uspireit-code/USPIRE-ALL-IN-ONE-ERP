@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { assertCanPost } from '../periods/period-guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
 
@@ -232,22 +236,6 @@ export class ApService {
       throw new BadRequestException('Only SUBMITTED invoices can be approved');
     }
 
-    if (inv.createdById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'AP_INVOICE_APPROVE',
-          conflictingPermission: 'AP_INVOICE_CREATE',
-        },
-      });
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Creator cannot approve own supplier invoice',
-      });
-    }
-
     return this.prisma.supplierInvoice.update({
       where: { id: inv.id },
       data: {
@@ -292,70 +280,6 @@ export class ApService {
       throw new BadRequestException(
         'Invoice must have an approver before posting',
       );
-    }
-
-    if (inv.createdById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'AP_INVOICE_POST',
-          conflictingPermission: 'AP_INVOICE_CREATE',
-        },
-      });
-
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'AP_POST',
-            entityType: 'SUPPLIER_INVOICE',
-            entityId: inv.id,
-            action: 'AP_INVOICE_POST',
-            outcome: 'BLOCKED',
-            reason: 'Creator cannot post own supplier invoice',
-            userId: user.id,
-            permissionUsed: 'AP_INVOICE_POST',
-          },
-        })
-        .catch(() => undefined);
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Creator cannot post own supplier invoice',
-      });
-    }
-
-    if (inv.approvedById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'AP_INVOICE_POST',
-          conflictingPermission: 'AP_INVOICE_APPROVE',
-        },
-      });
-
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'AP_POST',
-            entityType: 'SUPPLIER_INVOICE',
-            entityId: inv.id,
-            action: 'AP_INVOICE_POST',
-            outcome: 'BLOCKED',
-            reason: 'Approver cannot post the same supplier invoice',
-            userId: user.id,
-            permissionUsed: 'AP_INVOICE_POST',
-          },
-        })
-        .catch(() => undefined);
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Approver cannot post the same supplier invoice',
-      });
     }
 
     const netAmount = this.round2(
@@ -426,50 +350,75 @@ export class ApService {
       select: { id: true, status: true, name: true },
     });
 
-    if (!period || period.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'AP_POST',
-            entityType: 'SUPPLIER_INVOICE',
-            entityId: inv.id,
-            action: 'AP_INVOICE_POST',
-            outcome: 'BLOCKED',
-            reason: !period
-              ? 'No accounting period exists for the invoice date'
-              : `Accounting period is not OPEN: ${period.name}`,
-            userId: user.id,
-            permissionUsed: 'AP_INVOICE_POST',
-          },
-        })
-        .catch(() => undefined);
+    if (!period) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.AP_POST,
+          entityType: AuditEntityType.SUPPLIER_INVOICE,
+          entityId: inv.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'AP_INVOICE_POST',
+          permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+          lifecycleType: 'POST',
+          reason: 'No accounting period exists for the invoice date',
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the invoice date'
-          : `Accounting period is not OPEN: ${period.name}`,
+        reason: 'No accounting period exists for the invoice date',
+      });
+    }
+
+    // Canonical period semantics: posting is allowed only in OPEN.
+    // We preserve the existing ForbiddenException payload/messages on failure.
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.AP_POST,
+          entityType: AuditEntityType.SUPPLIER_INVOICE,
+          entityId: inv.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'AP_INVOICE_POST',
+          permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+          lifecycleType: 'POST',
+          reason: `Accounting period is not OPEN: ${period.name}`,
+        },
+        this.prisma,
+      );
+
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
 
     if (period.name === 'Opening Balances') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'AP_POST',
-            entityType: 'SUPPLIER_INVOICE',
-            entityId: inv.id,
-            action: 'AP_INVOICE_POST',
-            outcome: 'BLOCKED',
-            reason:
-              'Operational postings are not allowed in the Opening Balances period',
-            userId: user.id,
-            permissionUsed: 'AP_INVOICE_POST',
-          },
-        })
-        .catch(() => undefined);
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.AP_POST,
+          entityType: AuditEntityType.SUPPLIER_INVOICE,
+          entityId: inv.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'AP_INVOICE_POST',
+          permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+          lifecycleType: 'POST',
+          reason: 'Operational postings are not allowed in the Opening Balances period',
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Posting blocked by opening balances control period',
@@ -489,21 +438,22 @@ export class ApService {
     });
 
     if (cutoverLocked && inv.invoiceDate < cutoverLocked.startDate) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'AP_POST',
-            entityType: 'SUPPLIER_INVOICE',
-            entityId: inv.id,
-            action: 'AP_INVOICE_POST',
-            outcome: 'BLOCKED',
-            reason: `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`,
-            userId: user.id,
-            permissionUsed: 'AP_INVOICE_POST',
-          },
-        })
-        .catch(() => undefined);
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.AP_POST,
+          entityType: AuditEntityType.SUPPLIER_INVOICE,
+          entityId: inv.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'AP_INVOICE_POST',
+          permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+          lifecycleType: 'POST',
+          reason: `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`,
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Posting blocked by cutover lock',
@@ -602,7 +552,7 @@ export class ApService {
           action: 'AP_INVOICE_POST',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'AP_INVOICE_POST',
+          permissionUsed: PERMISSIONS.AP.INVOICE_POST,
         },
       })
       .catch(() => undefined);

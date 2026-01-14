@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { canAny } from '../auth/permissions';
-import { resolveBrandAssetUrl, useBrandColors, useBranding } from '../branding/BrandingContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
+import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
 
 export function Layout() {
   const location = useLocation();
-  const brand = useBrandColors();
-  const { effective } = useBranding();
+  const brand = useBranding();
+  const { effective } = brand;
   const Icon = (props: { children: React.ReactNode }) => {
     return (
       <span
@@ -298,69 +299,93 @@ export function Layout() {
   const COLORS = {
     navy: '#020445',
     gold: '#EDBA35',
-    white: brand.white,
+    white: '#FCFCFC',
   };
 
   const TOPBAR_HEIGHT = 60;
 
   const SIDEBAR_WIDTH = 280;
 
-  const hasSystemViewAll = hasPermission('SYSTEM_VIEW_ALL');
-  const hasFinanceViewAll = hasPermission('FINANCE_VIEW_ALL');
-  const hasSystemConfigView = hasPermission('SYSTEM_CONFIG_VIEW');
-  const hasUserView = hasPermission('USER_VIEW');
-  const hasRoleView = hasPermission('ROLE_VIEW');
+  const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
+  const hasSystemConfigView = hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
+  const hasUserView = hasPermission(PERMISSIONS.USER.VIEW);
+  const hasRoleView = hasPermission(PERMISSIONS.ROLE.VIEW);
 
-  const showAudit = hasPermission('AUDIT_VIEW') || hasSystemViewAll;
+  const showAudit = hasPermission(PERMISSIONS.AUDIT_VIEW) || hasSystemViewAll;
 
-  const showArAging = hasPermission('AR_AGING_VIEW') || hasFinanceViewAll || hasSystemViewAll;
-  const showArStatements = hasPermission('AR_STATEMENT_VIEW') || hasFinanceViewAll || hasSystemViewAll;
-  const showArReminders = hasPermission('AR_REMINDER_VIEW') || hasFinanceViewAll || hasSystemViewAll;
-  const showGlCreate = hasPermission('FINANCE_GL_CREATE');
-  const showGlView = hasPermission('FINANCE_GL_VIEW') || hasFinanceViewAll || hasSystemViewAll;
-  const showGlReviewQueue = hasPermission('FINANCE_GL_APPROVE');
-  const showGlPostQueue = hasPermission('FINANCE_GL_FINAL_POST');
-  const showGlRecurring = hasPermission('FINANCE_GL_RECURRING_MANAGE') || hasPermission('FINANCE_GL_RECURRING_GENERATE');
+  const showArAging =
+    hasPermission(PERMISSIONS.AR_AGING.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showArStatements =
+    hasPermission(PERMISSIONS.AR_STATEMENT.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showArReminders =
+    hasPermission(PERMISSIONS.AR_REMINDER.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showGlCreate = hasPermission(PERMISSIONS.GL.CREATE);
+  const showGlView = hasPermission(PERMISSIONS.GL.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showGlReviewQueue = hasPermission(PERMISSIONS.GL.APPROVE);
+  const showGlPostQueue = hasPermission(PERMISSIONS.GL.FINAL_POST);
+  const showGlRecurring =
+    hasPermission(PERMISSIONS.GL.RECURRING_MANAGE) ||
+    hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
   const showGlRiskIntelligence = showGlView;
   const showGlRegister = showGlView;
   const showGlDrafts = showGlCreate;
-  const showCoa = hasPermission('FINANCE_COA_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+  const showCoa = hasPermission(PERMISSIONS.COA.VIEW) || hasFinanceViewAll || hasSystemViewAll;
   const showPeriods =
     hasFinanceViewAll ||
     hasSystemViewAll ||
-    hasPermission('FINANCE_PERIOD_VIEW') ||
-    hasPermission('FINANCE_PERIOD_CLOSE_APPROVE') ||
-    hasPermission('FINANCE_PERIOD_REOPEN');
+    hasPermission(PERMISSIONS.PERIOD.VIEW) ||
+    hasPermission(PERMISSIONS.PERIOD.CLOSE_APPROVE) ||
+    hasPermission(PERMISSIONS.PERIOD.REOPEN);
 
   const showBudgetSetup =
-    hasPermission('BUDGET_VIEW') ||
-    hasPermission('BUDGET_CREATE') ||
-    hasPermission('BUDGET_APPROVE');
+    hasPermission(PERMISSIONS.BUDGET.VIEW) ||
+    hasPermission(PERMISSIONS.BUDGET.CREATE) ||
+    hasPermission(PERMISSIONS.BUDGET.APPROVE);
 
-  const showBudgetVsActual = hasPermission('FINANCE_BUDGET_VIEW');
+  const showBudgetVsActual = hasPermission(PERMISSIONS.BUDGET.FINANCE_VIEW);
 
   const showFinanceBudgets = showBudgetSetup || showBudgetVsActual;
-  const showForecasts = hasPermission('forecast.view');
+  const showForecasts = hasPermission(PERMISSIONS.FORECAST.VIEW);
 
   const showArCustomers =
-    hasPermission('CUSTOMERS_VIEW') || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.CUSTOMERS.VIEW) || hasFinanceViewAll || hasSystemViewAll;
   const showArInvoices =
-    hasPermission('INVOICE_VIEW') || hasPermission('INVOICE_CREATE') || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.AR.INVOICE_VIEW) ||
+    hasPermission(PERMISSIONS.AR.INVOICE_CREATE) ||
+    hasFinanceViewAll ||
+    hasSystemViewAll;
   const showArReceipts =
-    hasPermission('RECEIPT_VIEW') || hasPermission('RECEIPT_POST') || hasPermission('RECEIPT_CREATE') || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.AR.RECEIPT_VIEW) ||
+    hasPermission(PERMISSIONS.AR.RECEIPT_POST) ||
+    hasPermission(PERMISSIONS.AR.RECEIPT_CREATE) ||
+    hasFinanceViewAll ||
+    hasSystemViewAll;
   const showArCreditNotes =
-    canAny(state.me, ['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_CREATE', 'CREDIT_NOTE_POST']) || hasFinanceViewAll || hasSystemViewAll;
+    canAny(state.me, [
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+      PERMISSIONS.AR.CREDIT_NOTE_POST,
+    ]) ||
+    hasFinanceViewAll ||
+    hasSystemViewAll;
   const showArRefunds =
-    canAny(state.me, ['REFUND_VIEW', 'REFUND_CREATE', 'REFUND_POST']) || hasFinanceViewAll || hasSystemViewAll;
+    canAny(state.me, [
+      PERMISSIONS.AR.REFUND_VIEW,
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_POST,
+    ]) ||
+    hasFinanceViewAll ||
+    hasSystemViewAll;
 
   const showFixedAssets =
-    hasPermission('FA_CATEGORY_MANAGE') ||
-    hasPermission('FA_ASSET_CREATE') ||
-    hasPermission('FA_ASSET_CAPITALIZE') ||
-    hasPermission('FA_DEPRECIATION_RUN') ||
-    hasPermission('FA_DISPOSE');
+    hasPermission(PERMISSIONS.FA.CATEGORY_MANAGE) ||
+    hasPermission(PERMISSIONS.FA.ASSET_CREATE) ||
+    hasPermission(PERMISSIONS.FA.ASSET_CAPITALIZE) ||
+    hasPermission(PERMISSIONS.FA.DEPRECIATION_RUN) ||
+    hasPermission(PERMISSIONS.FA.DISPOSE);
 
-  const showBankReconciliation = hasPermission('BANK_RECONCILIATION_VIEW');
+  const showBankReconciliation = hasPermission(PERMISSIONS.BANK.RECONCILIATION_VIEW);
 
   const showSettings = hasSystemViewAll || hasSystemConfigView || hasUserView || hasRoleView;
 

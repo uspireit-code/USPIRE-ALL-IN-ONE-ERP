@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PERMISSIONS } from '../../rbac/permission-catalog';
 import { bucketForDaysOverdue, daysBetweenUtc } from './ar-aging.util';
 
 export type ArAgingRow = {
@@ -193,7 +194,7 @@ export class ArAgingService {
           outcome: 'SUCCESS' as any,
           reason: JSON.stringify({ asOf: asOfIso, customerId: customerId ?? null }),
           userId: user.id,
-          permissionUsed: 'AR_AGING_VIEW',
+          permissionUsed: PERMISSIONS.AR_AGING.VIEW,
         } as any,
       })
       .catch(() => undefined);

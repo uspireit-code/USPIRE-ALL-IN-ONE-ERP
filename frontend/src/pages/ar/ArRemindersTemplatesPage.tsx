@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { ApiError } from '../../services/api';
 import {
   listReminderTemplates,
@@ -13,8 +14,10 @@ export function ArRemindersTemplatesPage() {
   const { hasPermission } = useAuth();
 
   const canView =
-    hasPermission('AR_REMINDER_VIEW') || hasPermission('FINANCE_VIEW_ALL') || hasPermission('SYSTEM_VIEW_ALL');
-  const canConfigure = hasPermission('AR_REMINDER_CONFIGURE');
+    hasPermission(PERMISSIONS.AR.REMINDER.VIEW) ||
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canConfigure = hasPermission(PERMISSIONS.AR.REMINDER.CONFIGURE);
 
   const [templates, setTemplates] = useState<ArReminderTemplate[]>([]);
   const [loading, setLoading] = useState(false);

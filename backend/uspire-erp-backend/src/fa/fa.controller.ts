@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
@@ -25,13 +26,13 @@ export class FaController {
   constructor(private readonly fa: FaService) {}
 
   @Get('categories')
-  @Permissions('FA_CATEGORY_MANAGE')
+  @Permissions(PERMISSIONS.FA.CATEGORY_MANAGE)
   async listCategories(@Req() req: Request) {
     return this.fa.listCategories(req);
   }
 
   @Post('categories')
-  @Permissions('FA_CATEGORY_MANAGE')
+  @Permissions(PERMISSIONS.FA.CATEGORY_MANAGE)
   async createCategory(
     @Req() req: Request,
     @Body() dto: CreateFixedAssetCategoryDto,
@@ -41,23 +42,23 @@ export class FaController {
 
   @Get('assets')
   @PermissionsAny(
-    'FA_ASSET_CREATE',
-    'FA_ASSET_CAPITALIZE',
-    'FA_DEPRECIATION_RUN',
-    'FA_DISPOSE',
+    PERMISSIONS.FA.ASSET_CREATE,
+    PERMISSIONS.FA.ASSET_CAPITALIZE,
+    PERMISSIONS.FA.DEPRECIATION_RUN,
+    PERMISSIONS.FA.DISPOSE,
   )
   async listAssets(@Req() req: Request) {
     return this.fa.listAssets(req);
   }
 
   @Post('assets')
-  @Permissions('FA_ASSET_CREATE')
+  @Permissions(PERMISSIONS.FA.ASSET_CREATE)
   async createAsset(@Req() req: Request, @Body() dto: CreateFixedAssetDto) {
     return this.fa.createAsset(req, dto);
   }
 
   @Post('assets/:id/capitalize')
-  @Permissions('FA_ASSET_CAPITALIZE', 'FINANCE_GL_POST')
+  @Permissions(PERMISSIONS.FA.ASSET_CAPITALIZE, PERMISSIONS.GL.POST)
   async capitalizeAsset(
     @Req() req: Request,
     @Param('id') id: string,
@@ -67,7 +68,7 @@ export class FaController {
   }
 
   @Post('depreciation/run')
-  @Permissions('FA_DEPRECIATION_RUN', 'FINANCE_GL_POST')
+  @Permissions(PERMISSIONS.FA.DEPRECIATION_RUN, PERMISSIONS.GL.POST)
   async runDepreciation(
     @Req() req: Request,
     @Query('periodId') periodId: string,
@@ -76,13 +77,13 @@ export class FaController {
   }
 
   @Get('depreciation/runs')
-  @Permissions('FA_DEPRECIATION_RUN')
+  @Permissions(PERMISSIONS.FA.DEPRECIATION_RUN)
   async listDepreciationRuns(@Req() req: Request) {
     return this.fa.listDepreciationRuns(req);
   }
 
   @Post('assets/:id/dispose')
-  @Permissions('FA_DISPOSE', 'FINANCE_GL_POST')
+  @Permissions(PERMISSIONS.FA.DISPOSE, PERMISSIONS.GL.POST)
   async disposeAsset(
     @Req() req: Request,
     @Param('id') id: string,

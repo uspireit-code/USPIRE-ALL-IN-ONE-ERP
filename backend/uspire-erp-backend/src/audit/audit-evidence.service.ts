@@ -8,6 +8,7 @@ import { Inject } from '@nestjs/common';
 import { randomUUID, createHash } from 'node:crypto';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import type { StorageProvider } from '../storage/storage.provider';
 import { STORAGE_PROVIDER } from '../storage/storage.provider';
 import { AuditEvidenceQueryDto } from './dto/audit-evidence-query.dto';
@@ -77,7 +78,7 @@ export class AuditEvidenceService {
           outcome: 'SUCCESS',
           reason: `Uploaded evidence: ${file.originalname}`,
           userId: user.id,
-          permissionUsed: 'AUDIT_EVIDENCE_UPLOAD',
+          permissionUsed: PERMISSIONS.AUDIT.EVIDENCE_UPLOAD,
         },
       })
       .catch(() => undefined);

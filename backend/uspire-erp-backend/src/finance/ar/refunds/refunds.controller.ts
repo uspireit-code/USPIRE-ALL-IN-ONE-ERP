@@ -6,12 +6,15 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../../../rbac/jwt-auth.guard';
 import { Permissions } from '../../../rbac/permissions.decorator';
 import { PermissionsGuard } from '../../../rbac/permissions.guard';
+import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import {
   CreateCustomerRefundDto,
   ListRefundsQueryDto,
@@ -28,13 +31,13 @@ export class FinanceArRefundsController {
   constructor(private readonly refunds: FinanceArRefundsService) {}
 
   @Get()
-  @Permissions('REFUND_VIEW')
+  @Permissions(PERMISSIONS.AR.REFUND_VIEW)
   async list(@Req() req: Request, @Query() q: ListRefundsQueryDto) {
     return this.refunds.list(req, q);
   }
 
   @Get('refundable-credit-notes')
-  @Permissions('REFUND_CREATE')
+  @Permissions(PERMISSIONS.AR.REFUND_CREATE)
   async listRefundableCreditNotes(
     @Req() req: Request,
     @Query('customerId') customerId: string,
@@ -43,13 +46,13 @@ export class FinanceArRefundsController {
   }
 
   @Get('refundable-customers')
-  @Permissions('REFUND_CREATE')
+  @Permissions(PERMISSIONS.AR.REFUND_CREATE)
   async listRefundableCustomers(@Req() req: Request) {
     return this.refunds.listRefundableCustomers(req);
   }
 
   @Get('credit-notes/:creditNoteId/refundable')
-  @Permissions('REFUND_CREATE')
+  @Permissions(PERMISSIONS.AR.REFUND_CREATE)
   async refundable(
     @Req() req: Request,
     @Param('creditNoteId') creditNoteId: string,
@@ -58,19 +61,35 @@ export class FinanceArRefundsController {
   }
 
   @Get(':id')
-  @Permissions('REFUND_VIEW')
+  @Permissions(PERMISSIONS.AR.REFUND_VIEW)
   async getById(@Req() req: Request, @Param('id') id: string) {
     return this.refunds.getById(req, id);
   }
 
+  @Get(':id/export')
+  @Permissions(PERMISSIONS.AR.REFUND_VIEW)
+  async exportPdf(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const body = await this.refunds.exportPdf(req, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="refund-${id}.pdf"`,
+    );
+    res.send(body);
+  }
+
   @Post()
-  @Permissions('REFUND_CREATE')
+  @Permissions(PERMISSIONS.AR.REFUND_CREATE)
   async create(@Req() req: Request, @Body() dto: CreateCustomerRefundDto) {
     return this.refunds.create(req, dto);
   }
 
   @Post(':id/submit')
-  @Permissions('REFUND_SUBMIT')
+  @Permissions(PERMISSIONS.AR.REFUND_SUBMIT)
   async submit(
     @Req() req: Request,
     @Param('id') id: string,
@@ -80,7 +99,7 @@ export class FinanceArRefundsController {
   }
 
   @Post(':id/approve')
-  @Permissions('REFUND_APPROVE')
+  @Permissions(PERMISSIONS.AR.REFUND_APPROVE)
   async approve(
     @Req() req: Request,
     @Param('id') id: string,
@@ -90,7 +109,7 @@ export class FinanceArRefundsController {
   }
 
   @Post(':id/post')
-  @Permissions('REFUND_POST')
+  @Permissions(PERMISSIONS.AR.REFUND_POST)
   async post(
     @Req() req: Request,
     @Param('id') id: string,
@@ -100,7 +119,7 @@ export class FinanceArRefundsController {
   }
 
   @Post(':id/void')
-  @Permissions('REFUND_VOID')
+  @Permissions(PERMISSIONS.AR.REFUND_VOID)
   async void(
     @Req() req: Request,
     @Param('id') id: string,

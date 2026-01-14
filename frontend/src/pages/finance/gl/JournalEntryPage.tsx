@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { AccountContextPanel } from '../../../components/AccountContextPanel';
 import { DataTable } from '../../../components/DataTable';
@@ -118,10 +119,10 @@ export function JournalEntryPage() {
   const [searchParams] = useSearchParams();
 
   const { state, hasPermission } = useAuth();
-  const canView = hasPermission('FINANCE_GL_VIEW');
-  const canCreate = hasPermission('FINANCE_GL_CREATE');
-  const canApprove = hasPermission('FINANCE_GL_APPROVE');
-  const canPost = hasPermission('FINANCE_GL_FINAL_POST');
+  const canView = hasPermission(PERMISSIONS.GL.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.GL.CREATE);
+  const canApprove = hasPermission(PERMISSIONS.GL.APPROVE);
+  const canPost = hasPermission(PERMISSIONS.GL.FINAL_POST);
   const currentUserId = state.me?.user?.id ?? '';
 
   const [loading, setLoading] = useState(false);

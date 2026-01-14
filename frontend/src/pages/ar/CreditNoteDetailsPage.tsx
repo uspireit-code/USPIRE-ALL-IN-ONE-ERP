@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
-import { getApiErrorMessage } from '../../services/api';
+import { apiFetchRaw, getApiErrorMessage } from '../../services/api';
 import {
   approveCreditNote,
   getCreditNoteById,
@@ -38,17 +39,40 @@ export function CreditNoteDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('CREDIT_NOTE_VIEW') || hasPermission('CREDIT_NOTE_POST');
-  const canSubmit = hasPermission('CREDIT_NOTE_CREATE');
-  const canApprove = hasPermission('CREDIT_NOTE_APPROVE');
-  const canPost = hasPermission('CREDIT_NOTE_POST');
-  const canVoid = hasPermission('CREDIT_NOTE_VOID');
+  const canView =
+    hasPermission(PERMISSIONS.AR.CREDIT_NOTE.VIEW) ||
+    hasPermission(PERMISSIONS.AR.CREDIT_NOTE.POST);
+  const canSubmit = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.SUBMIT);
+  const canApprove = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.APPROVE);
+  const canPost = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.POST);
+  const canVoid = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.VOID);
 
   const [cn, setCn] = useState<CreditNote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  async function onExportPdf() {
+    if (!id) return;
+    setActionError(null);
+    try {
+      const res = await apiFetchRaw(`/finance/ar/credit-notes/${id}/export`, {
+        method: 'GET',
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `credit-note-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setActionError(getApiErrorMessage(e, 'Export PDF failed'));
+    }
+  }
 
   const refresh = async () => {
     if (!id) return;
@@ -101,9 +125,9 @@ export function CreditNoteDetailsPage() {
   const exceedsOutstanding = useMemo(() => {
     if (!cn?.invoiceId) return false;
     if (!(netOutstanding > 0)) return false;
-    const total = Number(cn?.totalAmount ?? 0);
+    const total = Number(cn?.subtotal ?? 0);
     return total > netOutstanding;
-  }, [cn?.invoiceId, cn?.totalAmount, netOutstanding]);
+  }, [cn?.invoiceId, cn?.subtotal, netOutstanding]);
 
   function validateSubmitOrApproveOrThrow() {
     if (exceedsOutstanding) {
@@ -201,7 +225,7 @@ export function CreditNoteDetailsPage() {
   if (!canView) {
     return (
       <div style={{ color: 'crimson' }}>
-        You don’t have permission to view credit notes. Required: one of CREDIT_NOTE_VIEW, CREDIT_NOTE_POST.
+        {`You don’t have permission to view credit notes. Required: one of ${PERMISSIONS.AR.CREDIT_NOTE.VIEW}, ${PERMISSIONS.AR.CREDIT_NOTE.POST}.`}
       </div>
     );
   }
@@ -214,6 +238,9 @@ export function CreditNoteDetailsPage() {
       title={`Credit Note ${cn.creditNoteNumber}`}
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" disabled={!id} onClick={onExportPdf}>
+            Export PDF
+          </button>
           {allowed.submit ? (
             <button type="button" disabled={acting} onClick={onSubmit}>
               Submit
@@ -342,7 +369,7 @@ export function CreditNoteDetailsPage() {
         </table>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, fontWeight: 700 }}>
-          Total: {formatMoney(Number(cn.totalAmount ?? 0))}
+          Total: {formatMoney(Number(cn.subtotal ?? 0))}
         </div>
       </div>
     </PageLayout>

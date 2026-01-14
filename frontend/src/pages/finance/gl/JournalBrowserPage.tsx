@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
@@ -79,7 +80,7 @@ function buildSearchParams(filters: JournalBrowserFilters) {
 export function JournalBrowserPage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
-  const canView = hasPermission('FINANCE_GL_VIEW');
+  const canView = hasPermission(PERMISSIONS.GL.VIEW);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();

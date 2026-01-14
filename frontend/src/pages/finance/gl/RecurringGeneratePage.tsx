@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
@@ -19,7 +20,7 @@ export function RecurringGeneratePage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
-  const canGenerate = hasPermission('FINANCE_GL_RECURRING_GENERATE');
+  const canGenerate = hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

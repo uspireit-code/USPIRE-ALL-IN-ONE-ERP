@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { SupplierInvoice } from '../../services/ap';
 import { listInvoices } from '../../services/ap';
 
@@ -10,7 +11,7 @@ function formatMoney(n: number) {
 
 export function InvoicesListPage() {
   const { hasPermission } = useAuth();
-  const canCreateInvoice = hasPermission('AP_INVOICE_CREATE');
+  const canCreateInvoice = hasPermission(PERMISSIONS.AP.INVOICE.CREATE);
 
   const [rows, setRows] = useState<SupplierInvoice[]>([]);
   const [loading, setLoading] = useState(true);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
@@ -21,8 +22,10 @@ export function RefundsListPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('REFUND_VIEW') || hasPermission('REFUND_CREATE');
-  const canCreate = hasPermission('REFUND_CREATE');
+  const canView =
+    hasPermission(PERMISSIONS.AR.REFUND.VIEW) ||
+    hasPermission(PERMISSIONS.AR.REFUND.CREATE);
+  const canCreate = hasPermission(PERMISSIONS.AR.REFUND.CREATE);
 
   const [rows, setRows] = useState<RefundListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +72,7 @@ export function RefundsListPage() {
   }, [canView]);
 
   const content = useMemo(() => {
-    if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view refunds. Required: REFUND_VIEW.</div>;
+    if (!canView) return <div style={{ color: 'crimson' }}>{`You don’t have permission to view refunds. Required: ${PERMISSIONS.AR.REFUND.VIEW}.`}</div>;
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 

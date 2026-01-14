@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Customer, CustomerInvoice, ReceiptLineInput } from '../../services/ar';
 import { createReceipt, listCustomers, listInvoices } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
@@ -22,7 +23,7 @@ export function CreateReceiptPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('RECEIPT_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.AR.RECEIPT.CREATE);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
@@ -85,7 +86,7 @@ export function CreateReceiptPage() {
 
   async function onSaveDraft() {
     if (!canCreate) {
-      setError('You don’t have permission to create receipts. Required: RECEIPT_CREATE.');
+      setError(`You don’t have permission to create receipts. Required: ${PERMISSIONS.AR.RECEIPT.CREATE}.`);
       return;
     }
 

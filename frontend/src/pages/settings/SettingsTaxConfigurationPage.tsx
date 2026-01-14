@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
@@ -10,8 +11,8 @@ import { getTenantTaxConfig, updateTenantTaxConfig } from '../../services/tax';
 export function SettingsTaxConfigurationPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('TAX_RATE_VIEW');
-  const canUpdate = hasPermission('TAX_CONFIG_UPDATE');
+  const canView = hasPermission(PERMISSIONS.TAX.RATE_VIEW);
+  const canUpdate = hasPermission(PERMISSIONS.TAX.CONFIG_UPDATE);
 
   const [coa, setCoa] = useState<CoaAccount[]>([]);
   const [cfg, setCfg] = useState<TenantTaxConfig | null>(null);

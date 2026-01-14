@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
@@ -21,12 +22,14 @@ export function CreditNotesListPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('CREDIT_NOTE_VIEW') || hasPermission('CREDIT_NOTE_CREATE');
-  const canCreate = hasPermission('CREDIT_NOTE_CREATE');
-  const canSubmit = hasPermission('AR_CREDIT_NOTE_SUBMIT');
-  const canApprove = hasPermission('AR_CREDIT_NOTE_APPROVE');
-  const canPost = hasPermission('AR_CREDIT_NOTE_POST');
-  const canVoid = hasPermission('AR_CREDIT_NOTE_VOID');
+  const canView =
+    hasPermission(PERMISSIONS.AR.CREDIT_NOTE.VIEW) ||
+    hasPermission(PERMISSIONS.AR.CREDIT_NOTE.CREATE);
+  const canCreate = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.CREATE);
+  const canSubmit = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.SUBMIT);
+  const canApprove = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.APPROVE);
+  const canPost = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.POST);
+  const canVoid = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.VOID);
 
   const [rows, setRows] = useState<CreditNoteListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,7 +76,7 @@ export function CreditNotesListPage() {
   }, [canView]);
 
   const content = useMemo(() => {
-    if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view credit notes. Required: CREDIT_NOTE_VIEW.</div>;
+    if (!canView) return <div style={{ color: 'crimson' }}>{`You don’t have permission to view credit notes. Required: ${PERMISSIONS.AR.CREDIT_NOTE.VIEW}.`}</div>;
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 

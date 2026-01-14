@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { CreateForecastDto } from './dto/create-forecast.dto';
@@ -23,13 +24,13 @@ export class ForecastsController {
   constructor(private readonly forecasts: ForecastsService) {}
 
   @Post()
-  @Permissions('forecast.create')
+  @Permissions(PERMISSIONS.FORECAST.CREATE)
   async createForecast(@Req() req: Request, @Body() dto: CreateForecastDto) {
     return this.forecasts.createForecast(req, dto);
   }
 
   @Get()
-  @Permissions('forecast.view')
+  @Permissions(PERMISSIONS.FORECAST.VIEW)
   async listForecasts(
     @Req() req: Request,
     @Query('fiscalYear') fiscalYear?: string,
@@ -54,37 +55,37 @@ export class ForecastsController {
   }
 
   @Get(':id')
-  @Permissions('forecast.view')
+  @Permissions(PERMISSIONS.FORECAST.VIEW)
   async getForecast(@Req() req: Request, @Param('id') id: string) {
     return this.forecasts.getForecast(req, id);
   }
 
   @Get(':id/actuals')
-  @Permissions('forecast.view')
+  @Permissions(PERMISSIONS.FORECAST.VIEW)
   async getForecastActuals(@Req() req: Request, @Param('id') id: string) {
     return this.forecasts.getForecastActuals(req, id);
   }
 
   @Get(':id/variance')
-  @Permissions('forecast.view')
+  @Permissions(PERMISSIONS.FORECAST.VIEW)
   async getForecastVariance(@Req() req: Request, @Param('id') id: string) {
     return this.forecasts.getForecastVariance(req, id);
   }
 
   @Post(':id/submit')
-  @Permissions('forecast.submit')
+  @Permissions(PERMISSIONS.FORECAST.SUBMIT)
   async submitForecast(@Req() req: Request, @Param('id') id: string) {
     return this.forecasts.submitForecast(req, id);
   }
 
   @Post(':id/approve')
-  @Permissions('forecast.approve')
+  @Permissions(PERMISSIONS.FORECAST.APPROVE)
   async approveForecast(@Req() req: Request, @Param('id') id: string) {
     return this.forecasts.approveForecast(req, id);
   }
 
   @Patch(':id/lines')
-  @Permissions('forecast.edit')
+  @Permissions(PERMISSIONS.FORECAST.EDIT)
   async updateForecastLines(
     @Req() req: Request,
     @Param('id') id: string,

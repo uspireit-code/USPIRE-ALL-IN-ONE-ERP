@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 
 @Injectable()
 export class DisclosureNotesAuditService {
@@ -18,19 +20,21 @@ export class DisclosureNotesAuditService {
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
 
-    return this.prisma.auditEvent.create({
-      data: {
+    return writeAuditEventWithPrisma(
+      {
         tenantId: tenant.id,
-        eventType: 'DISCLOSURE_NOTE_GENERATE',
-        entityType: 'DISCLOSURE_NOTE',
+        eventType: AuditEventType.DISCLOSURE_NOTE_GENERATE,
+        entityType: AuditEntityType.DISCLOSURE_NOTE,
         entityId: params.noteId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: params.outcome as any,
         action: 'GENERATE',
-        outcome: params.outcome,
-        reason: params.reason,
-        userId: user.id,
         permissionUsed: params.permissionUsed,
+        reason: params.reason,
       },
-    });
+      this.prisma,
+    );
   }
 
   async disclosureNoteView(params: {
@@ -45,18 +49,20 @@ export class DisclosureNotesAuditService {
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
 
-    return this.prisma.auditEvent.create({
-      data: {
+    return writeAuditEventWithPrisma(
+      {
         tenantId: tenant.id,
-        eventType: 'DISCLOSURE_NOTE_VIEW',
-        entityType: 'DISCLOSURE_NOTE',
+        eventType: AuditEventType.DISCLOSURE_NOTE_VIEW,
+        entityType: AuditEntityType.DISCLOSURE_NOTE,
         entityId: params.noteId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: params.outcome as any,
         action: 'VIEW',
-        outcome: params.outcome,
-        reason: params.reason,
-        userId: user.id,
         permissionUsed: params.permissionUsed,
+        reason: params.reason,
       },
-    });
+      this.prisma,
+    );
   }
 }

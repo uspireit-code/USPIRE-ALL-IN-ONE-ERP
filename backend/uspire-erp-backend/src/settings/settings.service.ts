@@ -8,6 +8,7 @@ import {
 import { Inject } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import type { StorageProvider } from '../storage/storage.provider';
 import { STORAGE_PROVIDER } from '../storage/storage.provider';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
@@ -132,34 +133,34 @@ export class SettingsService {
     });
 
     const allowedPermissionCodes = [
-      'AR_INVOICE_CREATE',
-      'INVOICE_CREATE',
-      'AR_INVOICE_EDIT_DRAFT',
-      'AR_INVOICE_VIEW',
-      'INVOICE_VIEW',
-      'AR_RECEIPTS_CREATE',
-      'RECEIPT_CREATE',
-      'AR_RECEIPTS_VIEW',
-      'RECEIPT_VIEW',
-      'AR_CREDIT_NOTE_CREATE',
-      'CREDIT_NOTE_CREATE',
-      'AR_CREDIT_NOTE_SUBMIT',
-      'CREDIT_NOTE_SUBMIT',
-      'AR_CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_VIEW',
-      'AR_REFUND_CREATE',
-      'REFUND_CREATE',
-      'AR_REFUND_SUBMIT',
-      'REFUND_SUBMIT',
-      'AR_REFUND_VIEW',
-      'REFUND_VIEW',
+      PERMISSIONS.AR.INVOICE_CREATE_RBAC,
+      PERMISSIONS.AR.INVOICE_CREATE,
+      PERMISSIONS.AR.INVOICE_EDIT_DRAFT,
+      PERMISSIONS.AR.INVOICE_VIEW_RBAC,
+      PERMISSIONS.AR.INVOICE_VIEW,
+      PERMISSIONS.AR.RECEIPT_CREATE_RBAC,
+      PERMISSIONS.AR.RECEIPT_CREATE,
+      PERMISSIONS.AR.RECEIPT_VIEW_RBAC,
+      PERMISSIONS.AR.RECEIPT_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+      PERMISSIONS.AR.CREDIT_NOTE_SUBMIT_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_SUBMIT,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_VIEW_RBAC,
+      PERMISSIONS.AR.REFUND_VIEW,
 
-      'INVOICE_CATEGORY_VIEW',
-      'TAX_RATE_VIEW',
-      'FINANCE_GL_VIEW',
-      'MASTER_DATA_DEPARTMENT_VIEW',
-      'MASTER_DATA_PROJECT_VIEW',
-      'MASTER_DATA_FUND_VIEW',
+      PERMISSIONS.AR.INVOICE_CATEGORY_VIEW,
+      PERMISSIONS.TAX.RATE_VIEW,
+      PERMISSIONS.GL.VIEW,
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+      PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+      PERMISSIONS.MASTER_DATA.FUND.VIEW,
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -198,36 +199,36 @@ export class SettingsService {
     });
 
     const allowedPermissionCodes = [
-      'FINANCE_GL_VIEW',
-      'FINANCE_GL_APPROVE',
-      'FINANCE_GL_RECURRING_MANAGE',
-      'FINANCE_GL_RECURRING_GENERATE',
-      'FINANCE_COA_VIEW',
-      'FINANCE_BUDGET_VIEW',
+      PERMISSIONS.GL.VIEW,
+      PERMISSIONS.GL.APPROVE,
+      PERMISSIONS.GL.RECURRING_MANAGE,
+      PERMISSIONS.GL.RECURRING_GENERATE,
+      PERMISSIONS.COA.VIEW,
+      PERMISSIONS.BUDGET.FINANCE_VIEW,
 
-      'INVOICE_VIEW',
+      PERMISSIONS.AR.INVOICE_VIEW,
 
-      'FINANCE_PERIOD_VIEW',
-      'FINANCE_PERIOD_CHECKLIST_VIEW',
-      'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-      'FINANCE_PERIOD_CLOSE',
+      PERMISSIONS.PERIOD.VIEW,
+      PERMISSIONS.PERIOD.CHECKLIST_VIEW,
+      PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      PERMISSIONS.PERIOD.CLOSE,
 
-      'FINANCE_TB_VIEW',
-      'FINANCE_CASHFLOW_VIEW',
-      'FINANCE_SOE_VIEW',
-      'FINANCE_DISCLOSURE_VIEW',
+      PERMISSIONS.REPORT.TB_VIEW,
+      PERMISSIONS.REPORT.CASHFLOW_VIEW,
+      PERMISSIONS.REPORT.SOE_VIEW,
+      PERMISSIONS.REPORT.DISCLOSURE_VIEW,
 
-      'report.view.pl',
-      'report.view.bs',
-      'FINANCE_REPORT_EXPORT',
+      PERMISSIONS.REPORT.PRESENTATION_PL_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
+      PERMISSIONS.REPORT.REPORT_EXPORT,
 
-      'RECEIPT_VIEW',
+      PERMISSIONS.AR.RECEIPT_VIEW,
 
-      'RECEIPT_POST',
-      'CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_APPROVE',
-      'REFUND_VIEW',
-      'REFUND_APPROVE',
+      PERMISSIONS.AR.RECEIPT_POST,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_APPROVE,
+      PERMISSIONS.AR.REFUND_VIEW,
+      PERMISSIONS.AR.REFUND_APPROVE,
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -266,54 +267,54 @@ export class SettingsService {
     });
 
     const allowedPermissionCodes = [
-      'FINANCE_GL_VIEW',
-      'FINANCE_GL_FINAL_POST',
-      'FINANCE_PERIOD_VIEW',
-      'FINANCE_PERIOD_CREATE',
-      'FINANCE_PERIOD_CLOSE',
-      'FINANCE_PERIOD_CHECKLIST_VIEW',
-      'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-      'FINANCE_COA_VIEW',
-      'FINANCE_COA_UPDATE',
-      'FINANCE_BUDGET_VIEW',
+      PERMISSIONS.GL.VIEW,
+      PERMISSIONS.GL.FINAL_POST,
+      PERMISSIONS.PERIOD.VIEW,
+      PERMISSIONS.PERIOD.CREATE,
+      PERMISSIONS.PERIOD.CLOSE,
+      PERMISSIONS.PERIOD.CHECKLIST_VIEW,
+      PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      PERMISSIONS.COA.VIEW,
+      PERMISSIONS.COA.UPDATE,
+      PERMISSIONS.BUDGET.FINANCE_VIEW,
 
-      'FINANCE_CONFIG_VIEW',
-      'FINANCE_CONFIG_UPDATE',
-      'FINANCE_CONFIG_CHANGE',
+      PERMISSIONS.FINANCE.CONFIG_VIEW,
+      PERMISSIONS.FINANCE.CONFIG_UPDATE,
+      PERMISSIONS.FINANCE.CONFIG_CHANGE,
 
-      'RECEIPT_VIEW',
+      PERMISSIONS.AR.RECEIPT_VIEW,
 
-      'INVOICE_VIEW',
+      PERMISSIONS.AR.INVOICE_VIEW,
 
-      'INVOICE_POST',
+      PERMISSIONS.AR.INVOICE_POST,
 
-      'MASTER_DATA_DEPARTMENT_VIEW',
-      'MASTER_DATA_DEPARTMENT_CREATE',
-      'MASTER_DATA_DEPARTMENT_EDIT',
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE,
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT,
 
-      'MASTER_DATA_PROJECT_VIEW',
-      'MASTER_DATA_PROJECT_CREATE',
-      'MASTER_DATA_PROJECT_EDIT',
-      'MASTER_DATA_PROJECT_CLOSE',
+      PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+      PERMISSIONS.MASTER_DATA.PROJECT.CREATE,
+      PERMISSIONS.MASTER_DATA.PROJECT.EDIT,
+      PERMISSIONS.MASTER_DATA.PROJECT.CLOSE,
 
-      'MASTER_DATA_FUND_VIEW',
-      'MASTER_DATA_FUND_CREATE',
-      'MASTER_DATA_FUND_EDIT',
+      PERMISSIONS.MASTER_DATA.FUND.VIEW,
+      PERMISSIONS.MASTER_DATA.FUND.CREATE,
+      PERMISSIONS.MASTER_DATA.FUND.EDIT,
 
-      'FINANCE_TB_VIEW',
-      'FINANCE_CASHFLOW_VIEW',
-      'FINANCE_SOE_VIEW',
-      'FINANCE_DISCLOSURE_VIEW',
+      PERMISSIONS.REPORT.TB_VIEW,
+      PERMISSIONS.REPORT.CASHFLOW_VIEW,
+      PERMISSIONS.REPORT.SOE_VIEW,
+      PERMISSIONS.REPORT.DISCLOSURE_VIEW,
 
-      'report.view.pl',
-      'report.view.bs',
-      'FINANCE_REPORT_EXPORT',
+      PERMISSIONS.REPORT.PRESENTATION_PL_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
+      PERMISSIONS.REPORT.REPORT_EXPORT,
 
-      'RECEIPT_POST',
-      'CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_POST',
-      'REFUND_VIEW',
-      'REFUND_POST',
+      PERMISSIONS.AR.RECEIPT_POST,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_POST,
+      PERMISSIONS.AR.REFUND_VIEW,
+      PERMISSIONS.AR.REFUND_POST,
     ] as const;
 
     const perms = await this.prisma.permission.findMany({
@@ -724,7 +725,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ name: created.name, email: created.email }),
           userId: actor.id,
-          permissionUsed: 'USER_CREATE',
+          permissionUsed: PERMISSIONS.USER.CREATE,
         },
       })
       .catch(() => undefined);
@@ -794,7 +795,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ isActive: updated.isActive }),
           userId: actor.id,
-          permissionUsed: 'USER_EDIT',
+          permissionUsed: PERMISSIONS.USER.EDIT,
         },
       })
       .catch(() => undefined);
@@ -843,7 +844,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ roleIds }),
           userId: actor.id,
-          permissionUsed: 'ROLE_ASSIGN',
+          permissionUsed: PERMISSIONS.ROLE.ASSIGN,
         },
       })
       .catch(() => undefined);
@@ -1107,7 +1108,7 @@ export class SettingsService {
             tenantId: tenant.id,
             userRoles: { some: { userId: user.id } },
           },
-          permission: { code: 'SYSTEM_CONFIG_UPDATE' },
+          permission: { code: PERMISSIONS.SYSTEM.CONFIG_UPDATE },
         },
         select: { roleId: true },
       });
@@ -1115,7 +1116,7 @@ export class SettingsService {
       if (!hasSystemConfigUpdate) {
         throw new ForbiddenException({
           error: 'Access denied',
-          missingPermissions: ['SYSTEM_CONFIG_UPDATE'],
+          missingPermissions: [PERMISSIONS.SYSTEM.CONFIG_UPDATE],
         });
       }
     }
@@ -1127,7 +1128,7 @@ export class SettingsService {
             tenantId: tenant.id,
             userRoles: { some: { userId: user.id } },
           },
-          permission: { code: { in: ['FINANCE_CONFIG_UPDATE', 'FINANCE_CONFIG_CHANGE'] } },
+          permission: { code: { in: [PERMISSIONS.FINANCE.CONFIG_UPDATE, PERMISSIONS.FINANCE.CONFIG_CHANGE] } },
         },
         select: { roleId: true },
       });
@@ -1135,7 +1136,7 @@ export class SettingsService {
       if (!hasFinanceConfig) {
         throw new ForbiddenException({
           error: 'Access denied',
-          missingPermissions: ['FINANCE_CONFIG_UPDATE'],
+          missingPermissions: [PERMISSIONS.FINANCE.CONFIG_UPDATE],
         });
       }
     }
@@ -1482,7 +1483,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: 'SYSTEM_CONFIG_UPDATE',
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
         },
       })
       .catch(() => undefined);
@@ -1541,7 +1542,7 @@ export class SettingsService {
             after: { faviconUrl: updated.faviconUrl },
           }),
           userId: user.id,
-          permissionUsed: 'SYSTEM_CONFIG_UPDATE',
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
         },
       })
       .catch(() => undefined);
@@ -1635,7 +1636,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: 'SYSTEM_CONFIG_UPDATE',
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
         },
       })
       .catch(() => undefined);
@@ -1693,7 +1694,7 @@ export class SettingsService {
             after: { logoUrl: updated.logoUrl },
           }),
           userId: user.id,
-          permissionUsed: 'ADMIN',
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_CHANGE,
         },
       })
       .catch(() => undefined);

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
@@ -91,8 +92,8 @@ class PageErrorBoundary extends Component<
 export function JournalsListPage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
-  const canView = hasPermission('FINANCE_GL_VIEW') || hasPermission('gl.journal.view');
-  const canCreate = hasPermission('FINANCE_GL_CREATE') || hasPermission('gl.journal.create');
+  const canView = hasPermission(PERMISSIONS.GL.VIEW) || hasPermission(PERMISSIONS.GL.JOURNAL_VIEW_LEGACY);
+  const canCreate = hasPermission(PERMISSIONS.GL.CREATE) || hasPermission(PERMISSIONS.GL.JOURNAL_CREATE_LEGACY);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = useMemo(() => {

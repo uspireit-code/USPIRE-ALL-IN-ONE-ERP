@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { ArService } from './ar.service';
@@ -22,25 +23,25 @@ export class ArController {
   constructor(private readonly ar: ArService) {}
 
   @Post('customers')
-  @Permissions('AR_CUSTOMER_CREATE')
+  @Permissions(PERMISSIONS.AR.CUSTOMER_CREATE)
   async createCustomer(@Req() req: Request, @Body() dto: CreateCustomerDto) {
     return this.ar.createCustomer(req, dto);
   }
 
   @Get('customers')
-  @Permissions('CUSTOMERS_VIEW')
+  @Permissions(PERMISSIONS.CUSTOMERS.VIEW)
   async listCustomers(@Req() req: Request) {
     return this.ar.listCustomers(req);
   }
 
   @Get('accounts')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async listEligibleAccounts(@Req() req: Request) {
     return this.ar.listEligibleAccounts(req);
   }
 
   @Post('invoices')
-  @Permissions('INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CREATE)
   async createInvoice(
     @Req() req: Request,
     @Body() dto: CreateCustomerInvoiceDto,
@@ -49,7 +50,7 @@ export class ArController {
   }
 
   @Post('invoices/:id/post')
-  @Permissions('INVOICE_POST')
+  @Permissions(PERMISSIONS.AR.INVOICE_POST)
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -59,7 +60,7 @@ export class ArController {
   }
 
   @Get('invoices')
-  @Permissions('INVOICE_VIEW')
+  @Permissions(PERMISSIONS.AR.INVOICE_VIEW)
   async listInvoices(@Req() req: Request) {
     return this.ar.listInvoices(req);
   }

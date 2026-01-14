@@ -4,6 +4,7 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { tokens } from '../../designTokens';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import type { BudgetControlMode, CoaAccount, CoaAccountType, CoaTreeNode, NormalBalance } from '../../services/coa';
 import {
   cleanupNonCanonical,
@@ -145,9 +146,9 @@ function flattenTree(tree: CoaTreeNode[]) {
 export function ChartOfAccountsPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('FINANCE_COA_VIEW');
-  const canUpdate = hasPermission('FINANCE_COA_UPDATE');
-  const canUnlockCOA = hasPermission('FINANCE_COA_UNLOCK');
+  const canView = hasPermission(PERMISSIONS.COA.VIEW);
+  const canUpdate = hasPermission(PERMISSIONS.COA.UPDATE);
+  const canUnlockCOA = hasPermission(PERMISSIONS.COA.UNLOCK);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

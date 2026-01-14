@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { ApiError } from '../../services/api';
 import { getApiErrorMessage } from '../../services/api';
 import { listGlPeriods, type AccountingPeriod } from '../../services/gl';
@@ -143,9 +144,9 @@ type TaxRow = {
 
 export function DisclosureNotesPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('FINANCE_DISCLOSURE_VIEW');
-  const canGenerate = hasPermission('FINANCE_DISCLOSURE_GENERATE');
-  const canExport = hasPermission('FINANCE_REPORT_EXPORT');
+  const canView = hasPermission(PERMISSIONS.DISCLOSURE.VIEW);
+  const canGenerate = hasPermission(PERMISSIONS.DISCLOSURE.GENERATE);
+  const canExport = hasPermission(PERMISSIONS.REPORT.EXPORT);
 
   const [mode, setMode] = useState<'LEGACY' | 'IFRS'>('IFRS');
 
@@ -339,7 +340,7 @@ export function DisclosureNotesPage() {
   }
 
   if (!canView) {
-    return <div>You do not have permission to view disclosure notes (requires FINANCE_DISCLOSURE_VIEW).</div>;
+    return <div>You do not have permission to view disclosure notes (requires {PERMISSIONS.DISCLOSURE.VIEW}).</div>;
   }
 
   const errBody = (error as unknown as ApiError | any)?.body;

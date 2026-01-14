@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { TimeoutInterceptor } from '../internal/timeout.interceptor';
@@ -23,7 +24,7 @@ export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
   @Get('summary')
-  @Permissions('dashboard.view')
+  @Permissions(PERMISSIONS.DASHBOARD.VIEW)
   async summary(@Req() req: Request, @Query() query: DashboardQueryDto) {
     const data = await this.dashboard.getKpis(req, query);
     await this.dashboard.auditDashboardView(req, {
@@ -34,7 +35,7 @@ export class DashboardController {
   }
 
   @Get('kpis')
-  @Permissions('dashboard.view')
+  @Permissions(PERMISSIONS.DASHBOARD.VIEW)
   async kpis(@Req() req: Request, @Query() query: DashboardQueryDto) {
     const data = await this.dashboard.getKpis(req, query);
     await this.dashboard.auditDashboardView(req, {
@@ -45,7 +46,7 @@ export class DashboardController {
   }
 
   @Get('trends')
-  @Permissions('dashboard.view')
+  @Permissions(PERMISSIONS.DASHBOARD.VIEW)
   async trends(@Req() req: Request, @Query() query: DashboardQueryDto) {
     const data = await this.dashboard.getTrends(req, query);
     await this.dashboard.auditDashboardView(req, {

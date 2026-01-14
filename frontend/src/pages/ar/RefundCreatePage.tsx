@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
 import { createRefund, getRefundableForCreditNote, listRefundableCreditNotes, listRefundableCustomers, type RefundableCustomerRow, type RefundPaymentMethod, type RefundableCreditNoteRow } from '../../services/ar';
@@ -11,7 +12,7 @@ export function RefundCreatePage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('REFUND_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.AR.REFUND.CREATE);
 
   const [form, setForm] = useState(() => ({
     customerId: '',
@@ -170,7 +171,7 @@ export function RefundCreatePage() {
 
   async function onSave() {
     if (!canCreate) {
-      setError('You don’t have permission to create refunds. Required: REFUND_CREATE.');
+      setError(`You don’t have permission to create refunds. Required: ${PERMISSIONS.AR.REFUND.CREATE}.`);
       return;
     }
 

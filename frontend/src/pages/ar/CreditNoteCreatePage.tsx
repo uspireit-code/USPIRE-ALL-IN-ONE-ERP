@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
 import { createCreditNote, getInvoiceById, listEligibleCreditNoteCustomers, listEligibleCreditNoteInvoices, type CustomerInvoice, type EligibleCreditNoteCustomerRow, type EligibleCreditNoteInvoiceRow } from '../../services/ar';
@@ -21,7 +22,7 @@ export function CreditNoteCreatePage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('CREDIT_NOTE_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.AR.CREDIT_NOTE.CREATE);
 
   const [customers, setCustomers] = useState<EligibleCreditNoteCustomerRow[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
@@ -123,7 +124,14 @@ export function CreditNoteCreatePage() {
         const defaultLines = (inv.lines ?? []).map((l) => ({
           description: String(l.description ?? '').trim(),
           quantity: String(Number(l.quantity ?? 1)),
-          unitPrice: String(Number(l.unitPrice ?? 0)),
+          unitPrice: (() => {
+            const qty = Number(l.quantity ?? 0);
+            const netLineTotal = Number((l as any).lineTotal ?? 0);
+            if (qty > 0 && Number.isFinite(netLineTotal) && netLineTotal >= 0) {
+              return String(round2(netLineTotal / qty));
+            }
+            return String(Number(l.unitPrice ?? 0));
+          })(),
           revenueAccountId: String(l.accountId ?? '').trim(),
         }));
         if (defaultLines.length > 0) {
@@ -149,15 +157,28 @@ export function CreditNoteCreatePage() {
   }, [invoiceId, postedInvoices]);
 
   const invoiceOutstanding = useMemo(() => {
-    const remaining = Number(selectedEligibleInvoice?.outstandingBalance ?? 0);
-    return round2(remaining);
-  }, [selectedEligibleInvoice?.outstandingBalance]);
+    const inv: any = invoice as any;
 
-  useEffect(() => {
-    if (!invoiceId) return;
-    console.log('Invoice selected:', selectedEligibleInvoice);
-    console.log('Net outstanding used:', invoiceOutstanding);
-  }, [invoiceId, invoiceOutstanding, selectedEligibleInvoice]);
+    const direct = inv?.outstandingAmount ?? inv?.outstandingBalance;
+    if (direct != null) {
+      const v = Number(direct);
+      return Number.isFinite(v) ? round2(v) : 0;
+    }
+
+    const netTotal = Number(inv?.netTotal);
+    const paidToDate = Number(inv?.paidToDate);
+    const creditedToDate = Number(inv?.creditedToDate);
+    if (
+      Number.isFinite(netTotal) &&
+      Number.isFinite(paidToDate) &&
+      Number.isFinite(creditedToDate)
+    ) {
+      return round2(netTotal - paidToDate - creditedToDate);
+    }
+
+    const eligible = Number(selectedEligibleInvoice?.outstandingBalance ?? 0);
+    return Number.isFinite(eligible) ? round2(eligible) : 0;
+  }, [invoice, selectedEligibleInvoice?.outstandingBalance]);
 
   const computedTotal = useMemo(() => {
     const sum = lines.reduce((s, l) => s + round2(Number(l.quantity || 0) * Number(l.unitPrice || 0)), 0);
@@ -172,7 +193,7 @@ export function CreditNoteCreatePage() {
 
   async function onSave() {
     if (!canCreate) {
-      setError('You don’t have permission to create credit notes. Required: CREDIT_NOTE_CREATE.');
+      setError(`You don’t have permission to create credit notes. Required: ${PERMISSIONS.AR.CREDIT_NOTE.CREATE}.`);
       return;
     }
 

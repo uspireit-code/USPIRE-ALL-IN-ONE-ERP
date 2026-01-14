@@ -8,6 +8,7 @@ import {
   type AuditEvidenceRow,
 } from '../services/auditEvidence';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Alert } from './Alert';
@@ -19,8 +20,8 @@ export function EvidencePanel(props: {
   uploadsEnabled: boolean;
 }) {
   const { hasPermission } = useAuth();
-  const canUpload = hasPermission('AUDIT_EVIDENCE_UPLOAD');
-  const canView = hasPermission('AUDIT_EVIDENCE_VIEW');
+  const canUpload = hasPermission(PERMISSIONS.AUDIT.EVIDENCE_UPLOAD);
+  const canView = hasPermission(PERMISSIONS.AUDIT.EVIDENCE_VIEW);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);

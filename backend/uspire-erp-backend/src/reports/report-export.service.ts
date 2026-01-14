@@ -126,6 +126,193 @@ export class ReportExportService {
     doc.y = y + Math.max(h1, h2) + 2;
   }
 
+  async creditNoteToPdf(params: {
+    creditNote: any;
+    header: PdfHeaderBlock;
+  }): Promise<Buffer> {
+    const PDFDocument = this.ensurePdfKit();
+
+    const cn = params.creditNote ?? {};
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const drawHeader = () => this.renderHeaderBlock(doc, params.header);
+    drawHeader();
+
+    const width = this.pageWidth(doc);
+    const x = this.x0(doc);
+    const labelW = Math.max(220, width - 160);
+    const valueW = width - labelW;
+
+    const row = (label: string, value: string, opts?: { bold?: boolean }) => {
+      this.ensureSpace(doc, 14, drawHeader);
+      this.renderTwoColumnRow(doc, {
+        label,
+        value,
+        labelWidth: labelW,
+        valueWidth: valueW,
+        bold: opts?.bold,
+      });
+    };
+
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text('Summary', x, doc.y, { width });
+    doc.moveDown(0.4);
+    doc.font('Helvetica').fontSize(9);
+
+    row('Credit Note Number', String(cn.creditNoteNumber ?? cn.id ?? ''));
+    row('Credit Note Date', String(cn.creditNoteDate ?? ''));
+    row('Customer', String(cn.customerName ?? cn.customerId ?? ''));
+    row('Status', String(cn.status ?? ''));
+    row(
+      'Subtotal (NET)',
+      this.formatMoney(Number(cn.subtotal ?? 0)),
+      { bold: true },
+    );
+    row('Tax', this.formatMoney(Number(cn.taxAmount ?? 0)));
+    row('Total (GROSS)', this.formatMoney(Number(cn.totalAmount ?? 0)));
+    if (cn.memo) row('Memo', String(cn.memo));
+
+    doc.moveDown(0.6);
+    doc
+      .moveTo(x, doc.y)
+      .lineTo(x + width, doc.y)
+      .strokeColor('#ddd')
+      .stroke();
+    doc.strokeColor('#000');
+    doc.moveDown(0.6);
+
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text('Lines', x, doc.y, { width });
+    doc.moveDown(0.4);
+
+    const lines: any[] = Array.isArray(cn.lines) ? cn.lines : [];
+    const colDesc = Math.max(220, width - 80 - 90 - 90);
+    const colQty = 80;
+    const colUnit = 90;
+    const colAmt = 90;
+
+    const drawTableHeader = () => {
+      this.ensureSpace(doc, 18, drawHeader);
+      const y = doc.y;
+      doc.font('Helvetica-Bold').fontSize(9);
+      doc.text('Description', x, y, { width: colDesc, align: 'left' });
+      doc.text('Qty', x + colDesc, y, { width: colQty, align: 'right' });
+      doc.text('Unit', x + colDesc + colQty, y, {
+        width: colUnit,
+        align: 'right',
+      });
+      doc.text('Amount', x + colDesc + colQty + colUnit, y, {
+        width: colAmt,
+        align: 'right',
+      });
+      doc.moveDown(0.5);
+      doc
+        .moveTo(x, doc.y)
+        .lineTo(x + width, doc.y)
+        .strokeColor('#ddd')
+        .stroke();
+      doc.strokeColor('#000');
+      doc.moveDown(0.35);
+      doc.font('Helvetica').fontSize(9);
+    };
+
+    drawTableHeader();
+    for (const l of lines) {
+      const desc = String(l.description ?? '').trim();
+      const qty = Number(l.quantity ?? 0);
+      const unit = Number(l.unitPrice ?? 0);
+      const amt = Number(l.lineAmount ?? 0);
+
+      const h = Math.max(
+        14,
+        doc.heightOfString(desc, { width: colDesc, lineGap: 1 }) + 4,
+      );
+      this.ensureSpace(doc, h, () => {
+        drawHeader();
+        drawTableHeader();
+      });
+
+      const y = doc.y;
+      doc.text(desc, x, y, { width: colDesc, align: 'left', lineGap: 1 });
+      doc.text(String(qty), x + colDesc, y, { width: colQty, align: 'right' });
+      doc.text(this.formatMoney(unit), x + colDesc + colQty, y, {
+        width: colUnit,
+        align: 'right',
+      });
+      doc.text(this.formatMoney(amt), x + colDesc + colQty + colUnit, y, {
+        width: colAmt,
+        align: 'right',
+      });
+
+      doc.y = y + h;
+    }
+
+    return await new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.end();
+    });
+  }
+
+  async refundToPdf(params: {
+    refund: any;
+    header: PdfHeaderBlock;
+  }): Promise<Buffer> {
+    const PDFDocument = this.ensurePdfKit();
+
+    const r = params.refund ?? {};
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const drawHeader = () => this.renderHeaderBlock(doc, params.header);
+    drawHeader();
+
+    const width = this.pageWidth(doc);
+    const x = this.x0(doc);
+    const labelW = Math.max(220, width - 160);
+    const valueW = width - labelW;
+
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text('Summary', x, doc.y, { width });
+    doc.moveDown(0.4);
+    doc.font('Helvetica').fontSize(9);
+
+    const row = (label: string, value: string, opts?: { bold?: boolean }) => {
+      this.ensureSpace(doc, 14, drawHeader);
+      this.renderTwoColumnRow(doc, {
+        label,
+        value,
+        labelWidth: labelW,
+        valueWidth: valueW,
+        bold: opts?.bold,
+      });
+    };
+
+    row('Refund Number', String(r.refundNumber ?? r.id ?? ''));
+    row('Refund Date', String(r.refundDate ?? ''));
+    row('Customer', String(r.customerName ?? r.customerId ?? ''));
+    row('Status', String(r.status ?? ''));
+    row('Payment Method', String(r.paymentMethod ?? ''));
+    row('Bank Account', String(r.bankAccountId ?? '-'));
+    row(
+      'Amount',
+      this.formatMoney(Number(r.amount ?? 0)),
+      { bold: true },
+    );
+    row('Currency', String(r.currency ?? ''));
+    row('Credit Note', String(r.creditNoteNumber ?? r.creditNoteId ?? ''));
+    row('Invoice', String(r.invoiceId ?? '-'));
+
+    return await new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.end();
+    });
+  }
+
   private csvEscape(v: string) {
     if (v.includes('"') || v.includes(',') || v.includes('\n')) {
       return `"${v.replace(/"/g, '""')}"`;

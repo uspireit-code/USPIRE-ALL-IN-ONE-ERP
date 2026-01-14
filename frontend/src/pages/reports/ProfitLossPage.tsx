@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { JournalDetailModal } from '../../components/JournalDetailModal';
 import { LedgerDrilldownDrawer } from '../../components/LedgerDrilldownDrawer';
 import { Alert } from '../../components/Alert';
@@ -32,9 +33,9 @@ function isReportEmpty(report: PresentedReport) {
 
 export function ProfitLossPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('report.view.pl');
-  const canExport = hasPermission('FINANCE_REPORT_EXPORT');
-  const canGlView = hasPermission('FINANCE_GL_VIEW');
+  const canView = hasPermission(PERMISSIONS.REPORT.VIEW.PROFIT_LOSS);
+  const canExport = hasPermission(PERMISSIONS.REPORT.EXPORT);
+  const canGlView = hasPermission(PERMISSIONS.GL.VIEW);
 
   const [from, setFrom] = useState(firstDayOfMonthIso());
   const [to, setTo] = useState(todayIsoDate());
@@ -358,7 +359,9 @@ export function ProfitLossPage() {
         </label>
       </div>
 
-      {!canExport ? <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Export disabled: missing FINANCE_REPORT_EXPORT permission.</div> : null}
+      {!canExport ? (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Export disabled: missing {PERMISSIONS.REPORT.EXPORT} permission.</div>
+      ) : null}
 
       {error ? (
         <Alert tone="error" title="Request failed" style={{ marginTop: 12 }}>

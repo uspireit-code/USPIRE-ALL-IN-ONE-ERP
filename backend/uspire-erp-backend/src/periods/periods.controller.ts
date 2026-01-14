@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateAccountingPeriodDto } from '../gl/dto/create-accounting-period.dto';
 import { ReopenPeriodDto } from '../gl/dto/reopen-period.dto';
 import { PeriodsService } from './periods.service';
@@ -14,30 +15,34 @@ export class PeriodsController {
   constructor(private readonly periods: PeriodsService) {}
 
   @Get()
-  @PermissionsAny('FINANCE_PERIOD_VIEW', 'FINANCE_PERIOD_REVIEW', 'FINANCE_GL_VIEW')
+  @PermissionsAny(
+    PERMISSIONS.PERIOD.VIEW,
+    PERMISSIONS.PERIOD.REVIEW,
+    PERMISSIONS.GL.VIEW,
+  )
   async list(@Req() req: Request) {
     return this.periods.listPeriods(req);
   }
 
   @Post()
-  @Permissions('FINANCE_PERIOD_CREATE')
+  @Permissions(PERMISSIONS.PERIOD.CREATE)
   async create(@Req() req: Request, @Body() dto: CreateAccountingPeriodDto) {
     return this.periods.createPeriod(req, dto);
   }
 
   @Get(':id/checklist')
   @PermissionsAny(
-    'FINANCE_PERIOD_CHECKLIST_VIEW',
-    'FINANCE_PERIOD_VIEW',
-    'FINANCE_PERIOD_REVIEW',
-    'FINANCE_GL_VIEW',
+    PERMISSIONS.PERIOD.CHECKLIST_VIEW,
+    PERMISSIONS.PERIOD.VIEW,
+    PERMISSIONS.PERIOD.REVIEW,
+    PERMISSIONS.GL.VIEW,
   )
   async getChecklist(@Req() req: Request, @Param('id') id: string) {
     return this.periods.getChecklist(req, id);
   }
 
   @Post(':id/checklist/items/:itemId/complete')
-  @Permissions('FINANCE_PERIOD_CHECKLIST_COMPLETE')
+  @Permissions(PERMISSIONS.PERIOD.CHECKLIST_COMPLETE)
   async completeChecklistItem(
     @Req() req: Request,
     @Param('id') id: string,
@@ -47,13 +52,13 @@ export class PeriodsController {
   }
 
   @Post(':id/close')
-  @Permissions('FINANCE_PERIOD_CLOSE')
+  @Permissions(PERMISSIONS.PERIOD.CLOSE)
   async close(@Req() req: Request, @Param('id') id: string) {
     return this.periods.closePeriod(req, id);
   }
 
   @Post(':id/reopen')
-  @Permissions('FINANCE_PERIOD_REOPEN')
+  @Permissions(PERMISSIONS.PERIOD.REOPEN)
   async reopen(
     @Req() req: Request,
     @Param('id') id: string,
@@ -63,7 +68,7 @@ export class PeriodsController {
   }
 
   @Patch(':id/correct')
-  @Permissions('FINANCE_PERIOD_CORRECT')
+  @Permissions(PERMISSIONS.PERIOD.CORRECT)
   async correct(
     @Req() req: Request,
     @Param('id') id: string,

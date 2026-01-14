@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 
 @Injectable()
@@ -753,7 +754,7 @@ export class BudgetsService {
             action: 'BUDGET_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'BUDGET_CREATE',
+            permissionUsed: PERMISSIONS.BUDGET.CREATE,
           },
         })
         .catch(() => undefined);
@@ -802,7 +803,7 @@ export class BudgetsService {
             outcome: 'BLOCKED',
             reason: 'An ACTIVE budget already exists for this fiscal year',
             userId: user.id,
-            permissionUsed: 'BUDGET_APPROVE',
+            permissionUsed: PERMISSIONS.BUDGET.APPROVE,
           },
         })
         .catch(() => undefined);
@@ -841,7 +842,7 @@ export class BudgetsService {
           action: 'BUDGET_APPROVE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'BUDGET_APPROVE',
+          permissionUsed: PERMISSIONS.BUDGET.APPROVE,
         },
       })
       .catch(() => undefined);

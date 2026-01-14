@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { BankService } from './bank.service';
 import { AddBankStatementLinesDto } from './dto/add-bank-statement-lines.dto';
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';
@@ -26,7 +27,7 @@ export class BankController {
   constructor(private readonly bank: BankService) {}
 
   @Post('accounts')
-  @Permissions('BANK_ACCOUNT_CREATE')
+  @Permissions(PERMISSIONS.BANK.ACCOUNT_CREATE)
   async createBankAccount(
     @Req() req: Request,
     @Body() dto: CreateBankAccountDto,
@@ -35,13 +36,13 @@ export class BankController {
   }
 
   @Get('accounts')
-  @Permissions('BANK_RECONCILIATION_VIEW')
+  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
   async listBankAccounts(@Req() req: Request) {
     return this.bank.listBankAccounts(req);
   }
 
   @Post('statements')
-  @Permissions('BANK_STATEMENT_IMPORT')
+  @Permissions(PERMISSIONS.BANK.STATEMENT_IMPORT)
   async createStatement(
     @Req() req: Request,
     @Body() dto: CreateBankStatementDto,
@@ -50,7 +51,7 @@ export class BankController {
   }
 
   @Get('statements')
-  @Permissions('BANK_RECONCILIATION_VIEW')
+  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
   async listStatements(
     @Req() req: Request,
     @Query() dto: ListBankStatementsQueryDto,
@@ -59,13 +60,13 @@ export class BankController {
   }
 
   @Get('statements/:id')
-  @Permissions('BANK_RECONCILIATION_VIEW')
+  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
   async getStatement(@Req() req: Request, @Param('id') id: string) {
     return this.bank.getStatement(req, id);
   }
 
   @Post('statements/:id/lines')
-  @Permissions('BANK_STATEMENT_IMPORT')
+  @Permissions(PERMISSIONS.BANK.STATEMENT_IMPORT)
   async addStatementLines(
     @Req() req: Request,
     @Param('id') id: string,
@@ -75,19 +76,19 @@ export class BankController {
   }
 
   @Get('reconciliation/unmatched')
-  @Permissions('BANK_RECONCILIATION_VIEW')
+  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
   async unmatched(@Req() req: Request) {
     return this.bank.unmatched(req);
   }
 
   @Post('reconciliation/match')
-  @Permissions('BANK_RECONCILE')
+  @Permissions(PERMISSIONS.BANK.RECONCILE)
   async match(@Req() req: Request, @Body() dto: MatchBankReconciliationDto) {
     return this.bank.match(req, dto);
   }
 
   @Get('reconciliation/status')
-  @Permissions('BANK_RECONCILIATION_VIEW')
+  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
   async status(
     @Req() req: Request,
     @Query() dto: ReconciliationStatusQueryDto,

@@ -5,6 +5,7 @@ import { Button } from '../../../components/Button';
 import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getApiErrorMessage } from '../../../services/api';
 import { approveBudget, getBudget, type BudgetDetailsResponse } from '../../../services/budgets';
 
@@ -18,8 +19,8 @@ export function BudgetDetailPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('BUDGET_VIEW');
-  const canApprove = hasPermission('BUDGET_APPROVE');
+  const canView = hasPermission(PERMISSIONS.BUDGET.VIEW);
+  const canApprove = hasPermission(PERMISSIONS.BUDGET.APPROVE);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

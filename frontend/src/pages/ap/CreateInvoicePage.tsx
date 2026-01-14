@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { AccountLookup, Supplier } from '../../services/ap';
 import { createInvoice, listEligibleAccounts, listSuppliers } from '../../services/ap';
 
@@ -22,7 +23,7 @@ export function CreateInvoicePage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('AP_INVOICE_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.AP.INVOICE.CREATE);
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [accounts, setAccounts] = useState<AccountLookup[]>([]);

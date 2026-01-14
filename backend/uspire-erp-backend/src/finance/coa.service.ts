@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import ExcelJS from 'exceljs';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateCoaAccountDto, UpdateCoaAccountDto } from './coa.dto';
 
 type RequestContext = Request;
@@ -594,7 +595,7 @@ export class CoaService {
               updated: updated.length,
             }),
             userId: user.id,
-            permissionUsed: 'FINANCE_COA_UPDATE',
+            permissionUsed: PERMISSIONS.COA.UPDATE,
           },
         })
         .catch(() => undefined);
@@ -937,7 +938,7 @@ export class CoaService {
             blockedCount: blocked.length,
           }),
           userId: user.id,
-          permissionUsed: 'FINANCE_COA_UPDATE',
+          permissionUsed: PERMISSIONS.COA.UPDATE,
         },
       })
       .catch(() => undefined);
@@ -1332,7 +1333,7 @@ export class CoaService {
             accountType: dto.accountType,
           }),
           userId: user.id,
-          permissionUsed: 'FINANCE_COA_UPDATE',
+          permissionUsed: PERMISSIONS.COA.UPDATE,
         },
       })
       .catch(() => undefined);
@@ -1443,7 +1444,7 @@ export class CoaService {
               outcome: 'SUCCESS',
               reason: 'COA_CREATE_TAX_CONTROL',
               userId: user.id,
-              permissionUsed: 'FINANCE_COA_UPDATE',
+              permissionUsed: PERMISSIONS.COA.UPDATE,
             },
           })
           .catch(() => undefined);
@@ -1677,7 +1678,7 @@ export class CoaService {
               next: dto.ifrsMappingCode ?? null,
             }),
             userId: user.id,
-            permissionUsed: 'FINANCE_COA_UPDATE',
+            permissionUsed: PERMISSIONS.COA.UPDATE,
           },
         })
         .catch(() => undefined);
@@ -1701,7 +1702,7 @@ export class CoaService {
               : 'COA_UPDATE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'FINANCE_COA_UPDATE',
+          permissionUsed: PERMISSIONS.COA.UPDATE,
         },
       })
       .catch(() => undefined);
@@ -1732,7 +1733,7 @@ export class CoaService {
           action: 'COA_FREEZE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'coa.freeze',
+          permissionUsed: PERMISSIONS.COA.FREEZE,
         },
       })
       .catch(() => undefined);
@@ -1763,7 +1764,7 @@ export class CoaService {
           action: 'COA_UNFREEZE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'coa.freeze',
+          permissionUsed: PERMISSIONS.COA.FREEZE,
         },
       })
       .catch(() => undefined);
@@ -1794,7 +1795,7 @@ export class CoaService {
           action: 'COA_LOCKED',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'coa.freeze',
+          permissionUsed: PERMISSIONS.COA.FREEZE,
         },
       })
       .catch(() => undefined);
@@ -1825,7 +1826,7 @@ export class CoaService {
           action: 'COA_UNLOCKED',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'coa.freeze',
+          permissionUsed: PERMISSIONS.COA.FREEZE,
         },
       })
       .catch(() => undefined);

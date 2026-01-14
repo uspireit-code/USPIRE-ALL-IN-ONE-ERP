@@ -21,6 +21,7 @@
     "prisma:migrations:archive": "ts-node scripts/archive-legacy-migrations.ts",
     "prisma:baseline:generate": "ts-node scripts/generate-reconciliation-baseline.ts",
     "prisma:seed": "prisma db seed && ts-node scripts/verify-governance.ts",
+    "rbac:verify-catalog": "ts-node scripts/verify-permission-catalog.ts",
     "rbac:repair": "ts-node scripts/rbac-repair.ts",
     "backfill:invoice-categories": "ts-node scripts/backfill-invoice-categories.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

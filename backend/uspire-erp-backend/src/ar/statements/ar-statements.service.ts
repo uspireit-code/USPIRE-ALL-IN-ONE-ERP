@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PERMISSIONS } from '../../rbac/permission-catalog';
 
 export type ArStatementTransactionType = 'INVOICE' | 'RECEIPT' | 'CREDIT_NOTE';
 
@@ -249,7 +250,7 @@ export class ArStatementsService {
           outcome: 'SUCCESS' as any,
           reason: JSON.stringify({ customerId, fromDate: q.fromDate ?? null, toDate: q.toDate ?? null, asOfDate: q.asOfDate ?? null }),
           userId: user.id,
-          permissionUsed: 'AR_STATEMENT_VIEW',
+          permissionUsed: PERMISSIONS.AR_STATEMENT.VIEW,
         } as any,
       })
       .catch(() => undefined);

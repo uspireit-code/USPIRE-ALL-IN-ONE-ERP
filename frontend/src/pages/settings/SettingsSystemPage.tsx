@@ -10,6 +10,7 @@ import { getSystemConfig, updateSystemConfig, uploadSystemFavicon } from '../../
 import { roleDisplayMap } from '../../roleDisplayMap';
 import { useBrandColors, useBranding } from '../../branding/BrandingContext';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { setupTaxControlAccounts, type SetupTaxControlAccountsResponse } from '../../services/coa';
 import { listGlAccounts, type GlAccountLookup } from '../../services/gl';
 
@@ -27,8 +28,8 @@ export function SettingsSystemPage() {
   const { setPreviewOverrides, clearPreviewOverrides, refresh: refreshBranding } = useBranding();
   const brand = useBrandColors();
   const { hasPermission } = useAuth();
-  const canSystemConfigUpdate = hasPermission('SYSTEM_CONFIG_UPDATE');
-  const canFinanceConfigChange = hasPermission('FINANCE_CONFIG_UPDATE');
+  const canSystemConfigUpdate = hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
+  const canFinanceConfigChange = hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

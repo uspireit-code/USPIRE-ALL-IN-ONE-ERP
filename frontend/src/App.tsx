@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
 import { can, canAny } from './auth/permissions';
+import { PERMISSIONS } from './auth/permission-catalog';
 import { BrandingProvider } from './branding/BrandingContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -105,21 +106,21 @@ import { ArRemindersTemplatesPage } from './pages/ar/ArRemindersTemplatesPage';
 function SettingsVisibleRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
   const has = canAny(state.me, [
-    'SYSTEM_VIEW_ALL',
-    'SYSTEM_CONFIG_VIEW',
-    'FINANCE_CONFIG_VIEW',
-    'USER_VIEW',
-    'ROLE_VIEW',
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+    PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.FINANCE.CONFIG_VIEW,
+    PERMISSIONS.USER.VIEW,
+    PERMISSIONS.ROLE.VIEW,
   ]);
   if (!has)
     return (
       <AccessDeniedPage
         requiredAnyPermissions={[
-          'SYSTEM_CONFIG_VIEW',
-          'FINANCE_CONFIG_VIEW',
-          'USER_VIEW',
-          'ROLE_VIEW',
-          'SYSTEM_VIEW_ALL',
+          PERMISSIONS.SYSTEM.CONFIG_VIEW,
+          PERMISSIONS.FINANCE.CONFIG_VIEW,
+          PERMISSIONS.USER.VIEW,
+          PERMISSIONS.ROLE.VIEW,
+          PERMISSIONS.SYSTEM.VIEW_ALL,
         ]}
       />
     );
@@ -170,7 +171,7 @@ export default function App() {
               <Route
                 path="ar/invoices"
                 element={
-                  <PermissionAnyRoute permissions={['INVOICE_VIEW', 'INVOICE_CREATE']}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AR.INVOICE_VIEW, PERMISSIONS.AR.INVOICE_CREATE]}>
                     <ArInvoicesListPage />
                   </PermissionAnyRoute>
                 }
@@ -178,7 +179,7 @@ export default function App() {
               <Route
                 path="ar/invoices/new"
                 element={
-                  <PermissionOnlyRoute permission="INVOICE_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.INVOICE_CREATE}>
                     <CreateArInvoicePage />
                   </PermissionOnlyRoute>
                 }
@@ -186,7 +187,7 @@ export default function App() {
               <Route
                 path="ar/invoices/:id"
                 element={
-                  <PermissionAnyRoute permissions={['INVOICE_VIEW', 'INVOICE_CREATE']}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AR.INVOICE_VIEW, PERMISSIONS.AR.INVOICE_CREATE]}>
                     <ArInvoiceDetailsPage />
                   </PermissionAnyRoute>
                 }
@@ -194,7 +195,13 @@ export default function App() {
               <Route
                 path="ar/receipts"
                 element={
-                  <PermissionAnyRoute permissions={['RECEIPT_VIEW', 'RECEIPT_POST', 'RECEIPT_CREATE']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.RECEIPT_VIEW,
+                      PERMISSIONS.AR.RECEIPT_POST,
+                      PERMISSIONS.AR.RECEIPT_CREATE,
+                    ]}
+                  >
                     <ReceiptsPage />
                   </PermissionAnyRoute>
                 }
@@ -202,7 +209,7 @@ export default function App() {
               <Route
                 path="ar/receipts/new"
                 element={
-                  <PermissionOnlyRoute permission="RECEIPT_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.RECEIPT_CREATE}>
                     <CreateReceiptPage />
                   </PermissionOnlyRoute>
                 }
@@ -210,7 +217,13 @@ export default function App() {
               <Route
                 path="ar/receipts/:id"
                 element={
-                  <PermissionAnyRoute permissions={['RECEIPT_VIEW', 'RECEIPT_POST', 'RECEIPT_CREATE']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.RECEIPT_VIEW,
+                      PERMISSIONS.AR.RECEIPT_POST,
+                      PERMISSIONS.AR.RECEIPT_CREATE,
+                    ]}
+                  >
                     <ReceiptDetailsPage />
                   </PermissionAnyRoute>
                 }
@@ -218,7 +231,13 @@ export default function App() {
               <Route
                 path="ar/aging"
                 element={
-                  <PermissionAnyRoute permissions={['AR_AGING_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR_AGING.VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <ArAgingReportPage />
                   </PermissionAnyRoute>
                 }
@@ -227,7 +246,13 @@ export default function App() {
               <Route
                 path="ar/statements"
                 element={
-                  <PermissionAnyRoute permissions={['AR_STATEMENT_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR_STATEMENT.VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <ArStatementsPage />
                   </PermissionAnyRoute>
                 }
@@ -236,7 +261,13 @@ export default function App() {
               <Route
                 path="ar/reminders"
                 element={
-                  <PermissionAnyRoute permissions={['AR_REMINDER_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR_REMINDER.VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <ArRemindersManualTriggerPage />
                   </PermissionAnyRoute>
                 }
@@ -245,7 +276,13 @@ export default function App() {
               <Route
                 path="ar/reminders/rules"
                 element={
-                  <PermissionAnyRoute permissions={['AR_REMINDER_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR_REMINDER.VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <ArRemindersRulesPage />
                   </PermissionAnyRoute>
                 }
@@ -254,7 +291,13 @@ export default function App() {
               <Route
                 path="ar/reminders/templates"
                 element={
-                  <PermissionAnyRoute permissions={['AR_REMINDER_VIEW', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR_REMINDER.VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <ArRemindersTemplatesPage />
                   </PermissionAnyRoute>
                 }
@@ -263,7 +306,14 @@ export default function App() {
               <Route
                 path="ar/credit-notes"
                 element={
-                  <PermissionAnyRoute permissions={['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_CREATE', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+                      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <CreditNotesListPage />
                   </PermissionAnyRoute>
                 }
@@ -271,7 +321,7 @@ export default function App() {
               <Route
                 path="ar/credit-notes/new"
                 element={
-                  <PermissionOnlyRoute permission="CREDIT_NOTE_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.CREDIT_NOTE_CREATE}>
                     <CreditNoteCreatePage />
                   </PermissionOnlyRoute>
                 }
@@ -279,7 +329,14 @@ export default function App() {
               <Route
                 path="ar/credit-notes/:id"
                 element={
-                  <PermissionAnyRoute permissions={['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_CREATE', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+                      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <CreditNoteDetailsPage />
                   </PermissionAnyRoute>
                 }
@@ -288,7 +345,14 @@ export default function App() {
               <Route
                 path="ar/refunds"
                 element={
-                  <PermissionAnyRoute permissions={['REFUND_VIEW', 'REFUND_CREATE', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.REFUND_VIEW,
+                      PERMISSIONS.AR.REFUND_CREATE,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <RefundsListPage />
                   </PermissionAnyRoute>
                 }
@@ -296,7 +360,7 @@ export default function App() {
               <Route
                 path="ar/refunds/new"
                 element={
-                  <PermissionOnlyRoute permission="REFUND_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.REFUND_CREATE}>
                     <RefundCreatePage />
                   </PermissionOnlyRoute>
                 }
@@ -304,7 +368,14 @@ export default function App() {
               <Route
                 path="ar/refunds/:id"
                 element={
-                  <PermissionAnyRoute permissions={['REFUND_VIEW', 'REFUND_CREATE', 'FINANCE_VIEW_ALL', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.REFUND_VIEW,
+                      PERMISSIONS.AR.REFUND_CREATE,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <RefundDetailsPage />
                   </PermissionAnyRoute>
                 }
@@ -336,7 +407,7 @@ export default function App() {
               <Route
                 path="budgets"
                 element={
-                  <PermissionOnlyRoute permission="BUDGET_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.BUDGET.VIEW}>
                     <BudgetSetupPage />
                   </PermissionOnlyRoute>
                 }
@@ -344,7 +415,7 @@ export default function App() {
               <Route
                 path="budgets/vs-actual"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_BUDGET_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.BUDGET.FINANCE_VIEW}>
                     <BudgetVsActualPage />
                   </PermissionOnlyRoute>
                 }
@@ -352,7 +423,7 @@ export default function App() {
               <Route
                 path="budget-vs-actual"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_BUDGET_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.BUDGET.FINANCE_VIEW}>
                     <BudgetVsActualPage />
                   </PermissionOnlyRoute>
                 }
@@ -368,7 +439,7 @@ export default function App() {
               <Route
                 path="settings/organisation"
                 element={
-                  <PermissionAnyRoute permissions={['SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
                     <SettingsOrganisationPage />
                   </PermissionAnyRoute>
                 }
@@ -376,7 +447,7 @@ export default function App() {
               <Route
                 path="settings/users"
                 element={
-                  <PermissionAnyRoute permissions={['USER_VIEW', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.USER.VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
                     <SettingsUsersPage />
                   </PermissionAnyRoute>
                 }
@@ -384,7 +455,7 @@ export default function App() {
               <Route
                 path="settings/roles"
                 element={
-                  <PermissionAnyRoute permissions={['ROLE_VIEW', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.ROLE.VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
                     <SettingsRolesPage />
                   </PermissionAnyRoute>
                 }
@@ -392,7 +463,13 @@ export default function App() {
               <Route
                 path="settings/system"
                 element={
-                  <PermissionAnyRoute permissions={['SYSTEM_CONFIG_VIEW', 'FINANCE_CONFIG_VIEW', 'SYSTEM_VIEW_ALL']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.SYSTEM.CONFIG_VIEW,
+                      PERMISSIONS.FINANCE.CONFIG_VIEW,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
                     <SettingsSystemPage />
                   </PermissionAnyRoute>
                 }
@@ -400,7 +477,7 @@ export default function App() {
               <Route
                 path="settings/tax-rates"
                 element={
-                  <PermissionOnlyRoute permission="TAX_RATE_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.TAX.RATE_VIEW}>
                     <SettingsTaxRatesPage />
                   </PermissionOnlyRoute>
                 }
@@ -408,7 +485,7 @@ export default function App() {
               <Route
                 path="settings/tax-configuration"
                 element={
-                  <PermissionOnlyRoute permission="TAX_RATE_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.TAX.RATE_VIEW}>
                     <SettingsTaxConfigurationPage />
                   </PermissionOnlyRoute>
                 }
@@ -418,10 +495,10 @@ export default function App() {
                 element={
                   <PermissionAnyRoute
                     permissions={[
-                      'MASTER_DATA_DEPARTMENT_VIEW',
-                      'MASTER_DATA_PROJECT_VIEW',
-                      'MASTER_DATA_FUND_VIEW',
-                      'INVOICE_CATEGORY_VIEW',
+                      PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+                      PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+                      PERMISSIONS.MASTER_DATA.FUND.VIEW,
+                      PERMISSIONS.AR.INVOICE_CATEGORY_VIEW,
                     ]}
                   >
                     <SettingsMasterDataPage />
@@ -431,7 +508,7 @@ export default function App() {
               <Route
                 path="settings/master-data/departments"
                 element={
-                  <PermissionOnlyRoute permission="MASTER_DATA_DEPARTMENT_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW}>
                     <SettingsDepartmentsPage />
                   </PermissionOnlyRoute>
                 }
@@ -439,7 +516,7 @@ export default function App() {
               <Route
                 path="settings/master-data/projects"
                 element={
-                  <PermissionOnlyRoute permission="MASTER_DATA_PROJECT_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.MASTER_DATA.PROJECT.VIEW}>
                     <SettingsProjectsPage />
                   </PermissionOnlyRoute>
                 }
@@ -447,7 +524,7 @@ export default function App() {
               <Route
                 path="settings/master-data/funds"
                 element={
-                  <PermissionOnlyRoute permission="MASTER_DATA_FUND_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.MASTER_DATA.FUND.VIEW}>
                     <SettingsFundsPage />
                   </PermissionOnlyRoute>
                 }
@@ -455,7 +532,7 @@ export default function App() {
               <Route
                 path="settings/master-data/invoice-categories"
                 element={
-                  <PermissionOnlyRoute permission="INVOICE_CATEGORY_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.INVOICE_CATEGORY_VIEW}>
                     <SettingsInvoiceCategoriesPage />
                   </PermissionOnlyRoute>
                 }
@@ -467,7 +544,7 @@ export default function App() {
               <Route
                 path="finance/coa"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_COA_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.COA.VIEW}>
                     <ChartOfAccountsPage />
                   </PermissionOnlyRoute>
                 }
@@ -479,7 +556,7 @@ export default function App() {
               <Route
                 path="finance/gl/risk"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_GL_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.GL.VIEW}>
                     <RiskIntelligencePage />
                   </PermissionOnlyRoute>
                 }
@@ -491,7 +568,7 @@ export default function App() {
               <Route
                 path="finance/gl/review"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_GL_APPROVE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.GL.APPROVE}>
                     <ReviewQueuePage />
                   </PermissionOnlyRoute>
                 }
@@ -499,7 +576,7 @@ export default function App() {
               <Route
                 path="finance/gl/post"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_GL_FINAL_POST">
+                  <PermissionOnlyRoute permission={PERMISSIONS.GL.FINAL_POST}>
                     <PostQueuePage />
                   </PermissionOnlyRoute>
                 }
@@ -511,7 +588,7 @@ export default function App() {
               <Route
                 path="finance/ar/invoices"
                 element={
-                  <PermissionOnlyRoute permission="INVOICE_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.INVOICE_VIEW}>
                     <ArInvoicesListPage />
                   </PermissionOnlyRoute>
                 }
@@ -519,7 +596,7 @@ export default function App() {
               <Route
                 path="finance/ar/invoices/new"
                 element={
-                  <PermissionOnlyRoute permission="INVOICE_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.INVOICE_CREATE}>
                     <CreateArInvoicePage />
                   </PermissionOnlyRoute>
                 }
@@ -527,7 +604,7 @@ export default function App() {
               <Route
                 path="finance/ar/invoices/:id"
                 element={
-                  <PermissionOnlyRoute permission="INVOICE_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.INVOICE_VIEW}>
                     <ArInvoiceDetailsPage />
                   </PermissionOnlyRoute>
                 }
@@ -535,7 +612,7 @@ export default function App() {
               <Route
                 path="finance/ar/receipts"
                 element={
-                  <PermissionOnlyRoute permission="RECEIPT_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.RECEIPT_VIEW}>
                     <ReceiptsPage />
                   </PermissionOnlyRoute>
                 }
@@ -543,7 +620,7 @@ export default function App() {
               <Route
                 path="finance/ar/receipts/new"
                 element={
-                  <PermissionOnlyRoute permission="RECEIPT_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.RECEIPT_CREATE}>
                     <CreateReceiptPage />
                   </PermissionOnlyRoute>
                 }
@@ -551,7 +628,7 @@ export default function App() {
               <Route
                 path="finance/ar/receipts/:id"
                 element={
-                  <PermissionOnlyRoute permission="RECEIPT_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.RECEIPT_VIEW}>
                     <ReceiptDetailsPage />
                   </PermissionOnlyRoute>
                 }
@@ -560,7 +637,13 @@ export default function App() {
               <Route
                 path="finance/ar/credit-notes"
                 element={
-                  <PermissionAnyRoute permissions={['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_CREATE', 'CREDIT_NOTE_POST']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+                      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+                      PERMISSIONS.AR.CREDIT_NOTE_POST,
+                    ]}
+                  >
                     <CreditNotesListPage />
                   </PermissionAnyRoute>
                 }
@@ -568,7 +651,7 @@ export default function App() {
               <Route
                 path="finance/ar/credit-notes/new"
                 element={
-                  <PermissionOnlyRoute permission="CREDIT_NOTE_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.CREDIT_NOTE_CREATE}>
                     <CreditNoteCreatePage />
                   </PermissionOnlyRoute>
                 }
@@ -576,7 +659,12 @@ export default function App() {
               <Route
                 path="finance/ar/credit-notes/:id"
                 element={
-                  <PermissionAnyRoute permissions={['CREDIT_NOTE_VIEW', 'CREDIT_NOTE_POST']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+                      PERMISSIONS.AR.CREDIT_NOTE_POST,
+                    ]}
+                  >
                     <CreditNoteDetailsPage />
                   </PermissionAnyRoute>
                 }
@@ -585,7 +673,13 @@ export default function App() {
               <Route
                 path="finance/ar/refunds"
                 element={
-                  <PermissionAnyRoute permissions={['REFUND_VIEW', 'REFUND_CREATE', 'REFUND_POST']}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.AR.REFUND_VIEW,
+                      PERMISSIONS.AR.REFUND_CREATE,
+                      PERMISSIONS.AR.REFUND_POST,
+                    ]}
+                  >
                     <RefundsListPage />
                   </PermissionAnyRoute>
                 }
@@ -593,7 +687,7 @@ export default function App() {
               <Route
                 path="finance/ar/refunds/new"
                 element={
-                  <PermissionOnlyRoute permission="REFUND_CREATE">
+                  <PermissionOnlyRoute permission={PERMISSIONS.AR.REFUND_CREATE}>
                     <RefundCreatePage />
                   </PermissionOnlyRoute>
                 }
@@ -601,7 +695,9 @@ export default function App() {
               <Route
                 path="finance/ar/refunds/:id"
                 element={
-                  <PermissionAnyRoute permissions={['REFUND_VIEW', 'REFUND_POST']}>
+                  <PermissionAnyRoute
+                    permissions={[PERMISSIONS.AR.REFUND_VIEW, PERMISSIONS.AR.REFUND_POST]}
+                  >
                     <RefundDetailsPage />
                   </PermissionAnyRoute>
                 }
@@ -619,7 +715,7 @@ export default function App() {
               <Route
                 path="finance/budgets"
                 element={
-                  <PermissionOnlyRoute permission="BUDGET_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.BUDGET.VIEW}>
                     <BudgetSetupPage />
                   </PermissionOnlyRoute>
                 }
@@ -627,7 +723,7 @@ export default function App() {
               <Route
                 path="finance/budgets/vs-actual"
                 element={
-                  <PermissionOnlyRoute permission="FINANCE_BUDGET_VIEW">
+                  <PermissionOnlyRoute permission={PERMISSIONS.BUDGET.FINANCE_VIEW}>
                     <BudgetVsActualPage />
                   </PermissionOnlyRoute>
                 }

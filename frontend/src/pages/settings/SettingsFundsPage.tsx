@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import type { Fund, MasterStatus, Project } from '../../services/master-data';
 import { createFund, listFunds, listProjects, updateFund } from '../../services/master-data';
@@ -12,9 +13,9 @@ function todayIsoDate() {
 export function SettingsFundsPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('MASTER_DATA_FUND_VIEW');
-  const canCreate = hasPermission('MASTER_DATA_FUND_CREATE');
-  const canEdit = hasPermission('MASTER_DATA_FUND_EDIT');
+  const canView = hasPermission(PERMISSIONS.MASTER_DATA.FUND.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.MASTER_DATA.FUND.CREATE);
+  const canEdit = hasPermission(PERMISSIONS.MASTER_DATA.FUND.EDIT);
 
   const [rows, setRows] = useState<Fund[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

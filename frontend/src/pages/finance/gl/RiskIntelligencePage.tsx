@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
@@ -56,7 +57,7 @@ function TabButton(props: { active: boolean; label: string; onClick: () => void 
 export function RiskIntelligencePage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
-  const canView = hasPermission('FINANCE_GL_VIEW');
+  const canView = hasPermission(PERMISSIONS.GL.VIEW);
 
   const navigate = useNavigate();
 

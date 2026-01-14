@@ -1,16 +1,17 @@
 import type React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { Card } from '../../components/Card';
 
 export function SettingsMasterDataPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canDepartments = hasPermission('MASTER_DATA_DEPARTMENT_VIEW');
-  const canProjects = hasPermission('MASTER_DATA_PROJECT_VIEW');
-  const canFunds = hasPermission('MASTER_DATA_FUND_VIEW');
-  const canInvoiceCategories = hasPermission('INVOICE_CATEGORY_VIEW');
+  const canDepartments = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW);
+  const canProjects = hasPermission(PERMISSIONS.MASTER_DATA.PROJECT.VIEW);
+  const canFunds = hasPermission(PERMISSIONS.MASTER_DATA.FUND.VIEW);
+  const canInvoiceCategories = hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW);
 
   const NAVY = '#020445';
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';

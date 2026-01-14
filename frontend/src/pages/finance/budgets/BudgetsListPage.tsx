@@ -6,14 +6,15 @@ import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
 import { Input } from '../../../components/Input';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getApiErrorMessage } from '../../../services/api';
 import { listBudgets, type BudgetListRow } from '../../../services/budgets';
 
 export function BudgetsListPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('BUDGET_VIEW');
-  const canCreate = hasPermission('BUDGET_CREATE');
+  const canView = hasPermission(PERMISSIONS.BUDGET.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.BUDGET.CREATE);
 
   const [fiscalYear, setFiscalYear] = useState<number>(() => new Date().getFullYear());
   const [loading, setLoading] = useState(false);

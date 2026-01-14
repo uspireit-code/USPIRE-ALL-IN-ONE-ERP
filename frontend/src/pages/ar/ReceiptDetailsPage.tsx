@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 import type { ArReceipt, ReceiptLineInput } from '../../services/ar';
 import { downloadReceiptExport, getReceiptById, postReceipt, setReceiptAllocations, updateReceipt, voidReceipt } from '../../services/ar';
@@ -17,10 +18,12 @@ export function ReceiptDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canRead = hasPermission('RECEIPT_VIEW') || hasPermission('RECEIPT_POST');
-  const canCreate = hasPermission('RECEIPT_CREATE');
-  const canPost = hasPermission('RECEIPT_POST');
-  const canVoid = hasPermission('AR_RECEIPT_VOID');
+  const canRead =
+    hasPermission(PERMISSIONS.AR.RECEIPT.VIEW) ||
+    hasPermission(PERMISSIONS.AR.RECEIPT.POST);
+  const canCreate = hasPermission(PERMISSIONS.AR.RECEIPT.CREATE);
+  const canPost = hasPermission(PERMISSIONS.AR.RECEIPT.POST);
+  const canVoid = hasPermission(PERMISSIONS.AR.RECEIPT.VOID);
 
   const [receipt, setReceipt] = useState<ArReceipt | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,7 +169,7 @@ export function ReceiptDetailsPage() {
   async function onSaveDraft() {
     if (!receipt || !id) return;
     if (!canCreate) {
-      setError('You don’t have permission to edit receipts. Required: RECEIPT_CREATE.');
+      setError(`You don’t have permission to edit receipts. Required: ${PERMISSIONS.AR.RECEIPT.CREATE}.`);
       return;
     }
     if (!isDraft) {
@@ -217,7 +220,7 @@ export function ReceiptDetailsPage() {
   async function onPost() {
     if (!receipt || !id) return;
     if (!canPost) {
-      setError('You do not have permission to post receipts. Required: RECEIPT_POST.');
+      setError(`You do not have permission to post receipts. Required: ${PERMISSIONS.AR.RECEIPT.POST}.`);
       return;
     }
 

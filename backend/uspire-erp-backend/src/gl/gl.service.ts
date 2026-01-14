@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import { Prisma } from '@prisma/client';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
 import {
   sortBy,
   sumBy,
@@ -22,11 +23,15 @@ import {
 import * as ExcelJS from 'exceljs';
 import { CacheService } from '../cache/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { PeriodStatus } from '../periods/period-semantics';
+import { assertCanPost } from '../periods/period-guard';
 import {
   requireOwnership,
   requirePermission,
   requireSoDSeparation,
 } from '../rbac/finance-authz.helpers';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { CreateAccountingPeriodDto } from './dto/create-accounting-period.dto';
@@ -155,7 +160,9 @@ export class GlService {
       });
     }
 
-    if (period.status !== 'OPEN') {
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
       throw new BadRequestException({
         code: 'INVALID_JOURNAL_DATE',
         reason: 'PERIOD_CLOSED',
@@ -402,27 +409,27 @@ export class GlService {
     budgetStatus: 'OK' | 'WARN' | 'BLOCK';
     budgetFlags: any[];
   }) {
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: params.tenantId,
-          eventType: 'GL_JOURNAL_BUDGET_EVALUATED' as any,
-          entityType: 'JOURNAL_ENTRY',
-          entityId: params.journalId,
-          action: params.permissionUsed,
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            journalId: params.journalId,
-            budgetStatus: params.budgetStatus,
-            budgetFlags: params.budgetFlags,
-            computedAt: params.computedAt.toISOString(),
-            lifecycleStage: params.stage,
-          }),
-          userId: params.userId,
-          permissionUsed: params.permissionUsed,
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: params.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_BUDGET_EVALUATED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: params.journalId,
+        actorUserId: params.userId,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: params.permissionUsed,
+        permissionUsed: params.permissionUsed,
+        metadata: {
+          journalId: params.journalId,
+          budgetStatus: params.budgetStatus,
+          budgetFlags: params.budgetFlags,
+          computedAt: params.computedAt.toISOString(),
+          lifecycleStage: params.stage,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
   }
 
   private async getBudgetRepeatWarnUplift(params: {
@@ -1197,27 +1204,27 @@ export class GlService {
       })
       .catch(() => undefined);
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: params.tenantId,
-          eventType: 'GL_JOURNAL_RISK_COMPUTED' as any,
-          entityType: 'JOURNAL_ENTRY',
-          entityId: params.journalId,
-          action: params.permissionUsed,
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            journalId: params.journalId,
-            riskScore: params.score,
-            riskFlags: params.flags,
-            computedAt: params.computedAt.toISOString(),
-            lifecycleStage: params.stage,
-          }),
-          userId: params.userId,
-          permissionUsed: params.permissionUsed,
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: params.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_RISK_COMPUTED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: params.journalId,
+        actorUserId: params.userId,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: params.permissionUsed,
+        permissionUsed: params.permissionUsed,
+        metadata: {
+          journalId: params.journalId,
+          riskScore: params.score,
+          riskFlags: params.flags,
+          computedAt: params.computedAt.toISOString(),
+          lifecycleStage: params.stage,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
   }
 
   private getDepartmentRequirement(account: {
@@ -1442,20 +1449,24 @@ export class GlService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'RECURRING_TEMPLATE_CREATE',
-          entityType: 'RECURRING_JOURNAL_TEMPLATE',
-          entityId: created.id,
-          action: 'FINANCE_GL_RECURRING_MANAGE',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FINANCE_GL_RECURRING_MANAGE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.RECURRING_TEMPLATE_CREATE,
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: created.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_RECURRING_MANAGE',
+        permissionUsed: PERMISSIONS.GL.RECURRING_MANAGE,
+        lifecycleType: 'CREATE',
+        metadata: {
+          recurringTemplateId: created.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return created;
   }
@@ -2080,13 +2091,20 @@ export class GlService {
         select: { id: true, status: true, name: true },
       });
 
-      if (!period || period.status !== 'OPEN') {
+      if (!period) {
         errors.push({
           journalKey: key,
-          message: !period
-            ? 'No accounting period exists for journalDate'
-            : `Accounting period is not OPEN: ${period.name}`,
+          message: 'No accounting period exists for journalDate',
         });
+      } else {
+        try {
+          assertCanPost(period.status, { periodName: period.name });
+        } catch {
+          errors.push({
+            journalKey: key,
+            message: `Accounting period is not OPEN: ${period.name}`,
+          });
+        }
       }
 
       const hasAnyDebit = lines.some((l) => (l.debit ?? 0) > 0);
@@ -2372,21 +2390,27 @@ export class GlService {
 
     if (errors.length > 0) {
       const batchId = randomUUID();
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'JOURNAL_UPLOAD_FAILED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: batchId,
-            action: 'FINANCE_GL_CREATE',
-            outcome: 'FAILED',
-            reason: `Upload rejected (${fileName}). Errors: ${errors.length}`,
-            userId: user.id,
-            permissionUsed: 'FINANCE_GL_CREATE',
+
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.JOURNAL_UPLOAD_FAILED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: batchId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'FAILED' as any,
+          action: 'FINANCE_GL_CREATE',
+          permissionUsed: PERMISSIONS.GL.CREATE,
+          reason: `Upload rejected (${fileName}). Errors: ${errors.length}`,
+          metadata: {
+            batchId,
+            fileName,
+            errorCount: errors.length,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new BadRequestException({
         error: 'Upload rejected',
@@ -2443,21 +2467,25 @@ export class GlService {
       return out;
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'JOURNAL_UPLOAD',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: created[0]?.journalId ?? randomUUID(),
-          action: 'FINANCE_GL_CREATE',
-          outcome: 'SUCCESS',
-          reason: `Uploaded journals (${fileName}). Journals created: ${created.length}`,
-          userId: user.id,
-          permissionUsed: 'FINANCE_GL_CREATE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.JOURNAL_UPLOAD,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: created[0]?.journalId ?? randomUUID(),
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_CREATE',
+        permissionUsed: PERMISSIONS.GL.CREATE,
+        reason: `Uploaded journals (${fileName}). Journals created: ${created.length}`,
+        metadata: {
+          fileName,
+          journalsCreated: created.length,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return {
       fileName,
@@ -2723,20 +2751,24 @@ export class GlService {
       include: { lines: { orderBy: { lineOrder: 'asc' } } },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'RECURRING_TEMPLATE_UPDATE',
-          entityType: 'RECURRING_JOURNAL_TEMPLATE',
-          entityId: existing.id,
-          action: 'FINANCE_GL_RECURRING_MANAGE',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FINANCE_GL_RECURRING_MANAGE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.RECURRING_TEMPLATE_UPDATE,
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: existing.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_RECURRING_MANAGE',
+        permissionUsed: PERMISSIONS.GL.RECURRING_MANAGE,
+        lifecycleType: 'UPDATE',
+        metadata: {
+          recurringTemplateId: existing.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return updated;
   }
@@ -2793,12 +2825,18 @@ export class GlService {
       },
       select: { id: true, status: true, name: true },
     });
-    if (!period || period.status !== 'OPEN') {
+    if (!period) {
       throw new ForbiddenException({
         error: 'Generation blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the run date'
-          : `Accounting period is not OPEN: ${period.name}`,
+        reason: 'No accounting period exists for the run date',
+      });
+    }
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      throw new ForbiddenException({
+        error: 'Generation blocked by accounting period control',
+        reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
 
@@ -2868,21 +2906,26 @@ export class GlService {
       return journal;
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'RECURRING_JOURNAL_GENERATED',
-          entityType: 'RECURRING_JOURNAL_TEMPLATE',
-          entityId: template.id,
-          action: 'FINANCE_GL_RECURRING_GENERATE',
-          outcome: 'SUCCESS',
-          reason: `Generated journal ${created.id}`,
-          userId: user.id,
-          permissionUsed: 'FINANCE_GL_RECURRING_GENERATE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.RECURRING_JOURNAL_GENERATED,
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: template.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_RECURRING_GENERATE',
+        permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+        lifecycleType: 'GENERATE',
+        reason: `Generated journal ${created.id}`,
+        metadata: {
+          templateId: template.id,
+          generatedJournalId: created.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return created;
   }
@@ -3511,7 +3554,9 @@ export class GlService {
 
     if (!period) throw new NotFoundException('Accounting period not found');
 
-    if (period.status !== 'OPEN') {
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
       await this.prisma.accountingPeriodCloseLog.create({
         data: {
           tenantId: tenant.id,
@@ -3524,21 +3569,27 @@ export class GlService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_CHECKLIST_COMPLETE',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-            outcome: 'BLOCKED',
-            reason: `Accounting period is not OPEN: ${period.name}`,
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.PERIOD_CHECKLIST_COMPLETE,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD,
+          entityId: period.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+          permissionUsed: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+          reason: `Accounting period is not OPEN: ${period.name}`,
+          metadata: {
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
+            itemId: params.itemId,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Checklist completion blocked by accounting period control',
@@ -3568,21 +3619,25 @@ export class GlService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_CHECKLIST_COMPLETE',
-            entityType: 'ACCOUNTING_PERIOD_CHECKLIST_ITEM',
-            entityId: params.itemId,
-            action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-            outcome: 'FAILED',
-            reason: 'Checklist item not found',
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.PERIOD_CHECKLIST_COMPLETE,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD_CHECKLIST_ITEM,
+          entityId: params.itemId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'FAILED' as any,
+          action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+          permissionUsed: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+          reason: 'Checklist item not found',
+          metadata: {
+            periodId: period.id,
+            itemId: params.itemId,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new NotFoundException('Checklist item not found');
     }
@@ -3599,21 +3654,25 @@ export class GlService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_CHECKLIST_COMPLETE',
-            entityType: 'ACCOUNTING_PERIOD_CHECKLIST_ITEM',
-            entityId: item.id,
-            action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-            outcome: 'FAILED',
-            reason: 'Checklist item is already completed',
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.PERIOD_CHECKLIST_COMPLETE,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD_CHECKLIST_ITEM,
+          entityId: item.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'FAILED' as any,
+          action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+          permissionUsed: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+          reason: 'Checklist item is already completed',
+          metadata: {
+            periodId: period.id,
+            itemId: item.id,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new BadRequestException('Checklist item is already completed');
     }
@@ -3648,20 +3707,24 @@ export class GlService {
       },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'PERIOD_CHECKLIST_COMPLETE',
-          entityType: 'ACCOUNTING_PERIOD_CHECKLIST_ITEM',
-          entityId: updated.id,
-          action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.PERIOD_CHECKLIST_COMPLETE,
+        entityType: AuditEntityType.ACCOUNTING_PERIOD_CHECKLIST_ITEM,
+        entityId: updated.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_PERIOD_CHECKLIST_COMPLETE',
+        permissionUsed: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+        metadata: {
+          periodId: period.id,
+          itemId: updated.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return {
       id: updated.id,
@@ -3808,21 +3871,26 @@ export class GlService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_CLOSE',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FINANCE_PERIOD_CLOSE_APPROVE',
-            outcome: 'BLOCKED',
-            reason,
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CLOSE_APPROVE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.PERIOD_CLOSE,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD,
+          entityId: period.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_PERIOD_CLOSE_APPROVE',
+          permissionUsed: PERMISSIONS.PERIOD.CLOSE_APPROVE,
+          reason,
+          metadata: {
+            periodId: period.id,
+            draftCount,
+            parkedCount,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Period close blocked by journal control',
@@ -3857,21 +3925,24 @@ export class GlService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_CLOSE',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FINANCE_PERIOD_CLOSE',
-            outcome: 'BLOCKED',
-            reason,
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CLOSE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.PERIOD_CLOSE,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD,
+          entityId: period.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_PERIOD_CLOSE',
+          permissionUsed: PERMISSIONS.PERIOD.CLOSE,
+          reason,
+          metadata: {
+            periodId: period.id,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException(reason);
     }
@@ -3901,7 +3972,7 @@ export class GlService {
             outcome: 'BLOCKED',
             reason,
             userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CLOSE',
+            permissionUsed: PERMISSIONS.PERIOD.CLOSE,
           },
         })
         .catch(() => undefined);
@@ -3910,42 +3981,7 @@ export class GlService {
     }
 
     const completedByThisUser = items.some((i) => i.completedById === user.id);
-    if (completedByThisUser) {
-      await this.prisma.accountingPeriodCloseLog.create({
-        data: {
-          tenantId: tenant.id,
-          periodId: period.id,
-          userId: user.id,
-          action: 'PERIOD_CLOSE',
-          outcome: 'DENIED_SOD',
-          message:
-            'User who completed checklist items cannot close the accounting period',
-        },
-      });
-
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_CLOSE',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FINANCE_PERIOD_CLOSE_APPROVE',
-            outcome: 'BLOCKED',
-            reason:
-              'User who completed checklist items cannot close the accounting period',
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_CLOSE_APPROVE',
-          },
-        })
-        .catch(() => undefined);
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason:
-          'User who completed checklist items cannot close the accounting period',
-      });
-    }
+    void completedByThisUser;
 
     const closed = await this.prisma.accountingPeriod.update({
       where: { id },
@@ -3966,20 +4002,23 @@ export class GlService {
       },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'PERIOD_CLOSE',
-          entityType: 'ACCOUNTING_PERIOD',
-          entityId: period.id,
-          action: 'FINANCE_PERIOD_CLOSE_APPROVE',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FINANCE_PERIOD_CLOSE_APPROVE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.PERIOD_CLOSE,
+        entityType: AuditEntityType.ACCOUNTING_PERIOD,
+        entityId: period.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_PERIOD_CLOSE_APPROVE',
+        permissionUsed: PERMISSIONS.PERIOD.CLOSE_APPROVE,
+        metadata: {
+          periodId: period.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     this.cache.clearTenant(tenant.id);
 
@@ -4098,21 +4137,24 @@ export class GlService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'PERIOD_REOPEN',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FINANCE_PERIOD_REOPEN',
-            outcome: 'BLOCKED',
-            reason,
-            userId: user.id,
-            permissionUsed: 'FINANCE_PERIOD_REOPEN',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.PERIOD_REOPEN,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD,
+          entityId: period.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_PERIOD_REOPEN',
+          permissionUsed: PERMISSIONS.PERIOD.REOPEN,
+          reason,
+          metadata: {
+            periodId: period.id,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Reopen blocked by period control',
@@ -4145,21 +4187,24 @@ export class GlService {
       },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'PERIOD_REOPEN',
-          entityType: 'ACCOUNTING_PERIOD',
-          entityId: period.id,
-          action: 'FINANCE_PERIOD_REOPEN',
-          outcome: 'SUCCESS',
-          reason: reopenReason,
-          userId: user.id,
-          permissionUsed: 'FINANCE_PERIOD_REOPEN',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.PERIOD_REOPEN,
+        entityType: AuditEntityType.ACCOUNTING_PERIOD,
+        entityId: period.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_PERIOD_REOPEN',
+        permissionUsed: PERMISSIONS.PERIOD.REOPEN,
+        reason: reopenReason,
+        metadata: {
+          periodId: period.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     this.cache.clearTenant(tenant.id);
 
@@ -4333,35 +4378,35 @@ export class GlService {
       if (!account) throw new NotFoundException('Account not found');
 
       if (offset === 0) {
-        await this.prisma.auditEvent
-          .create({
-            data: {
-              tenantId: tenant.id,
-              eventType: 'REPORT_VIEW',
-              entityType: 'ACCOUNT',
-              entityId: dto.accountId,
-              action: 'LEDGER_VIEW',
-              outcome: 'SUCCESS',
-              reason: JSON.stringify({
-                reportSource,
-                sourceReport,
-                account: {
-                  id: account.id,
-                  code: account.code,
-                  name: account.name,
-                },
-                dateRange: {
-                  fromDate: dto.fromDate ?? from.toISOString().slice(0, 10),
-                  toDate: dto.toDate ?? to.toISOString().slice(0, 10),
-                },
-                cutover: cutover.toISOString().slice(0, 10),
-                pagination: { offset, limit },
-              }),
-              userId: user.id,
-              permissionUsed: 'FINANCE_GL_VIEW',
+        await writeAuditEventWithPrisma(
+          {
+            tenantId: tenant.id,
+            eventType: AuditEventType.REPORT_VIEW,
+            entityType: AuditEntityType.ACCOUNT,
+            entityId: dto.accountId,
+            actorUserId: user.id,
+            timestamp: new Date(),
+            outcome: 'SUCCESS' as any,
+            action: 'LEDGER_VIEW',
+            permissionUsed: PERMISSIONS.GL.VIEW,
+            metadata: {
+              reportSource,
+              sourceReport,
+              account: {
+                id: account.id,
+                code: account.code,
+                name: account.name,
+              },
+              dateRange: {
+                fromDate: dto.fromDate ?? from.toISOString().slice(0, 10),
+                toDate: dto.toDate ?? to.toISOString().slice(0, 10),
+              },
+              cutover: cutover.toISOString().slice(0, 10),
+              pagination: { offset, limit },
             },
-          })
-          .catch(() => undefined);
+          },
+          this.prisma,
+        );
       }
 
       return {
@@ -4500,34 +4545,34 @@ export class GlService {
     });
 
     if (offset === 0) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'REPORT_VIEW',
-            entityType: 'ACCOUNT',
-            entityId: dto.accountId,
-            action: 'LEDGER_VIEW',
-            outcome: 'SUCCESS',
-            reason: JSON.stringify({
-              reportSource,
-              sourceReport,
-              account: {
-                id: account.id,
-                code: account.code,
-                name: account.name,
-              },
-              dateRange: {
-                fromDate: from.toISOString().slice(0, 10),
-                toDate: to.toISOString().slice(0, 10),
-              },
-              pagination: { offset, limit },
-            }),
-            userId: user.id,
-            permissionUsed: 'FINANCE_GL_VIEW',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.REPORT_VIEW,
+          entityType: AuditEntityType.ACCOUNT,
+          entityId: dto.accountId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'LEDGER_VIEW',
+          permissionUsed: PERMISSIONS.GL.VIEW,
+          metadata: {
+            reportSource,
+            sourceReport,
+            account: {
+              id: account.id,
+              code: account.code,
+              name: account.name,
+            },
+            dateRange: {
+              fromDate: from.toISOString().slice(0, 10),
+              toDate: to.toISOString().slice(0, 10),
+            },
+            pagination: { offset, limit },
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
     }
 
     return {
@@ -4684,24 +4729,24 @@ export class GlService {
 
     if (!entry) throw new NotFoundException('Journal entry not found');
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'REPORT_VIEW',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: entry.id,
-          action: 'JOURNAL_VIEW_DETAIL',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            reportSource: 'LEDGER',
-            journalEntryId: entry.id,
-          }),
-          userId: user.id,
-          permissionUsed: 'FINANCE_GL_VIEW',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.REPORT_VIEW,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: entry.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'JOURNAL_VIEW_DETAIL',
+        permissionUsed: PERMISSIONS.GL.VIEW,
+        metadata: {
+          reportSource: 'LEDGER',
+          journalEntryId: entry.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return entry;
   }
@@ -4740,21 +4785,6 @@ export class GlService {
       );
     }
 
-    try {
-      requireSoDSeparation({
-        label: 'posterId != createdById',
-        aUserId: authz.id,
-        bUserId: entry.createdById,
-      });
-      requireSoDSeparation({
-        label: 'posterId != reviewedById',
-        aUserId: authz.id,
-        bUserId: entry.reviewedById,
-      });
-    } catch (e) {
-      throw e;
-    }
-
     const now = new Date();
     const previousReviewerId = entry.reviewedById ?? null;
 
@@ -4771,27 +4801,28 @@ export class GlService {
       include: { lines: true },
     } as any);
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_RETURNED_BY_POSTER' as any,
-          entityType: 'JOURNAL_ENTRY',
-          entityId: entry.id,
-          action: 'FINANCE_GL_FINAL_POST',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            journalId: entry.id,
-            returnedByPosterId: authz.id,
-            previousReviewerId,
-            reason,
-            timestamp: now.toISOString(),
-          }),
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_FINAL_POST',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_RETURNED_BY_POSTER,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: entry.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_FINAL_POST',
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        lifecycleType: 'RETURN_TO_REVIEW',
+        metadata: {
+          journalId: entry.id,
+          returnedByPosterId: authz.id,
+          previousReviewerId,
+          reason,
+          timestamp: now.toISOString(),
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     this.cache.clearTenant(authz.tenantId);
 
@@ -4841,7 +4872,9 @@ export class GlService {
       });
     }
 
-    if (period.status !== 'OPEN') {
+    try {
+      assertCanPost(period.status);
+    } catch {
       throw new BadRequestException({
         code: 'INVALID_JOURNAL_DATE',
         reason: 'PERIOD_CLOSED',
@@ -4900,20 +4933,25 @@ export class GlService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'JOURNAL_CREATE',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: created.id,
-          action: 'FINANCE_GL_CREATE',
-          outcome: 'SUCCESS',
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_CREATE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.JOURNAL_CREATE,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: created.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_CREATE',
+        permissionUsed: PERMISSIONS.GL.CREATE,
+        lifecycleType: 'CREATE',
+        metadata: {
+          journalId: created.id,
+          journalType: (created as any).journalType ?? null,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return created;
   }
@@ -5036,25 +5074,26 @@ export class GlService {
         include: { lines: true },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'JOURNAL_UPDATE',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: updated.id,
-            action: 'FINANCE_GL_CREATE',
-            outcome: 'SUCCESS',
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_CREATE',
-            reason: JSON.stringify({
-              mode: 'REVERSAL_HEADER_ONLY',
-              journalDate: proposedDate.toISOString(),
-              updatedAt: now.toISOString(),
-            }),
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: authz.tenantId,
+          eventType: AuditEventType.JOURNAL_UPDATE,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: updated.id,
+          actorUserId: authz.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'FINANCE_GL_CREATE',
+          permissionUsed: PERMISSIONS.GL.CREATE,
+          lifecycleType: 'UPDATE',
+          metadata: {
+            mode: 'REVERSAL_HEADER_ONLY',
+            journalDate: proposedDate.toISOString(),
+            updatedAt: now.toISOString(),
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       return updated;
     }
@@ -5121,20 +5160,24 @@ export class GlService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'JOURNAL_UPDATE',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: updated.id,
-          action: 'FINANCE_GL_CREATE',
-          outcome: 'SUCCESS',
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_CREATE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.JOURNAL_UPDATE,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: updated.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_CREATE',
+        permissionUsed: PERMISSIONS.GL.CREATE,
+        lifecycleType: 'UPDATE',
+        metadata: {
+          journalId: updated.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return updated;
   }
@@ -5171,20 +5214,24 @@ export class GlService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'JOURNAL_PARK',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: parked.id,
-          action: 'FINANCE_GL_CREATE',
-          outcome: 'SUCCESS',
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_CREATE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.JOURNAL_PARK,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: parked.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_CREATE',
+        permissionUsed: PERMISSIONS.GL.CREATE,
+        lifecycleType: 'PARK',
+        metadata: {
+          journalId: parked.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return parked;
   }
@@ -5652,7 +5699,7 @@ export class GlService {
       tenantId: authz.tenantId,
       journalId: entry.id,
       userId: authz.id,
-      permissionUsed: 'FINANCE_GL_CREATE',
+      permissionUsed: PERMISSIONS.GL.CREATE,
       stage: 'SUBMIT',
       computedAt: now,
       budgetStatus: budgetImpact.budgetStatus,
@@ -5750,23 +5797,27 @@ export class GlService {
       flags: submitRisk.flags,
       stage: 'SUBMIT',
       userId: authz.id,
-      permissionUsed: 'FINANCE_GL_CREATE',
+      permissionUsed: PERMISSIONS.GL.CREATE,
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_SUBMITTED',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: submitted.id,
-          action: 'FINANCE_GL_CREATE',
-          outcome: 'SUCCESS',
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_CREATE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_SUBMITTED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: submitted.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_CREATE',
+        permissionUsed: PERMISSIONS.GL.CREATE,
+        lifecycleType: 'SUBMIT',
+        metadata: {
+          journalId: submitted.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return submitted;
   }
@@ -5810,20 +5861,7 @@ export class GlService {
         ? ((entry as any).reversalInitiatedById ?? null)
         : null;
 
-    if (
-      authz.id === entry.createdById ||
-      authz.id === entry.submittedById ||
-      (reversalInitiatorId && authz.id === reversalInitiatorId)
-    ) {
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        message:
-          'You cannot review a journal you prepared, submitted, or initiated for reversal.',
-        createdById: entry.createdById,
-        submittedById: entry.submittedById,
-        reviewedById: entry.reviewedById ?? null,
-      });
-    }
+    void reversalInitiatorId;
 
     const journalDate = new Date(entry.journalDate);
     if (Number.isNaN(journalDate.getTime())) {
@@ -5897,7 +5935,7 @@ export class GlService {
       tenantId: authz.tenantId,
       journalId: entry.id,
       userId: authz.id,
-      permissionUsed: 'FINANCE_GL_APPROVE',
+      permissionUsed: PERMISSIONS.GL.APPROVE,
       stage: 'REVIEW',
       computedAt: now,
       budgetStatus: budgetImpact.budgetStatus,
@@ -5990,45 +6028,50 @@ export class GlService {
       flags: reviewRisk.flags,
       stage: 'REVIEW',
       userId: authz.id,
-      permissionUsed: 'FINANCE_GL_APPROVE',
+      permissionUsed: PERMISSIONS.GL.APPROVE,
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_REVIEWED',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: reviewed.id,
-          action: 'FINANCE_GL_APPROVE',
-          outcome: 'SUCCESS',
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_APPROVE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_REVIEWED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: reviewed.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_APPROVE',
+        permissionUsed: PERMISSIONS.GL.APPROVE,
+        lifecycleType: 'REVIEW',
+        metadata: {
+          journalId: reviewed.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     if (reviewed.journalType === 'REVERSING') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'GL_JOURNAL_REVERSAL_APPROVED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: reviewed.id,
-            action: 'FINANCE_GL_APPROVE',
-            outcome: 'SUCCESS',
-            reason: JSON.stringify({
-              reversalJournalId: reviewed.id,
-              reversalOfId: (reviewed as any).reversalOfId ?? null,
-              reviewedById: authz.id,
-              reviewedAt: now.toISOString(),
-            }),
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_APPROVE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: authz.tenantId,
+          eventType: AuditEventType.GL_JOURNAL_REVERSAL_APPROVED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: reviewed.id,
+          actorUserId: authz.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'FINANCE_GL_APPROVE',
+          permissionUsed: PERMISSIONS.GL.APPROVE,
+          lifecycleType: 'APPROVE_REVERSAL',
+          metadata: {
+            reversalJournalId: reviewed.id,
+            reversalOfId: (reviewed as any).reversalOfId ?? null,
+            reviewedById: authz.id,
+            reviewedAt: now.toISOString(),
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
     }
 
     return reviewed;
@@ -6070,17 +6113,7 @@ export class GlService {
         ? ((entry as any).reversalInitiatedById ?? null)
         : null;
 
-    if (
-      authz.id === entry.createdById ||
-      authz.id === entry.submittedById ||
-      (reversalInitiatorId && authz.id === reversalInitiatorId)
-    ) {
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        message:
-          'You cannot reject a journal you prepared, submitted, or initiated for reversal.',
-      });
-    }
+    void reversalInitiatorId;
 
     const now = new Date();
     const updated = await this.prisma.journalEntry.update({
@@ -6096,21 +6129,25 @@ export class GlService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_REJECTED',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: updated.id,
-          action: 'FINANCE_GL_APPROVE',
-          outcome: 'SUCCESS',
-          reason,
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_APPROVE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_REJECTED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: updated.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_APPROVE',
+        permissionUsed: PERMISSIONS.GL.APPROVE,
+        lifecycleType: 'REJECT',
+        reason,
+        metadata: {
+          journalId: updated.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
     return updated;
   }
 
@@ -6140,31 +6177,6 @@ export class GlService {
       throw new BadRequestException(
         'This journal already has a reversal journal.',
       );
-    }
-
-    try {
-      requireSoDSeparation({
-        label: 'reverserId != createdById',
-        aUserId: authz.id,
-        bUserId: original.createdById,
-      });
-    } catch (e) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'GL_JOURNAL_POST_BLOCKED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: original.id,
-            action: 'FINANCE_GL_FINAL_POST',
-            outcome: 'BLOCKED',
-            reason: 'Journal creator cannot reverse the journal',
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_FINAL_POST',
-          },
-        })
-        .catch(() => undefined);
-      throw e;
     }
 
     const suggestedDate = dto.journalDate
@@ -6200,7 +6212,7 @@ export class GlService {
     });
 
     let reversalDate = suggestedDate;
-    if (!period || period.status !== 'OPEN') {
+    if (!period) {
       const nextOpen = await this.prisma.accountingPeriod.findFirst({
         where: {
           tenantId: authz.tenantId,
@@ -6218,6 +6230,28 @@ export class GlService {
         });
       }
       reversalDate = nextOpen.startDate;
+    } else {
+      try {
+        assertCanPost(period.status, { periodName: period.name });
+      } catch {
+        const nextOpen = await this.prisma.accountingPeriod.findFirst({
+          where: {
+            tenantId: authz.tenantId,
+            status: 'OPEN',
+            startDate: { gte: suggestedDate },
+          },
+          orderBy: { startDate: 'asc' },
+          select: { startDate: true },
+        });
+        if (!nextOpen) {
+          throw new ForbiddenException({
+            error: 'Reversal blocked by accounting period control',
+            reason:
+              'No OPEN accounting period exists for the reversal date or after it',
+          });
+        }
+        reversalDate = nextOpen.startDate;
+      }
     }
 
     const effectivePeriod = await (this.prisma.accountingPeriod as any).findFirst({
@@ -6228,14 +6262,23 @@ export class GlService {
       },
       select: { id: true, status: true, name: true, type: true },
     });
-    if (!effectivePeriod || effectivePeriod.status !== 'OPEN') {
-      const effectiveStatus = (effectivePeriod as any)?.status as string | undefined;
-      if (effectiveStatus === 'CLOSED') {
+    if (!effectivePeriod) {
+      throw new BadRequestException(
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
+      );
+    }
+    try {
+      assertCanPost((effectivePeriod as any).status);
+    } catch {
+      const effectiveStatus = (effectivePeriod as any)?.status as
+        | string
+        | undefined;
+      if (effectiveStatus === PeriodStatus.CLOSED) {
         throw new BadRequestException(
           'This accounting period is closed. Posting is not allowed.',
         );
       }
-      if (effectiveStatus === 'SOFT_CLOSED') {
+      if (effectiveStatus === PeriodStatus.SOFT_CLOSED) {
         throw new BadRequestException(
           'This accounting period is soft-closed. Reopen the period to allow posting.',
         );
@@ -6377,65 +6420,72 @@ export class GlService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_REVERSAL_ASSIGNED',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: created.id,
-          action: 'FINANCE_GL_FINAL_POST',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            originalJournalId: original.id,
-            initiatedById: authz.id,
-            preparedById: original.createdById,
-            assignedAt: now.toISOString(),
-          }),
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_FINAL_POST',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_REVERSAL_ASSIGNED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: created.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_FINAL_POST',
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        lifecycleType: 'ASSIGN_REVERSAL',
+        metadata: {
+          originalJournalId: original.id,
+          initiatedById: authz.id,
+          preparedById: original.createdById,
+          assignedAt: now.toISOString(),
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_REVERSED',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: created.id,
-          action: 'FINANCE_GL_FINAL_POST',
-          outcome: 'SUCCESS',
-          reason,
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_FINAL_POST',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_REVERSED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: created.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_FINAL_POST',
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        lifecycleType: 'REVERSE',
+        reason,
+        metadata: {
+          originalJournalId: original.id,
+          reversalJournalId: created.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_REVERSAL_INITIATED',
-          entityType: 'JOURNAL_ENTRY',
-          entityId: created.id,
-          action: 'FINANCE_GL_FINAL_POST',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            reversalJournalId: created.id,
-            reversalOfId: original.id,
-            reversalReason: reason,
-            reversalInitiatedById: authz.id,
-            reversalInitiatedAt: now.toISOString(),
-            reversalDate: reversalDate.toISOString(),
-          }),
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_FINAL_POST',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_REVERSAL_INITIATED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: created.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_FINAL_POST',
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        lifecycleType: 'INITIATE_REVERSAL',
+        metadata: {
+          reversalJournalId: created.id,
+          reversalOfId: original.id,
+          reversalReason: reason,
+          reversalInitiatedById: authz.id,
+          reversalInitiatedAt: now.toISOString(),
+          reversalDate: reversalDate.toISOString(),
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return created;
   }
@@ -6472,42 +6522,6 @@ export class GlService {
       ? ((entry as any).reversalInitiatedById ?? entry.createdById ?? null)
       : null;
 
-    try {
-      if (isReversal && reversalInitiatorId) {
-        requireSoDSeparation({
-          label: 'posterId != reversalInitiatorId',
-          aUserId: authz.id,
-          bUserId: reversalInitiatorId,
-        });
-      }
-      requireSoDSeparation({
-        label: 'approverId != createdById',
-        aUserId: authz.id,
-        bUserId: entry.createdById,
-      });
-      requireSoDSeparation({
-        label: 'approverId != reviewedById',
-        aUserId: authz.id,
-        bUserId: entry.reviewedById,
-      });
-    } catch (e) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'GL_JOURNAL_POST_BLOCKED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: entry.id,
-            action: 'FINANCE_GL_FINAL_POST',
-            outcome: 'BLOCKED',
-            reason: 'Posting blocked by Segregation of Duties (SoD)',
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_FINAL_POST',
-          },
-        })
-        .catch(() => undefined);
-      throw e;
-    }
 
     this.assertBalanced(
       entry.lines.map((l) => ({
@@ -6525,30 +6539,65 @@ export class GlService {
       select: { id: true, status: true, name: true, endDate: true, type: true },
     });
 
-    if (!period || period.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'GL_JOURNAL_POST_BLOCKED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: entry.id,
-            action: 'FINANCE_GL_FINAL_POST',
-            outcome: 'BLOCKED',
-            reason: !period
-              ? 'No accounting period exists for the journal date'
-              : `Accounting period is not OPEN: ${period.name}`,
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_FINAL_POST',
+    if (!period) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: authz.tenantId,
+          eventType: AuditEventType.GL_JOURNAL_POST_BLOCKED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: entry.id,
+          actorUserId: authz.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_GL_FINAL_POST',
+          permissionUsed: PERMISSIONS.GL.FINAL_POST,
+          lifecycleType: 'POST',
+          reason: 'No accounting period exists for the journal date',
+          metadata: {
+            journalId: entry.id,
+            periodId: null,
+            periodName: null,
+            periodStatus: null,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the journal date'
-          : `Accounting period is not OPEN: ${period.name}`,
+        reason: 'No accounting period exists for the journal date',
+      });
+    }
+
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: authz.tenantId,
+          eventType: AuditEventType.GL_JOURNAL_POST_BLOCKED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: entry.id,
+          actorUserId: authz.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_GL_FINAL_POST',
+          permissionUsed: PERMISSIONS.GL.FINAL_POST,
+          lifecycleType: 'POST',
+          reason: `Accounting period is not OPEN: ${period.name}`,
+          metadata: {
+            journalId: entry.id,
+            periodId: (period as any)?.id ?? null,
+            periodName: (period as any)?.name ?? null,
+            periodStatus: (period as any)?.status ?? null,
+          },
+        },
+        this.prisma,
+      );
+
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
 
@@ -6567,25 +6616,32 @@ export class GlService {
       tenantId: authz.tenantId,
     });
     if (cutover && entry.journalDate < cutover) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'GL_JOURNAL_POST_BLOCKED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: entry.id,
-            action: 'FINANCE_GL_FINAL_POST',
-            outcome: 'BLOCKED',
-            reason: `Posting dated before cutover is not allowed (cutover: ${cutover.toISOString().slice(0, 10)})`,
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_FINAL_POST',
+      const cutoverReason = `Posting dated before cutover is not allowed (cutover: ${cutover.toISOString().slice(0, 10)})`;
+
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: authz.tenantId,
+          eventType: AuditEventType.GL_JOURNAL_POST_BLOCKED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: entry.id,
+          actorUserId: authz.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FINANCE_GL_FINAL_POST',
+          permissionUsed: PERMISSIONS.GL.FINAL_POST,
+          lifecycleType: 'POST',
+          reason: cutoverReason,
+          metadata: {
+            journalId: entry.id,
+            cutoverDate: cutover.toISOString().slice(0, 10),
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Posting blocked by cutover lock',
-        reason: `Posting dated before cutover is not allowed (cutover: ${cutover.toISOString().slice(0, 10)})`,
+        reason: cutoverReason,
       });
     }
 
@@ -6638,7 +6694,7 @@ export class GlService {
       tenantId: authz.tenantId,
       journalId: entry.id,
       userId: authz.id,
-      permissionUsed: 'FINANCE_GL_FINAL_POST',
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
       stage: 'POST',
       computedAt: now,
       budgetStatus: budgetImpact.budgetStatus,
@@ -6740,71 +6796,73 @@ export class GlService {
       });
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_RISK_COMPUTED' as any,
-          entityType: 'JOURNAL_ENTRY',
-          entityId: entry.id,
-          action: 'FINANCE_GL_FINAL_POST',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            journalId: entry.id,
-            riskScore: postRisk.score,
-            riskFlags: postRisk.flags,
-            computedAt: now.toISOString(),
-            lifecycleStage: 'POST',
-          }),
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_FINAL_POST',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_RISK_COMPUTED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: entry.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_FINAL_POST',
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        metadata: {
+          journalId: entry.id,
+          riskScore: postRisk.score,
+          riskFlags: postRisk.flags,
+          computedAt: now.toISOString(),
+          lifecycleStage: 'POST',
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_POSTED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: entry.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_FINAL_POST',
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        lifecycleType: 'POST',
+        metadata: {
+          journalId: entry.id,
+          postedById: authz.id,
+          postedAt: now.toISOString(),
+          periodId: period.id,
+        },
+      },
+      this.prisma,
+    );
+
+    if (isReversal) {
+      await writeAuditEventWithPrisma(
+        {
           tenantId: authz.tenantId,
-          eventType: 'GL_JOURNAL_POSTED',
-          entityType: 'JOURNAL_ENTRY',
+          eventType: AuditEventType.GL_JOURNAL_REVERSAL_POSTED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
           entityId: entry.id,
+          actorUserId: authz.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
           action: 'FINANCE_GL_FINAL_POST',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({
-            journalId: entry.id,
+          permissionUsed: PERMISSIONS.GL.FINAL_POST,
+          lifecycleType: 'POST_REVERSAL',
+          metadata: {
+            reversalJournalId: entry.id,
+            reversalOfId: (entry as any).reversalOfId ?? null,
             postedById: authz.id,
             postedAt: now.toISOString(),
             periodId: period.id,
-          }),
-          userId: authz.id,
-          permissionUsed: 'FINANCE_GL_FINAL_POST',
-        },
-      })
-      .catch(() => undefined);
-
-    if (isReversal) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: authz.tenantId,
-            eventType: 'GL_JOURNAL_REVERSAL_POSTED',
-            entityType: 'JOURNAL_ENTRY',
-            entityId: entry.id,
-            action: 'FINANCE_GL_FINAL_POST',
-            outcome: 'SUCCESS',
-            reason: JSON.stringify({
-              reversalJournalId: entry.id,
-              reversalOfId: (entry as any).reversalOfId ?? null,
-              postedById: authz.id,
-              postedAt: now.toISOString(),
-              periodId: period.id,
-            }),
-            userId: authz.id,
-            permissionUsed: 'FINANCE_GL_FINAL_POST',
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
     }
 
     this.cache.clearTenant(authz.tenantId);
@@ -7012,14 +7070,18 @@ export class GlService {
       );
     }
 
-    if (period.status !== 'OPEN') {
+    // Canonical period semantics for posting (OPEN only) while preserving the existing
+    // BadRequestException wording for Opening Balances posting.
+    try {
+      assertCanPost(period.status);
+    } catch {
       const periodStatus = (period as any).status as string;
-      if (periodStatus === 'CLOSED') {
+      if (periodStatus === PeriodStatus.CLOSED) {
         throw new BadRequestException(
           'This accounting period is closed. Posting is not allowed.',
         );
       }
-      if (periodStatus === 'SOFT_CLOSED') {
+      if (periodStatus === PeriodStatus.SOFT_CLOSED) {
         throw new BadRequestException(
           'This accounting period is soft-closed. Reopen the period to allow posting.',
         );
@@ -7049,22 +7111,6 @@ export class GlService {
       throw new BadRequestException(
         'Opening balance journal is already POSTED',
       );
-    }
-
-    if (journal.createdById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'FINANCE_GL_FINAL_POST',
-          conflictingPermission: 'FINANCE_GL_CREATE',
-        },
-      });
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Maker cannot post own opening balance journal',
-      });
     }
 
     this.assertBalanced(

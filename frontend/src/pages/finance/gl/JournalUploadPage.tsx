@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { Card } from '../../../components/Card';
@@ -42,7 +43,7 @@ export function JournalUploadPage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
-  const canUpload = hasPermission('FINANCE_GL_CREATE');
+  const canUpload = hasPermission(PERMISSIONS.GL.CREATE);
 
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);

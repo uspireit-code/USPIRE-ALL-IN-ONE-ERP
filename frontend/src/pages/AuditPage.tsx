@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import { PageLayout } from '../components/PageLayout';
 import type { ApiError } from '../services/api';
 import { Alert } from '../components/Alert';
@@ -17,7 +18,7 @@ import {
 
 export function AuditPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('AUDIT_VIEW');
+  const canView = hasPermission(PERMISSIONS.AUDIT_VIEW);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);

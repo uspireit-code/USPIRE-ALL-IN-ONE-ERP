@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { addStatementLine, getStatement, type BankStatementDetail } from '../../services/bankReconciliation';
 
 function money(n: number) {
@@ -17,8 +18,8 @@ export function BankStatementDetailsPage() {
   const navigate = useNavigate();
 
   const { hasPermission } = useAuth();
-  const canView = hasPermission('BANK_RECONCILIATION_VIEW');
-  const canImport = hasPermission('BANK_STATEMENT_IMPORT');
+  const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
+  const canImport = hasPermission(PERMISSIONS.BANK.STATEMENT.IMPORT);
 
   const [data, setData] = useState<BankStatementDetail | null>(null);
   const [loading, setLoading] = useState(true);

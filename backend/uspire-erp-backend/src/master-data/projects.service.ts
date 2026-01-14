@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateProjectDto, UpdateProjectDto } from './projects.dto';
 
 @Injectable()
@@ -87,7 +88,7 @@ export class ProjectsService {
             action: 'MASTER_DATA_PROJECT_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_PROJECT_CREATE',
+            permissionUsed: PERMISSIONS.MASTER_DATA.PROJECT.CREATE,
           },
         })
         .catch(() => undefined);
@@ -108,7 +109,7 @@ export class ProjectsService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to create project'),
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_PROJECT_CREATE',
+            permissionUsed: PERMISSIONS.MASTER_DATA.PROJECT.CREATE,
           },
         })
         .catch(() => undefined);
@@ -215,7 +216,7 @@ export class ProjectsService {
             action: 'MASTER_DATA_PROJECT_EDIT',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_PROJECT_EDIT',
+            permissionUsed: PERMISSIONS.MASTER_DATA.PROJECT.EDIT,
           },
         })
         .catch(() => undefined);
@@ -236,7 +237,7 @@ export class ProjectsService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to update project'),
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_PROJECT_EDIT',
+            permissionUsed: PERMISSIONS.MASTER_DATA.PROJECT.EDIT,
           },
         })
         .catch(() => undefined);
@@ -292,7 +293,7 @@ export class ProjectsService {
           action: 'MASTER_DATA_PROJECT_CLOSE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'MASTER_DATA_PROJECT_CLOSE',
+          permissionUsed: PERMISSIONS.MASTER_DATA.PROJECT.CLOSE,
         },
       })
       .catch(() => undefined);

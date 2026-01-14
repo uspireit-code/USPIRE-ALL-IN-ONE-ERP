@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertCanPost } from '../../periods/period-guard';
 
 export type AccountingPeriodGuardAction = 'create' | 'post';
 
@@ -34,7 +35,11 @@ export async function assertPeriodIsOpen(params: {
     );
   }
 
-  if (period.status !== 'OPEN') {
+  try {
+    // Legacy helper semantics require OPEN for both create and post.
+    // We use canonical period semantics but preserve the legacy error message below.
+    assertCanPost(period.status, { periodName: period.name });
+  } catch {
     const code = String(period.code ?? period.name ?? '').trim() || 'UNKNOWN';
     const status = String(period.status);
     const actionWord = params.action === 'post' ? 'post' : 'create';

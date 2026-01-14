@@ -1,19 +1,21 @@
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
-import type { ApproveCreditNoteDto, CreateCustomerCreditNoteDto, ListCreditNotesQueryDto, SubmitCreditNoteDto, VoidCreditNoteDto } from './credit-notes.dto';
 import { GlService } from '../../../gl/gl.service';
+import { ReportExportService } from '../../../reports/report-export.service';
+import type { ApproveCreditNoteDto, CreateCustomerCreditNoteDto, ListCreditNotesQueryDto, SubmitCreditNoteDto, VoidCreditNoteDto } from './credit-notes.dto';
 export declare class FinanceArCreditNotesService {
     private readonly prisma;
     private readonly gl;
+    private readonly exports;
     private readonly CREDIT_NOTE_NUMBER_SEQUENCE_NAME;
-    constructor(prisma: PrismaService, gl: GlService);
+    constructor(prisma: PrismaService, gl: GlService, exports: ReportExportService);
+    exportPdf(req: Request, id: string): Promise<Buffer>;
     private round2;
     private round6;
     private toNum;
     private ensureTenant;
     private ensureUser;
     private auditLifecycle;
-    private logSoDBlocked;
     private parseYmdToDateOrNull;
     private nextCreditNoteNumber;
     private normalizeMoney;

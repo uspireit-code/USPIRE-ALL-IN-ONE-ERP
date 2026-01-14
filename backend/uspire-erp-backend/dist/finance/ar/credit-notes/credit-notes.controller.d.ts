@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { ApproveCreditNoteDto, CreateCustomerCreditNoteDto, ListCreditNotesQueryDto, PostCreditNoteDto, SubmitCreditNoteDto, VoidCreditNoteDto } from './credit-notes.dto';
 import { FinanceArCreditNotesService } from './credit-notes.service';
 export declare class FinanceArCreditNotesController {
@@ -226,6 +227,7 @@ export declare class FinanceArCreditNotesController {
         voidedAt: any;
         lines: any;
     }>;
+    exportPdf(req: Request, id: string, res: Response): Promise<void>;
     create(req: Request, dto: CreateCustomerCreditNoteDto): Promise<{
         id: any;
         creditNoteNumber: any;

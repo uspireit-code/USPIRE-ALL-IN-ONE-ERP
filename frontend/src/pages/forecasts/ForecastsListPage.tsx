@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import { getForecast, listForecasts, type ForecastListRow, type ForecastStatus } from '../../services/forecasts';
 
@@ -16,9 +17,9 @@ function StatusBadge(props: { status: string }) {
 
 export function ForecastsListPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('forecast.view');
-  const canCreate = hasPermission('forecast.create');
-  const canEdit = hasPermission('forecast.edit');
+  const canView = hasPermission(PERMISSIONS.FORECAST.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.FORECAST.CREATE);
+  const canEdit = hasPermission(PERMISSIONS.FORECAST.EDIT);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const initialYear = useMemo(() => {

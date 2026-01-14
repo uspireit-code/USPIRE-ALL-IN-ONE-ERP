@@ -2,6 +2,7 @@ import type React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -12,10 +13,18 @@ export function SettingsPage() {
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
 
-  const canSystemConfigView = hasPermission('SYSTEM_CONFIG_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
-  const canFinanceConfigView = hasPermission('FINANCE_CONFIG_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
-  const canUserView = hasPermission('USER_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
-  const canRoleView = hasPermission('ROLE_VIEW') || hasPermission('SYSTEM_VIEW_ALL');
+  const canSystemConfigView =
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canFinanceConfigView =
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canUserView =
+    hasPermission(PERMISSIONS.USER.VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canRoleView =
+    hasPermission(PERMISSIONS.ROLE.VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
   const sections: Array<{ key: string; title: string; description: string; to: string; icon: React.ReactNode }> = [
     ...((canSystemConfigView || canFinanceConfigView)
@@ -90,7 +99,7 @@ export function SettingsPage() {
           },
         ]
       : []),
-    ...(hasPermission('TAX_RATE_VIEW')
+    ...(hasPermission(PERMISSIONS.TAX.RATE_VIEW)
       ? [
           {
             key: 'tax-rates',
@@ -118,7 +127,7 @@ export function SettingsPage() {
           },
         ]
       : []),
-    ...(hasPermission('INVOICE_CATEGORY_VIEW')
+    ...(hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW)
       ? [
           {
             key: 'invoice-categories',
@@ -137,10 +146,10 @@ export function SettingsPage() {
           },
         ]
       : []),
-    ...(hasPermission('MASTER_DATA_DEPARTMENT_VIEW') ||
-    hasPermission('MASTER_DATA_PROJECT_VIEW') ||
-    hasPermission('MASTER_DATA_FUND_VIEW') ||
-    hasPermission('INVOICE_CATEGORY_VIEW')
+    ...(hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW) ||
+    hasPermission(PERMISSIONS.MASTER_DATA.PROJECT.VIEW) ||
+    hasPermission(PERMISSIONS.MASTER_DATA.FUND.VIEW) ||
+    hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW)
       ? [
           {
             key: 'master-data',

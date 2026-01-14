@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { CreateProjectDto, ProjectIdParamDto, UpdateProjectDto } from './projects.dto';
@@ -12,19 +13,19 @@ export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
   @Get()
-  @Permissions('MASTER_DATA_PROJECT_VIEW')
+  @Permissions(PERMISSIONS.MASTER_DATA.PROJECT.VIEW)
   async list(@Req() req: Request) {
     return this.projects.list(req);
   }
 
   @Post()
-  @Permissions('MASTER_DATA_PROJECT_CREATE')
+  @Permissions(PERMISSIONS.MASTER_DATA.PROJECT.CREATE)
   async create(@Req() req: Request, @Body() dto: CreateProjectDto) {
     return this.projects.create(req, dto);
   }
 
   @Patch(':id')
-  @Permissions('MASTER_DATA_PROJECT_EDIT')
+  @Permissions(PERMISSIONS.MASTER_DATA.PROJECT.EDIT)
   async update(
     @Req() req: Request,
     @Param() params: ProjectIdParamDto,
@@ -34,7 +35,7 @@ export class ProjectsController {
   }
 
   @Post(':id/close')
-  @Permissions('MASTER_DATA_PROJECT_CLOSE')
+  @Permissions(PERMISSIONS.MASTER_DATA.PROJECT.CLOSE)
   async close(@Req() req: Request, @Param() params: ProjectIdParamDto) {
     return this.projects.close(req, params.id);
   }

@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../../../rbac/jwt-auth.guard';
 import { Permissions } from '../../../rbac/permissions.decorator';
 import { PermissionsGuard } from '../../../rbac/permissions.guard';
+import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import {
   CreateInvoiceCategoryDto,
   UpdateInvoiceCategoryDto,
@@ -24,25 +25,25 @@ export class InvoiceCategoriesController {
   constructor(private readonly categories: InvoiceCategoryService) {}
 
   @Get()
-  @Permissions('INVOICE_CATEGORY_VIEW')
+  @Permissions(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW)
   async list(@Req() req: Request) {
     return this.categories.list(req);
   }
 
   @Get(':id')
-  @Permissions('INVOICE_CATEGORY_VIEW')
+  @Permissions(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW)
   async getById(@Req() req: Request, @Param('id') id: string) {
     return this.categories.getById(req, id);
   }
 
   @Post()
-  @Permissions('INVOICE_CATEGORY_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CATEGORY_CREATE)
   async create(@Req() req: Request, @Body() dto: CreateInvoiceCategoryDto) {
     return this.categories.create(req, dto);
   }
 
   @Put(':id')
-  @Permissions('INVOICE_CATEGORY_UPDATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE)
   async update(
     @Req() req: Request,
     @Param('id') id: string,
@@ -52,7 +53,7 @@ export class InvoiceCategoriesController {
   }
 
   @Put(':id/active')
-  @Permissions('INVOICE_CATEGORY_DISABLE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE)
   async setActive(
     @Req() req: Request,
     @Param('id') id: string,

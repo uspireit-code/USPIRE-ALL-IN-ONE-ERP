@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 
 export function PaymentsHomePage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('PAYMENT_VIEW');
-  const canCreate = hasPermission('PAYMENT_CREATE');
+  const canView = hasPermission(PERMISSIONS.PAYMENT.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.PAYMENT.CREATE);
 
   return (
     <PageLayout title="Payments" description="Payments lifecycle in the backend is DRAFT → APPROVED → POSTED.">

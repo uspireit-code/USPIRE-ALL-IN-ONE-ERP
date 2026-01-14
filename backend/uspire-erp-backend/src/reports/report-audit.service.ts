@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 
 @Injectable()
 export class ReportAuditService {
@@ -18,19 +20,21 @@ export class ReportAuditService {
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
 
-    return this.prisma.auditEvent.create({
-      data: {
+    return writeAuditEventWithPrisma(
+      {
         tenantId: tenant.id,
-        eventType: 'REPORT_VIEW',
-        entityType: 'REPORT',
+        eventType: AuditEventType.REPORT_VIEW,
+        entityType: AuditEntityType.REPORT,
         entityId: params.entityId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: params.outcome as any,
         action: 'VIEW',
-        outcome: params.outcome,
-        reason: params.reason,
-        userId: user.id,
         permissionUsed: params.permissionUsed,
+        reason: params.reason,
       },
-    });
+      this.prisma,
+    );
   }
 
   async reportExport(params: {
@@ -46,18 +50,23 @@ export class ReportAuditService {
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
 
-    return this.prisma.auditEvent.create({
-      data: {
+    return writeAuditEventWithPrisma(
+      {
         tenantId: tenant.id,
-        eventType: 'REPORT_EXPORT',
-        entityType: 'REPORT',
+        eventType: AuditEventType.REPORT_EXPORT,
+        entityType: AuditEntityType.REPORT,
         entityId: params.entityId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: params.outcome as any,
         action: `EXPORT_${params.format}`,
-        outcome: params.outcome,
-        reason: params.reason,
-        userId: user.id,
         permissionUsed: params.permissionUsed,
+        reason: params.reason,
+        metadata: {
+          format: params.format,
+        },
       },
-    });
+      this.prisma,
+    );
   }
 }

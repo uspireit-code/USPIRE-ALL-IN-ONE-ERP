@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PERMISSIONS } from '../../rbac/permission-catalog';
 import { assertPeriodIsOpen } from '../common/accounting-period.guard';
 import type {
   CreateTaxRateDto,
@@ -180,7 +181,7 @@ export class FinanceTaxService {
             action: 'TAX_RATE_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'TAX_RATE_CREATE',
+            permissionUsed: PERMISSIONS.TAX.RATE_CREATE,
           } as any,
         })
         .catch(() => undefined);
@@ -259,7 +260,7 @@ export class FinanceTaxService {
             action: 'TAX_RATE_UPDATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'TAX_RATE_UPDATE',
+            permissionUsed: PERMISSIONS.TAX.RATE_UPDATE,
           } as any,
         })
         .catch(() => undefined);
@@ -298,7 +299,7 @@ export class FinanceTaxService {
           action: 'TAX_RATE_UPDATE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'TAX_RATE_UPDATE',
+          permissionUsed: PERMISSIONS.TAX.RATE_UPDATE,
         } as any,
       })
       .catch(() => undefined);
@@ -390,7 +391,7 @@ export class FinanceTaxService {
           action: 'TAX_CONFIG_UPDATE',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'TAX_CONFIG_UPDATE',
+          permissionUsed: PERMISSIONS.TAX.CONFIG_UPDATE,
         } as any,
       })
       .catch(() => undefined);

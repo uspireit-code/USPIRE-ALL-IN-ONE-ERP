@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Supplier } from '../../services/ap';
 import { listSuppliers } from '../../services/ap';
 
 export function SuppliersListPage() {
   const { hasPermission } = useAuth();
-  const canCreateSupplier = hasPermission('AP_SUPPLIER_CREATE');
+  const canCreateSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.CREATE);
 
   const [rows, setRows] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);

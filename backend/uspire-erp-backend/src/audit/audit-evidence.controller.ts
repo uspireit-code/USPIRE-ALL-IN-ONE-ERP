@@ -15,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { AuditEvidenceService } from './audit-evidence.service';
@@ -27,7 +28,7 @@ export class AuditEvidenceController {
   constructor(private readonly evidence: AuditEvidenceService) {}
 
   @Post()
-  @Permissions('AUDIT_EVIDENCE_UPLOAD')
+  @Permissions(PERMISSIONS.AUDIT.EVIDENCE_UPLOAD)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -45,13 +46,13 @@ export class AuditEvidenceController {
   }
 
   @Get()
-  @Permissions('AUDIT_EVIDENCE_VIEW')
+  @Permissions(PERMISSIONS.AUDIT.EVIDENCE_VIEW)
   async list(@Req() req: Request, @Query() dto: AuditEvidenceQueryDto) {
     return this.evidence.listEvidence(req, dto);
   }
 
   @Get(':id/download')
-  @Permissions('AUDIT_EVIDENCE_VIEW')
+  @Permissions(PERMISSIONS.AUDIT.EVIDENCE_VIEW)
   async download(
     @Req() req: Request,
     @Param('id') id: string,

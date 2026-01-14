@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { assertPeriodIsOpen } from '../finance/common/accounting-period.guard';
 import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -342,7 +343,7 @@ export class ArService {
             outcome: 'BLOCKED',
             reason: String(e?.message ?? 'Posting blocked by accounting period control'),
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_POST',
+            permissionUsed: PERMISSIONS.AR.INVOICE_POST_RBAC,
           },
         })
         .catch(() => undefined);
@@ -362,7 +363,7 @@ export class ArService {
             reason:
               'Operational postings are not allowed in the Opening Balances period',
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_POST',
+            permissionUsed: PERMISSIONS.AR.INVOICE_POST_RBAC,
           },
         })
         .catch(() => undefined);
@@ -426,7 +427,7 @@ export class ArService {
             outcome: 'BLOCKED',
             reason: `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`,
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_POST',
+            permissionUsed: PERMISSIONS.AR.INVOICE_POST_RBAC,
           },
         })
         .catch(() => undefined);
@@ -500,7 +501,7 @@ export class ArService {
           action: 'AR_INVOICE_POST',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'AR_INVOICE_POST',
+          permissionUsed: PERMISSIONS.AR.INVOICE_POST_RBAC,
         },
       })
       .catch(() => undefined);

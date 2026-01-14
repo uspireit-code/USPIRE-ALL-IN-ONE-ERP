@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertCanPost } from '../periods/period-guard';
 
 @Injectable()
 export class PeriodCloseService {
@@ -67,7 +68,11 @@ export class PeriodCloseService {
 
     if (!period) throw new NotFoundException('Accounting period not found');
 
-    if (period.status !== 'OPEN') {
+    // Canonical period semantics: posting-like actions are allowed only in OPEN.
+    // We preserve the existing ForbiddenException payload/messages on failure.
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
       throw new ForbiddenException({
         error: 'Checklist completion blocked by accounting period control',
         reason: `Accounting period is not OPEN: ${period.name}`,

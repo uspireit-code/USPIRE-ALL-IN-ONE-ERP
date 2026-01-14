@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { GlModule } from '../gl/gl.module';
+import { ReportsModule } from '../reports/reports.module';
 import { CoaController } from './coa.controller';
 import { CoaService } from './coa.service';
 import { FinanceArCustomersController } from './ar/customers/customers.controller';
@@ -22,7 +23,7 @@ import { FinanceTaxController } from './tax/tax.controller';
 import { FinanceTaxService } from './tax/tax.service';
 
 @Module({
-  imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule, GlModule],
+  imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule, GlModule, ReportsModule],
   controllers: [
     CoaController,
     FinanceArCustomersController,

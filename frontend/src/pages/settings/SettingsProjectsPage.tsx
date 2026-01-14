@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import type { Project, ProjectStatus } from '../../services/master-data';
 import { closeProject, createProject, listProjects, updateProject } from '../../services/master-data';
@@ -12,10 +13,10 @@ function todayIsoDate() {
 export function SettingsProjectsPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('MASTER_DATA_PROJECT_VIEW');
-  const canCreate = hasPermission('MASTER_DATA_PROJECT_CREATE');
-  const canEdit = hasPermission('MASTER_DATA_PROJECT_EDIT');
-  const canClose = hasPermission('MASTER_DATA_PROJECT_CLOSE');
+  const canView = hasPermission(PERMISSIONS.MASTER_DATA.PROJECT.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.MASTER_DATA.PROJECT.CREATE);
+  const canEdit = hasPermission(PERMISSIONS.MASTER_DATA.PROJECT.EDIT);
+  const canClose = hasPermission(PERMISSIONS.MASTER_DATA.PROJECT.CLOSE);
 
   const [rows, setRows] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);

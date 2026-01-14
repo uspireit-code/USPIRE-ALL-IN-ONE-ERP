@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PERMISSIONS } from '../../rbac/permission-catalog';
 
 type ReminderSendMode = 'AUTO' | 'MANUAL';
 
@@ -70,7 +71,7 @@ export class ArRemindersService {
           outcome: 'SUCCESS' as any,
           reason: JSON.stringify({ type: 'RULE', ruleId: rule.id }),
           userId: user.id,
-          permissionUsed: 'AR_REMINDER_CONFIGURE',
+          permissionUsed: PERMISSIONS.AR_REMINDER.CONFIGURE,
         } as any,
       })
       .catch(() => undefined);
@@ -135,7 +136,7 @@ export class ArRemindersService {
           outcome: 'SUCCESS' as any,
           reason: JSON.stringify({ type: 'TEMPLATE', templateId: template.id, level: template.level }),
           userId: user.id,
-          permissionUsed: 'AR_REMINDER_CONFIGURE',
+          permissionUsed: PERMISSIONS.AR_REMINDER.CONFIGURE,
         } as any,
       })
       .catch(() => undefined);
@@ -302,7 +303,7 @@ export class ArRemindersService {
             templateId: template.id,
           }),
           userId: user.id,
-          permissionUsed: 'AR_REMINDER_TRIGGER',
+          permissionUsed: PERMISSIONS.AR_REMINDER.TRIGGER,
         } as any,
       })
       .catch(() => undefined);

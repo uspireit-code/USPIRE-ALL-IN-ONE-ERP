@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Customer } from '../../services/ar';
 import { getCustomerById, updateCustomer } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
@@ -10,7 +11,7 @@ export function EditCustomerPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canEdit = hasPermission('CUSTOMERS_EDIT');
+  const canEdit = hasPermission(PERMISSIONS.AR.CUSTOMERS.EDIT);
 
   const [loaded, setLoaded] = useState<Customer | null>(null);
   const [name, setName] = useState('');

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
@@ -15,10 +16,10 @@ import {
 export function SettingsInvoiceCategoriesPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('INVOICE_CATEGORY_VIEW');
-  const canCreate = hasPermission('INVOICE_CATEGORY_CREATE');
-  const canEdit = hasPermission('INVOICE_CATEGORY_UPDATE');
-  const canDisable = hasPermission('INVOICE_CATEGORY_DISABLE');
+  const canView = hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW);
+  const canCreate = hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_CREATE);
+  const canEdit = hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE);
+  const canDisable = hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE);
 
   const [rows, setRows] = useState<InvoiceCategory[]>([]);
   const [coa, setCoa] = useState<CoaAccount[]>([]);

@@ -1,6 +1,7 @@
 import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { GlService } from './gl.service';
@@ -11,7 +12,7 @@ export class GlRiskController {
   constructor(private readonly gl: GlService) {}
 
   @Get('overview')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async overview(
     @Req() req: Request,
     @Query('periodId') periodId?: string,
@@ -34,7 +35,7 @@ export class GlRiskController {
   }
 
   @Get('users')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async users(
     @Req() req: Request,
     @Query('periodId') periodId?: string,
@@ -45,7 +46,7 @@ export class GlRiskController {
   }
 
   @Get('accounts')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async accounts(
     @Req() req: Request,
     @Query('periodId') periodId?: string,
@@ -68,7 +69,7 @@ export class GlRiskController {
   }
 
   @Get('organisation')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async organisation(
     @Req() req: Request,
     @Query('periodId') periodId?: string,
@@ -83,7 +84,7 @@ export class GlRiskController {
   }
 
   @Get('periods')
-  @Permissions('FINANCE_GL_VIEW')
+  @Permissions(PERMISSIONS.GL.VIEW)
   async periods(
     @Req() req: Request,
     @Query('periodId') periodId?: string,

@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const jwt_auth_guard_1 = require("../../../rbac/jwt-auth.guard");
 const permissions_decorator_1 = require("../../../rbac/permissions.decorator");
 const permissions_guard_1 = require("../../../rbac/permissions.guard");
+const permission_catalog_1 = require("../../../rbac/permission-catalog");
 const credit_notes_dto_1 = require("./credit-notes.dto");
 const credit_notes_service_1 = require("./credit-notes.service");
 let FinanceArCreditNotesController = class FinanceArCreditNotesController {
@@ -35,6 +36,12 @@ let FinanceArCreditNotesController = class FinanceArCreditNotesController {
     }
     async getById(req, id) {
         return this.creditNotes.getById(req, id);
+    }
+    async exportPdf(req, id, res) {
+        const body = await this.creditNotes.exportPdf(req, id);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="credit-note-${id}.pdf"`);
+        res.send(body);
     }
     async create(req, dto) {
         return this.creditNotes.create(req, dto);
@@ -55,7 +62,7 @@ let FinanceArCreditNotesController = class FinanceArCreditNotesController {
 exports.FinanceArCreditNotesController = FinanceArCreditNotesController;
 __decorate([
     (0, common_1.Get)(),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_VIEW'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_VIEW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -64,7 +71,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "list", null);
 __decorate([
     (0, common_1.Get)('eligible-customers'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_CREATE'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_CREATE),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -72,7 +79,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "eligibleCustomers", null);
 __decorate([
     (0, common_1.Get)('eligible-invoices'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_CREATE'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_CREATE),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('customerId')),
     __metadata("design:type", Function),
@@ -81,7 +88,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "eligibleInvoices", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_VIEW'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_VIEW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
@@ -89,8 +96,18 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], FinanceArCreditNotesController.prototype, "getById", null);
 __decorate([
+    (0, common_1.Get)(':id/export'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_VIEW),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], FinanceArCreditNotesController.prototype, "exportPdf", null);
+__decorate([
     (0, common_1.Post)(),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_CREATE'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_CREATE),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -99,7 +116,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "create", null);
 __decorate([
     (0, common_1.Post)(':id/submit'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_CREATE'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_CREATE),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),
@@ -109,7 +126,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "submit", null);
 __decorate([
     (0, common_1.Post)(':id/approve'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_APPROVE'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_APPROVE),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),
@@ -119,7 +136,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "approve", null);
 __decorate([
     (0, common_1.Post)(':id/post'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_POST'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_POST),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),
@@ -129,7 +146,7 @@ __decorate([
 ], FinanceArCreditNotesController.prototype, "post", null);
 __decorate([
     (0, common_1.Post)(':id/void'),
-    (0, permissions_decorator_1.Permissions)('CREDIT_NOTE_VOID'),
+    (0, permissions_decorator_1.Permissions)(permission_catalog_1.PERMISSIONS.AR.CREDIT_NOTE_VOID),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getApAging, type ApAgingResponse } from '../../services/reports';
 
 function todayIsoDate() {
@@ -13,7 +14,7 @@ function money(n: number) {
 
 export function ApAgingPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('FINANCE_AP_AGING_VIEW');
+  const canView = hasPermission(PERMISSIONS.REPORT.VIEW.AP_AGING);
 
   const [asOf, setAsOf] = useState(todayIsoDate());
   const [data, setData] = useState<ApAgingResponse | null>(null);

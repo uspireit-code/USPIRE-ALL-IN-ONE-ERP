@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
@@ -35,8 +36,8 @@ export function RecurringTemplateEditorPage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
-  const canManage = hasPermission('FINANCE_GL_RECURRING_MANAGE');
-  const canGenerate = hasPermission('FINANCE_GL_RECURRING_GENERATE');
+  const canManage = hasPermission(PERMISSIONS.GL.RECURRING_MANAGE);
+  const canGenerate = hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
   const canAccess = canManage || canGenerate;
   const readOnly = !canManage;
 

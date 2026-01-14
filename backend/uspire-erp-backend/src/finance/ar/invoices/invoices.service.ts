@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
 import type {
   CreateCustomerInvoiceDto,
@@ -767,7 +768,7 @@ export class FinanceArInvoicesService {
             invoiceNumber: (created as any).invoiceNumber,
           }),
           userId: user.id,
-          permissionUsed: 'AR_INVOICE_CREATE',
+          permissionUsed: PERMISSIONS.AR.INVOICE_CREATE_RBAC,
         } as any,
       } as any)
       .catch(() => undefined);
@@ -1005,7 +1006,7 @@ export class FinanceArInvoicesService {
               invoiceNumber: (existing as any).invoiceNumber,
             }),
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_EDIT_DRAFT',
+            permissionUsed: PERMISSIONS.AR.INVOICE_EDIT_DRAFT,
           } as any,
         } as any)
         .catch(() => undefined);
@@ -1021,7 +1022,7 @@ export class FinanceArInvoicesService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to edit invoice draft'),
             userId: user.id,
-            permissionUsed: 'AR_INVOICE_EDIT_DRAFT',
+            permissionUsed: PERMISSIONS.AR.INVOICE_EDIT_DRAFT,
           } as any,
         } as any)
         .catch(() => undefined);
@@ -1228,7 +1229,7 @@ export class FinanceArInvoicesService {
               revenueAccountId,
             }),
             userId: user.id,
-            permissionUsed: 'INVOICE_POST',
+            permissionUsed: PERMISSIONS.AR.INVOICE_POST,
           } as any,
         } as any)
         .catch(() => undefined);
@@ -1249,7 +1250,7 @@ export class FinanceArInvoicesService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to post invoice'),
             userId: user.id,
-            permissionUsed: 'INVOICE_POST',
+            permissionUsed: PERMISSIONS.AR.INVOICE_POST,
           } as any,
         } as any)
         .catch(() => undefined);

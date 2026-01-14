@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateDepartmentDto, UpdateDepartmentDto } from './departments.dto';
 
 @Injectable()
@@ -85,7 +86,7 @@ export class DepartmentsService {
             action: 'MASTER_DATA_DEPARTMENT_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_DEPARTMENT_CREATE',
+            permissionUsed: PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE,
           },
         })
         .catch(() => undefined);
@@ -107,7 +108,7 @@ export class DepartmentsService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to create department'),
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_DEPARTMENT_CREATE',
+            permissionUsed: PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE,
           },
         })
         .catch(() => undefined);
@@ -213,7 +214,7 @@ export class DepartmentsService {
             action: 'MASTER_DATA_DEPARTMENT_EDIT',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_DEPARTMENT_EDIT',
+            permissionUsed: PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT,
           },
         })
         .catch(() => undefined);
@@ -235,7 +236,7 @@ export class DepartmentsService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to update department'),
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_DEPARTMENT_EDIT',
+            permissionUsed: PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT,
           },
         })
         .catch(() => undefined);

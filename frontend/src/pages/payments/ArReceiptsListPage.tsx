@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Payment } from '../../services/payments';
 import { listPayments } from '../../services/payments';
 import { listInvoices as listArInvoices, type CustomerInvoice } from '../../services/ar';
@@ -13,7 +14,7 @@ function formatMoney(n: number) {
 
 export function ArReceiptsListPage() {
   const { hasPermission } = useAuth();
-  const canCreate = hasPermission('PAYMENT_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.PAYMENT.CREATE);
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);

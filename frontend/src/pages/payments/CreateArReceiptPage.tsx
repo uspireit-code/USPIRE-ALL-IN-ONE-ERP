@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { listInvoices as listArInvoices, type CustomerInvoice } from '../../services/ar';
 import type { BankAccount } from '../../services/payments';
 import { createPayment, listBankAccounts } from '../../services/payments';
@@ -26,7 +27,7 @@ export function CreateArReceiptPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('PAYMENT_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.PAYMENT.CREATE);
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);

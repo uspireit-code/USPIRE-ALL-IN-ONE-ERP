@@ -7,6 +7,10 @@ import {
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { assertCanPost } from '../periods/period-guard';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
@@ -143,22 +147,6 @@ export class PaymentsService {
       throw new BadRequestException('Only DRAFT payments can be approved');
     }
 
-    if (p.createdById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'PAYMENT_APPROVE',
-          conflictingPermission: 'PAYMENT_CREATE',
-        },
-      });
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Creator cannot approve own payment',
-      });
-    }
-
     return this.prisma.payment.update({
       where: { id: p.id },
       data: {
@@ -205,38 +193,6 @@ export class PaymentsService {
       );
     }
 
-    if (p.approvedById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'PAYMENT_POST',
-          conflictingPermission: 'PAYMENT_APPROVE',
-        },
-      });
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Approver cannot post the same payment',
-      });
-    }
-
-    if (p.createdById === user.id) {
-      await this.prisma.soDViolationLog.create({
-        data: {
-          tenantId: tenant.id,
-          userId: user.id,
-          permissionAttempted: 'PAYMENT_POST',
-          conflictingPermission: 'PAYMENT_CREATE',
-        },
-      });
-
-      throw new ForbiddenException({
-        error: 'Action blocked by Segregation of Duties (SoD)',
-        reason: 'Creator cannot post own payment',
-      });
-    }
-
     this.assertAllocations(
       p.allocations.map((a) => ({
         sourceType: a.sourceType,
@@ -255,16 +211,97 @@ export class PaymentsService {
       select: { id: true, status: true, name: true },
     });
 
-    if (!period || period.status !== 'OPEN') {
+    if (!period) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.JOURNAL_POST,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: p.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'PAYMENT_POST',
+          permissionUsed: PERMISSIONS.PAYMENT.POST,
+          lifecycleType: 'POST',
+          reason: 'No accounting period exists for the payment date',
+          metadata: {
+            entityTypeRaw: 'PAYMENT',
+            paymentId: p.id,
+            periodId: null,
+            periodName: null,
+            periodStatus: null,
+          },
+        },
+        this.prisma,
+      );
+
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the payment date'
-          : `Accounting period is not OPEN: ${period.name}`,
+        reason: 'No accounting period exists for the payment date',
+      });
+    }
+
+    // Canonical period semantics: posting is allowed only in OPEN.
+    // We preserve the existing ForbiddenException payload/messages on failure.
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.JOURNAL_POST,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: p.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'PAYMENT_POST',
+          permissionUsed: PERMISSIONS.PAYMENT.POST,
+          lifecycleType: 'POST',
+          reason: `Accounting period is not OPEN: ${period.name}`,
+          metadata: {
+            entityTypeRaw: 'PAYMENT',
+            paymentId: p.id,
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
+          },
+        },
+        this.prisma,
+      );
+
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
 
     if (period.name === 'Opening Balances') {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.JOURNAL_POST,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: p.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'PAYMENT_POST',
+          permissionUsed: PERMISSIONS.PAYMENT.POST,
+          lifecycleType: 'POST',
+          reason: 'Operational postings are not allowed in the Opening Balances period',
+          metadata: {
+            entityTypeRaw: 'PAYMENT',
+            paymentId: p.id,
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
+          },
+        },
+        this.prisma,
+      );
+
       throw new ForbiddenException({
         error: 'Posting blocked by opening balances control period',
         reason:
@@ -283,9 +320,32 @@ export class PaymentsService {
     });
 
     if (cutoverLocked && p.paymentDate < cutoverLocked.startDate) {
+      const cutoverReason = `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`;
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.JOURNAL_POST,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: p.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'PAYMENT_POST',
+          permissionUsed: PERMISSIONS.PAYMENT.POST,
+          lifecycleType: 'POST',
+          reason: cutoverReason,
+          metadata: {
+            entityTypeRaw: 'PAYMENT',
+            paymentId: p.id,
+            cutoverDate: cutoverLocked.startDate.toISOString().slice(0, 10),
+          },
+        },
+        this.prisma,
+      );
+
       throw new ForbiddenException({
         error: 'Posting blocked by cutover lock',
-        reason: `Posting dated before cutover is not allowed (cutover: ${cutoverLocked.startDate.toISOString().slice(0, 10)})`,
+        reason: cutoverReason,
       });
     }
 
@@ -375,6 +435,28 @@ export class PaymentsService {
       },
       include: { allocations: true, bankAccount: true },
     });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.JOURNAL_POST,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: postedJournal.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'PAYMENT_POST',
+        permissionUsed: PERMISSIONS.PAYMENT.POST,
+        lifecycleType: 'POST',
+        metadata: {
+          entityTypeRaw: 'PAYMENT',
+          paymentId: updatedPayment.id,
+          journalId: postedJournal.id,
+          paymentType: updatedPayment.type,
+        },
+      },
+      this.prisma,
+    );
 
     return { payment: updatedPayment, glJournal: postedJournal };
   }

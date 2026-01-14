@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 import type { ArReceipt } from '../../services/ar';
 import { listReceipts, postReceipt } from '../../services/ar';
@@ -29,9 +30,11 @@ export function ReceiptsPage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('RECEIPT_VIEW') || hasPermission('RECEIPT_POST');
-  const canCreate = hasPermission('RECEIPT_CREATE');
-  const canPost = hasPermission('RECEIPT_POST');
+  const canView =
+    hasPermission(PERMISSIONS.AR.RECEIPT.VIEW) ||
+    hasPermission(PERMISSIONS.AR.RECEIPT.POST);
+  const canCreate = hasPermission(PERMISSIONS.AR.RECEIPT.CREATE);
+  const canPost = hasPermission(PERMISSIONS.AR.RECEIPT.POST);
 
   const [rows, setRows] = useState<ArReceipt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +68,7 @@ export function ReceiptsPage() {
 
   async function onPost(id: string) {
     if (!canPost) {
-      setError('You do not have permission to post receipts. Required: RECEIPT_POST.');
+      setError(`You do not have permission to post receipts. Required: ${PERMISSIONS.AR.RECEIPT.POST}.`);
       return;
     }
 
@@ -86,7 +89,7 @@ export function ReceiptsPage() {
   }
 
   const content = useMemo(() => {
-    if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view receipts. Required: RECEIPT_VIEW.</div>;
+    if (!canView) return <div style={{ color: 'crimson' }}>{`You don’t have permission to view receipts. Required: ${PERMISSIONS.AR.RECEIPT.VIEW}.`}</div>;
     if (loading) return <div>Loading...</div>;
     if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 

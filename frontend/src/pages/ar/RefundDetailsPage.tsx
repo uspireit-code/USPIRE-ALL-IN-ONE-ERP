@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 import { formatMoney } from '../../money';
-import { getApiErrorMessage } from '../../services/api';
+import { apiFetchRaw, getApiErrorMessage } from '../../services/api';
 import { approveRefund, getRefundById, postRefund, submitRefund, type Refund } from '../../services/ar';
 
 function StatusBadge(props: { status: string }) {
@@ -31,16 +32,37 @@ export function RefundDetailsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('REFUND_VIEW');
-  const canSubmit = hasPermission('REFUND_SUBMIT');
-  const canApprove = hasPermission('REFUND_APPROVE');
-  const canPost = hasPermission('REFUND_POST');
+  const canView = hasPermission(PERMISSIONS.AR.REFUND.VIEW);
+  const canSubmit = hasPermission(PERMISSIONS.AR.REFUND.SUBMIT);
+  const canApprove = hasPermission(PERMISSIONS.AR.REFUND.APPROVE);
+  const canPost = hasPermission(PERMISSIONS.AR.REFUND.POST);
 
   const [refund, setRefund] = useState<Refund | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  async function onExportPdf() {
+    if (!id) return;
+    setActionError(null);
+    try {
+      const res = await apiFetchRaw(`/finance/ar/refunds/${id}/export`, {
+        method: 'GET',
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `refund-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setActionError(getApiErrorMessage(e, 'Export PDF failed'));
+    }
+  }
 
   const refresh = async () => {
     if (!id) return;
@@ -135,7 +157,7 @@ export function RefundDetailsPage() {
     }
   }
 
-  if (!canView) return <div style={{ color: 'crimson' }}>You don’t have permission to view refunds. Required: REFUND_VIEW.</div>;
+  if (!canView) return <div style={{ color: 'crimson' }}>{`You don’t have permission to view refunds. Required: ${PERMISSIONS.AR.REFUND.VIEW}.`}</div>;
   if (loading) return <div>Loading...</div>;
   if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
   if (!refund) return <div style={{ color: 'crimson' }}>Refund not found</div>;
@@ -145,6 +167,9 @@ export function RefundDetailsPage() {
       title={`Refund ${refund.refundNumber}`}
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" disabled={!id} onClick={onExportPdf}>
+            Export PDF
+          </button>
           {allowed.submit ? (
             <button type="button" disabled={acting} onClick={onSubmit}>
               Submit

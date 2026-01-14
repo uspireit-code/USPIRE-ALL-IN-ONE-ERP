@@ -11,6 +11,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { ApService } from './ap.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
@@ -22,25 +23,25 @@ export class ApController {
   constructor(private readonly ap: ApService) {}
 
   @Post('suppliers')
-  @Permissions('AP_SUPPLIER_CREATE')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_CREATE)
   async createSupplier(@Req() req: Request, @Body() dto: CreateSupplierDto) {
     return this.ap.createSupplier(req, dto);
   }
 
   @Get('suppliers')
-  @Permissions('AP_INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
   async listSuppliers(@Req() req: Request) {
     return this.ap.listSuppliers(req);
   }
 
   @Get('accounts')
-  @Permissions('AP_INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
   async listEligibleAccounts(@Req() req: Request) {
     return this.ap.listEligibleAccounts(req);
   }
 
   @Post('invoices')
-  @Permissions('AP_INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
   async createInvoice(
     @Req() req: Request,
     @Body() dto: CreateSupplierInvoiceDto,
@@ -49,19 +50,19 @@ export class ApController {
   }
 
   @Post('invoices/:id/submit')
-  @Permissions('AP_INVOICE_SUBMIT')
+  @Permissions(PERMISSIONS.AP.INVOICE_SUBMIT)
   async submitInvoice(@Req() req: Request, @Param('id') id: string) {
     return this.ap.submitInvoice(req, id);
   }
 
   @Post('invoices/:id/approve')
-  @Permissions('AP_INVOICE_APPROVE')
+  @Permissions(PERMISSIONS.AP.INVOICE_APPROVE)
   async approveInvoice(@Req() req: Request, @Param('id') id: string) {
     return this.ap.approveInvoice(req, id);
   }
 
   @Post('invoices/:id/post')
-  @Permissions('AP_INVOICE_POST')
+  @Permissions(PERMISSIONS.AP.INVOICE_POST)
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -73,7 +74,7 @@ export class ApController {
   }
 
   @Get('invoices')
-  @Permissions('AP_INVOICE_VIEW')
+  @Permissions(PERMISSIONS.AP.INVOICE_VIEW)
   async listInvoices(@Req() req: Request) {
     return this.ap.listInvoices(req);
   }

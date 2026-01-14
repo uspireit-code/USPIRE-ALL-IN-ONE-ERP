@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import {
   downloadReportExport,
   getSoceEngine,
@@ -14,9 +15,9 @@ function currentYear() {
 
 export function SocePage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('FINANCE_SOE_VIEW');
-  const canRun = hasPermission('FINANCE_REPORT_GENERATE');
-  const canExport = hasPermission('FINANCE_REPORT_EXPORT');
+  const canView = hasPermission(PERMISSIONS.REPORT.VIEW.SOCE);
+  const canRun = hasPermission(PERMISSIONS.REPORT.GENERATE);
+  const canExport = hasPermission(PERMISSIONS.REPORT.EXPORT);
 
   const [fiscalYear, setFiscalYear] = useState<number>(() => currentYear());
   const [compare, setCompare] = useState<'none' | 'prior_year'>('none');
@@ -188,7 +189,9 @@ export function SocePage() {
         <Link to="/reports">Back</Link>
       </div>
 
-      {!canView ? <div style={{ color: 'crimson' }}>You do not have permission to view SOCE (requires FINANCE_SOE_VIEW).</div> : null}
+      {!canView ? (
+        <div style={{ color: 'crimson' }}>You do not have permission to view SOCE (requires {PERMISSIONS.REPORT.VIEW.SOCE}).</div>
+      ) : null}
 
       <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'end' }}>
         <label>
@@ -231,9 +234,13 @@ export function SocePage() {
         </label>
       </div>
 
-      {!canRun ? <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Run disabled: missing FINANCE_REPORT_GENERATE permission.</div> : null}
+      {!canRun ? (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Run disabled: missing {PERMISSIONS.REPORT.GENERATE} permission.</div>
+      ) : null}
 
-      {!canExport ? <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Export disabled: missing FINANCE_REPORT_EXPORT permission.</div> : null}
+      {!canExport ? (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Export disabled: missing {PERMISSIONS.REPORT.EXPORT} permission.</div>
+      ) : null}
 
       {error ? <div style={{ color: 'crimson', marginTop: 12 }}>{error}</div> : null}
       {isEmpty ? <div style={{ marginTop: 12, color: '#666' }}>No data for selected period.</div> : null}

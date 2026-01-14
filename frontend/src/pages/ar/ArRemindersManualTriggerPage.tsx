@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { ApiError } from '../../services/api';
 import { getInvoiceById, listInvoices, type CustomerInvoice } from '../../services/ar';
 import { sendReminder } from '../../services/arReminders';
@@ -9,8 +10,10 @@ export function ArRemindersManualTriggerPage() {
   const { hasPermission } = useAuth();
 
   const canView =
-    hasPermission('AR_REMINDER_VIEW') || hasPermission('FINANCE_VIEW_ALL') || hasPermission('SYSTEM_VIEW_ALL');
-  const canTrigger = hasPermission('AR_REMINDER_TRIGGER');
+    hasPermission(PERMISSIONS.AR.REMINDER.VIEW) ||
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canTrigger = hasPermission(PERMISSIONS.AR.REMINDER.TRIGGER);
 
   const [invoiceId, setInvoiceId] = useState('');
   const [invoice, setInvoice] = useState<CustomerInvoice | null>(null);

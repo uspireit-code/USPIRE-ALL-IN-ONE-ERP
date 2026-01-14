@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import type { ApiError } from '../services/api';
 import {
   closePeriod,
@@ -17,22 +18,22 @@ import {
 export function PeriodsPage() {
   const { hasPermission } = useAuth();
 
-  const hasSystemViewAll = hasPermission('SYSTEM_VIEW_ALL');
-  const hasFinanceViewAll = hasPermission('FINANCE_VIEW_ALL');
+  const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
 
   const canView =
     hasFinanceViewAll ||
     hasSystemViewAll ||
-    hasPermission('FINANCE_PERIOD_VIEW') ||
-    hasPermission('FINANCE_GL_VIEW') ||
-    hasPermission('FINANCE_PERIOD_REVIEW') ||
-    hasPermission('FINANCE_PERIOD_CHECKLIST_VIEW');
-  const canCreate = hasPermission('FINANCE_PERIOD_CREATE');
-  const canClose = hasPermission('FINANCE_PERIOD_CLOSE');
-  const canReopen = hasPermission('FINANCE_PERIOD_REOPEN');
-  const canCorrect = hasPermission('FINANCE_PERIOD_CORRECT');
-  const canViewChecklist = hasPermission('FINANCE_PERIOD_CHECKLIST_VIEW');
-  const canCompleteChecklist = hasPermission('FINANCE_PERIOD_CHECKLIST_COMPLETE');
+    hasPermission(PERMISSIONS.PERIOD.VIEW) ||
+    hasPermission(PERMISSIONS.GL.VIEW) ||
+    hasPermission(PERMISSIONS.PERIOD.REVIEW) ||
+    hasPermission(PERMISSIONS.PERIOD.CHECKLIST_VIEW);
+  const canCreate = hasPermission(PERMISSIONS.PERIOD.CREATE);
+  const canClose = hasPermission(PERMISSIONS.PERIOD.CLOSE);
+  const canReopen = hasPermission(PERMISSIONS.PERIOD.REOPEN);
+  const canCorrect = hasPermission(PERMISSIONS.PERIOD.CORRECT);
+  const canViewChecklist = hasPermission(PERMISSIONS.PERIOD.CHECKLIST_VIEW);
+  const canCompleteChecklist = hasPermission(PERMISSIONS.PERIOD.CHECKLIST_COMPLETE);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);

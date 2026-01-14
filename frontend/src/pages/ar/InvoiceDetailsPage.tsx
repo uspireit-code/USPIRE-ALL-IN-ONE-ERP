@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { CustomerInvoice, InvoiceCategory } from '../../services/ar';
 import { downloadInvoiceExport, getInvoiceById, listInvoiceCategories, postInvoice } from '../../services/ar';
 import { getApiErrorMessage } from '../../services/api';
@@ -13,7 +14,7 @@ export function InvoiceDetailsPage() {
   const { id } = useParams();
   const { hasPermission } = useAuth();
 
-  const canPost = hasPermission('INVOICE_POST');
+  const canPost = hasPermission(PERMISSIONS.AR.INVOICE.POST);
 
   const [invoice, setInvoice] = useState<CustomerInvoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -227,9 +228,9 @@ export function InvoiceDetailsPage() {
       }
     } catch (err: any) {
       const msg = getApiErrorMessage(err, 'Action failed');
-      if (String(msg).includes('Missing permission: INVOICE_POST')) {
+      if (String(msg).includes(`Missing permission: ${PERMISSIONS.AR.INVOICE.POST}`)) {
         setActionError(
-          "You don’t have permission to post this invoice. Required: INVOICE_POST.",
+          `You don’t have permission to post this invoice. Required: ${PERMISSIONS.AR.INVOICE.POST}.`,
         );
       } else {
         setActionError(msg);

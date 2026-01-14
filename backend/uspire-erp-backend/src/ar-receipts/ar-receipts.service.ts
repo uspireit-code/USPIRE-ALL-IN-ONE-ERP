@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertCanPost } from '../periods/period-guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
 import { SetReceiptAllocationsDto } from './dto/set-receipt-allocations.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
@@ -1364,14 +1366,6 @@ export class ArReceiptsService {
       },
     });
 
-    if (tenantControls && tenantControls.allowSelfPosting === false) {
-      if (String(existing.createdById) === String(user.id)) {
-        throw new ForbiddenException(
-          'Posting blocked: you cannot post a receipt you prepared (segregation of duties)',
-        );
-      }
-    }
-
     const draftLines = await (this.prisma as any).customerReceiptLine.findMany({
       where: { receiptId: id },
       select: { invoiceId: true, appliedAmount: true },
@@ -1404,12 +1398,21 @@ export class ArReceiptsService {
       select: { id: true, status: true, name: true },
     });
 
-    if (!period || period.status !== 'OPEN') {
+    if (!period) {
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the receipt date'
-          : `Accounting period is not OPEN: ${period.name}`,
+        reason: 'No accounting period exists for the receipt date',
+      });
+    }
+
+    // Canonical period semantics: posting is allowed only in OPEN.
+    // We preserve the existing ForbiddenException payload/messages on failure.
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
 
@@ -1732,12 +1735,13 @@ export class ArReceiptsService {
               performedByRoles: roleNames,
             }),
             userId: user.id,
-            permissionUsed: 'RECEIPT_POST',
+            permissionUsed: PERMISSIONS.AR.RECEIPT_POST,
           } as any,
         })
         .catch(() => undefined);
 
       return { receiptId: id, glJournalId: postedJournal.id };
+
     });
 
     return this.getReceiptById(req, posted.receiptId);

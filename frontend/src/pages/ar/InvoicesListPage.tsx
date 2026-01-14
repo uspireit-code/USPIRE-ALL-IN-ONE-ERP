@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { CustomerInvoice } from '../../services/ar';
 import {
   bulkPostInvoices,
@@ -18,9 +19,9 @@ import { formatMoney } from '../../money';
 
 export function InvoicesListPage() {
   const { hasPermission } = useAuth();
-  const canCreateInvoice = hasPermission('INVOICE_CREATE');
-  const canImportInvoices = hasPermission('INVOICE_CREATE');
-  const canPostInvoices = hasPermission('INVOICE_POST');
+  const canCreateInvoice = hasPermission(PERMISSIONS.AR.INVOICE.CREATE);
+  const canImportInvoices = hasPermission(PERMISSIONS.AR.INVOICE.CREATE);
+  const canPostInvoices = hasPermission(PERMISSIONS.AR.INVOICE.POST);
 
   const [rows, setRows] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);

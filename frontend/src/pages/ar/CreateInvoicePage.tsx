@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { useBranding } from '../../branding/BrandingContext';
 import type { AccountLookup, Customer, InvoiceCategory } from '../../services/ar';
 import { createInvoice, listEligibleAccounts, listCustomers, listInvoiceCategories } from '../../services/ar';
@@ -38,7 +39,7 @@ export function CreateInvoicePage() {
   const { effective } = useBranding();
   const navigate = useNavigate();
 
-  const canCreate = hasPermission('INVOICE_CREATE');
+  const canCreate = hasPermission(PERMISSIONS.AR.INVOICE.CREATE);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<AccountLookup[]>([]);
@@ -274,7 +275,7 @@ export function CreateInvoicePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canCreate) {
-      setError('You don’t have permission to create invoices. Required: INVOICE_CREATE.');
+      setError(`You don’t have permission to create invoices. Required: ${PERMISSIONS.AR.INVOICE.CREATE}.`);
       return;
     }
 

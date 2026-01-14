@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ApiError } from '../services/api';
 import { downloadReviewPack, generateReviewPack, listReviewPacks, type ReviewPackRow } from '../services/reviewPacks';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Alert } from './Alert';
@@ -9,8 +10,8 @@ import { DataTable } from './DataTable';
 
 export function ReviewPackPanel(props: { periodId: string }) {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('AUDIT_REVIEW_PACK_VIEW');
-  const canGenerate = hasPermission('AUDIT_REVIEW_PACK_GENERATE');
+  const canView = hasPermission(PERMISSIONS.AUDIT.REVIEW_PACK_VIEW);
+  const canGenerate = hasPermission(PERMISSIONS.AUDIT.REVIEW_PACK_GENERATE);
 
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);

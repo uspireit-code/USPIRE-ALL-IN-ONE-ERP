@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { BankAccount } from '../../services/payments';
 import { listBankAccounts } from '../../services/payments';
 import { createStatement } from '../../services/bankReconciliation';
@@ -11,7 +12,7 @@ function todayIsoDate() {
 
 export function CreateBankStatementPage() {
   const { hasPermission } = useAuth();
-  const canImport = hasPermission('BANK_STATEMENT_IMPORT');
+  const canImport = hasPermission(PERMISSIONS.BANK.STATEMENT.IMPORT);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

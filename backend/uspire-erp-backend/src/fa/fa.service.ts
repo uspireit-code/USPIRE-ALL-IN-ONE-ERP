@@ -5,9 +5,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { Prisma, type FixedAssetStatus } from '@prisma/client';
+import {
+  AuditEntityType,
+  AuditEventType,
+  Prisma,
+  type FixedAssetStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GlService } from '../gl/gl.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { assertCanPost } from '../periods/period-guard';
 import { CreateFixedAssetCategoryDto } from './dto/create-fa-category.dto';
 import { CreateFixedAssetDto } from './dto/create-fa-asset.dto';
 import { CapitalizeFixedAssetDto } from './dto/capitalize-fa-asset.dto';
@@ -166,30 +174,61 @@ export class FaService {
       select: { id: true, status: true, name: true },
     });
 
-    if (!period || period.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'FA_CAPITALIZE',
-            entityType: 'FIXED_ASSET',
-            entityId: id,
-            action: 'FA_ASSET_CAPITALIZE',
-            outcome: 'BLOCKED',
-            reason: !period
-              ? 'No accounting period exists for the capitalization date'
-              : `Accounting period is not OPEN: ${period.name}`,
-            userId: user.id,
-            permissionUsed: 'FA_ASSET_CAPITALIZE',
+    if (!period) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_CAPITALIZE,
+          entityType: AuditEntityType.FIXED_ASSET,
+          entityId: id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FA_ASSET_CAPITALIZE',
+          permissionUsed: PERMISSIONS.FA.ASSET_CAPITALIZE,
+          reason: 'No accounting period exists for the capitalization date',
+          metadata: {
+            periodId: null,
+            periodName: null,
+            periodStatus: null,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      ).catch(() => undefined);
 
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the capitalization date'
-          : `Accounting period is not OPEN: ${period.name}`,
+        reason: 'No accounting period exists for the capitalization date',
+      });
+    }
+
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_CAPITALIZE,
+          entityType: AuditEntityType.FIXED_ASSET,
+          entityId: id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FA_ASSET_CAPITALIZE',
+          permissionUsed: PERMISSIONS.FA.ASSET_CAPITALIZE,
+          reason: `Accounting period is not OPEN: ${period.name}`,
+          metadata: {
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
+          },
+        },
+        this.prisma,
+      ).catch(() => undefined);
+
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
 
@@ -245,20 +284,24 @@ export class FaService {
       include: { category: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'FA_CAPITALIZE',
-          entityType: 'FIXED_ASSET',
-          entityId: asset.id,
-          action: 'FA_ASSET_CAPITALIZE',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FA_ASSET_CAPITALIZE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.FA_CAPITALIZE,
+        entityType: AuditEntityType.FIXED_ASSET,
+        entityId: asset.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FA_ASSET_CAPITALIZE',
+        permissionUsed: PERMISSIONS.FA.ASSET_CAPITALIZE,
+        metadata: {
+          assetId: asset.id,
+          capitalizationJournalId: posted.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    ).catch(() => undefined);
 
     return updatedAsset;
   }
@@ -283,22 +326,29 @@ export class FaService {
 
     if (!period) throw new NotFoundException('Accounting period not found');
 
-    if (period.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'FA_DEPRECIATION_RUN',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FA_DEPRECIATION_RUN',
-            outcome: 'BLOCKED',
-            reason: `Accounting period is not OPEN: ${period.name}`,
-            userId: user.id,
-            permissionUsed: 'FA_DEPRECIATION_RUN',
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_DEPRECIATION_RUN,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD,
+          entityId: period.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FA_DEPRECIATION_RUN',
+          permissionUsed: PERMISSIONS.FA.DEPRECIATION_RUN,
+          reason: `Accounting period is not OPEN: ${period.name}`,
+          metadata: {
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      ).catch(() => undefined);
 
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
@@ -312,21 +362,26 @@ export class FaService {
     });
 
     if (existingRun) {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'FA_DEPRECIATION_RUN',
-            entityType: 'ACCOUNTING_PERIOD',
-            entityId: period.id,
-            action: 'FA_DEPRECIATION_RUN',
-            outcome: 'FAILED',
-            reason: 'Depreciation already run for this period',
-            userId: user.id,
-            permissionUsed: 'FA_DEPRECIATION_RUN',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_DEPRECIATION_RUN,
+          entityType: AuditEntityType.ACCOUNTING_PERIOD,
+          entityId: period.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'FAILED' as any,
+          action: 'FA_DEPRECIATION_RUN',
+          permissionUsed: PERMISSIONS.FA.DEPRECIATION_RUN,
+          reason: 'Depreciation already run for this period',
+          metadata: {
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      ).catch(() => undefined);
 
       throw new BadRequestException('Depreciation already run for this period');
     }
@@ -351,21 +406,25 @@ export class FaService {
         },
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'FA_DEPRECIATION_RUN',
-            entityType: 'FIXED_ASSET_DEPRECIATION_RUN',
-            entityId: run.id,
-            action: 'FA_DEPRECIATION_RUN',
-            outcome: 'SUCCESS',
-            reason: 'No eligible assets; recorded empty depreciation run',
-            userId: user.id,
-            permissionUsed: 'FA_DEPRECIATION_RUN',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_DEPRECIATION_RUN,
+          entityType: AuditEntityType.FIXED_ASSET_DEPRECIATION_RUN,
+          entityId: run.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'FA_DEPRECIATION_RUN',
+          permissionUsed: PERMISSIONS.FA.DEPRECIATION_RUN,
+          reason: 'No eligible assets; recorded empty depreciation run',
+          metadata: {
+            periodId: period.id,
+            depreciationRunId: run.id,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      ).catch(() => undefined);
 
       return { run, journalEntry: null, totals: [] as Array<any> };
     }
@@ -522,20 +581,25 @@ export class FaService {
       include: { lines: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'FA_DEPRECIATION_RUN',
-          entityType: 'FIXED_ASSET_DEPRECIATION_RUN',
-          entityId: updatedRun.id,
-          action: 'FA_DEPRECIATION_RUN',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FA_DEPRECIATION_RUN',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.FA_DEPRECIATION_RUN,
+        entityType: AuditEntityType.FIXED_ASSET_DEPRECIATION_RUN,
+        entityId: updatedRun.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FA_DEPRECIATION_RUN',
+        permissionUsed: PERMISSIONS.FA.DEPRECIATION_RUN,
+        metadata: {
+          periodId: period.id,
+          depreciationRunId: updatedRun.id,
+          journalEntryId: posted.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    ).catch(() => undefined);
 
     return {
       run: updatedRun,
@@ -607,30 +671,65 @@ export class FaService {
       select: { id: true, status: true, name: true },
     });
 
-    if (!period || period.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'FA_DISPOSE',
-            entityType: 'FIXED_ASSET',
-            entityId: asset.id,
-            action: 'FA_DISPOSE',
-            outcome: 'BLOCKED',
-            reason: !period
-              ? 'No accounting period exists for the disposal date'
-              : `Accounting period is not OPEN for disposal date: ${period.name}`,
-            userId: user.id,
-            permissionUsed: 'FA_DISPOSE',
+    if (!period) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_DISPOSE,
+          entityType: AuditEntityType.FIXED_ASSET,
+          entityId: asset.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FA_DISPOSE',
+          permissionUsed: PERMISSIONS.FA.DISPOSE,
+          reason: 'No accounting period exists for the disposal date',
+          metadata: {
+            assetId: asset.id,
+            disposalDate: disposalDate.toISOString(),
+            periodId: null,
+            periodName: null,
+            periodStatus: null,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      ).catch(() => undefined);
 
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
-        reason: !period
-          ? 'No accounting period exists for the disposal date'
-          : `Accounting period is not OPEN for disposal date: ${period.name}`,
+        reason: 'No accounting period exists for the disposal date',
+      });
+    }
+
+    try {
+      assertCanPost(period.status, { periodName: period.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.FA_DISPOSE,
+          entityType: AuditEntityType.FIXED_ASSET,
+          entityId: asset.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'FA_DISPOSE',
+          permissionUsed: PERMISSIONS.FA.DISPOSE,
+          reason: `Accounting period is not OPEN for disposal date: ${period.name}`,
+          metadata: {
+            assetId: asset.id,
+            disposalDate: disposalDate.toISOString(),
+            periodId: period.id,
+            periodName: period.name,
+            periodStatus: period.status,
+          },
+        },
+        this.prisma,
+      ).catch(() => undefined);
+
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: `Accounting period is not OPEN for disposal date: ${period.name}`,
       });
     }
 
@@ -740,20 +839,24 @@ export class FaService {
       },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'FA_DISPOSE',
-          entityType: 'FIXED_ASSET',
-          entityId: asset.id,
-          action: 'FA_DISPOSE',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: 'FA_DISPOSE',
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.FA_DISPOSE,
+        entityType: AuditEntityType.FIXED_ASSET,
+        entityId: asset.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'FA_DISPOSE',
+        permissionUsed: PERMISSIONS.FA.DISPOSE,
+        metadata: {
+          assetId: asset.id,
+          disposalJournalId: posted.id,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    ).catch(() => undefined);
 
     return updatedAsset;
   }

@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import {
   getBudgetVsActualPaged,
   type BudgetVsActualPagedResponse,
@@ -42,7 +43,7 @@ function parseNumber(v: any): number | null {
 
 export function BudgetVsActualPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('FINANCE_BUDGET_VIEW');
+  const canView = hasPermission(PERMISSIONS.BUDGET.FINANCE_VIEW);
   const navigate = useNavigate();
 
   const [fiscalYear, setFiscalYear] = useState<number>(() => new Date().getFullYear());

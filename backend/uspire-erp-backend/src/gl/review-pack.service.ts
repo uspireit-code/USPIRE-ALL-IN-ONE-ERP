@@ -13,6 +13,7 @@ import archiver from 'archiver';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportPresentationService } from '../reports/report-presentation.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import {
   STORAGE_PROVIDER,
   type StorageProvider,
@@ -555,7 +556,7 @@ export class ReviewPackService {
             ],
           }),
           userId: user.id,
-          permissionUsed: 'AUDIT_REVIEW_PACK_GENERATE',
+          permissionUsed: PERMISSIONS.AUDIT.REVIEW_PACK_GENERATE,
         },
       })
       .catch(() => undefined);

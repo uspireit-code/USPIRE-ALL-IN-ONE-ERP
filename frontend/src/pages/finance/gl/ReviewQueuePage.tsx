@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
@@ -29,7 +30,7 @@ export function ReviewQueuePage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
-  const canApprove = hasPermission('FINANCE_GL_APPROVE');
+  const canApprove = hasPermission(PERMISSIONS.GL.APPROVE);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

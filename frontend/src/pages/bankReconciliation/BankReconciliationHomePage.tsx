@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { listBankAccounts } from '../../services/payments';
 import type { BankAccount } from '../../services/payments';
 import { getReconciliationStatus, getStatements } from '../../services/bankReconciliation';
@@ -9,7 +10,7 @@ export function BankReconciliationHomePage() {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
-  const canView = hasPermission('BANK_RECONCILIATION_VIEW');
+  const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [bankAccountId, setBankAccountId] = useState('');

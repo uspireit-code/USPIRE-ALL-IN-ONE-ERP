@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Customer } from '../../services/ar';
 import {
   downloadCustomersImportCsvTemplate,
@@ -15,8 +16,8 @@ import { getApiErrorMessage } from '../../services/api';
 
 export function CustomersListPage() {
   const { hasPermission } = useAuth();
-  const canCreateCustomer = hasPermission('CUSTOMERS_CREATE');
-  const canImportCustomers = hasPermission('CUSTOMERS_IMPORT');
+  const canCreateCustomer = hasPermission(PERMISSIONS.AR.CUSTOMERS.CREATE);
+  const canImportCustomers = hasPermission(PERMISSIONS.AR.CUSTOMERS.IMPORT);
 
   const [rows, setRows] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);

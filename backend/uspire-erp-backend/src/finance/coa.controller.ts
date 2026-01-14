@@ -19,6 +19,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import ExcelJS from 'exceljs';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { CreateCoaAccountDto, UpdateCoaAccountDto } from './coa.dto';
@@ -30,25 +31,25 @@ export class CoaController {
   constructor(private readonly coa: CoaService) {}
 
   @Get()
-  @Permissions('FINANCE_COA_VIEW')
+  @Permissions(PERMISSIONS.COA.VIEW)
   async list(@Req() req: Request) {
     return this.coa.list(req);
   }
 
   @Get('tree')
-  @Permissions('FINANCE_COA_VIEW')
+  @Permissions(PERMISSIONS.COA.VIEW)
   async tree(@Req() req: Request) {
     return this.coa.tree(req);
   }
 
   @Post()
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async create(@Req() req: Request, @Body() dto: CreateCoaAccountDto) {
     return this.coa.create(req, dto);
   }
 
   @Post('import')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -60,7 +61,7 @@ export class CoaController {
   }
 
   @Get('import-template')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async importTemplate(
     @Req() req: Request,
     @Query('format') format: string | undefined,
@@ -114,13 +115,13 @@ export class CoaController {
   }
 
   @Get(':id')
-  @Permissions('FINANCE_COA_VIEW')
+  @Permissions(PERMISSIONS.COA.VIEW)
   async get(@Req() req: Request, @Param('id') id: string) {
     return this.coa.get(req, id);
   }
 
   @Post('cleanup-non-canonical')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async cleanupNonCanonical(
     @Req() req: Request,
     @Body() dto: { canonicalHash?: string; dryRun?: boolean },
@@ -129,13 +130,13 @@ export class CoaController {
   }
 
   @Post('setup-tax-control-accounts')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async setupTaxControlAccounts(@Req() req: Request) {
     return this.coa.setupTaxControlAccounts(req);
   }
 
   @Patch(':id')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async update(
     @Req() req: Request,
     @Param('id') id: string,
@@ -145,7 +146,7 @@ export class CoaController {
   }
 
   @Put(':id')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async put(
     @Req() req: Request,
     @Param('id') id: string,
@@ -155,26 +156,26 @@ export class CoaController {
   }
 
   @Post('freeze')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async freeze(@Req() req: Request) {
     return this.coa.freeze(req);
   }
 
   @Post('unfreeze')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async unfreeze(@Req() req: Request) {
     return this.coa.unfreeze(req);
   }
 
   @Post('lock')
-  @Permissions('FINANCE_COA_UPDATE')
+  @Permissions(PERMISSIONS.COA.UPDATE)
   async lock(@Req() req: Request) {
     return this.coa.lock(req);
   }
 
   @Post('unlock')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('FINANCE_COA_UNLOCK')
+  @Permissions(PERMISSIONS.COA.UNLOCK)
   async unlock(@Req() req: Request) {
     return this.coa.unlock(req);
   }

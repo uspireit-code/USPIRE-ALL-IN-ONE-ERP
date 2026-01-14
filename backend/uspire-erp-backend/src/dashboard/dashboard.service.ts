@@ -6,6 +6,7 @@ import {
 import type { Request } from 'express';
 import { CacheService } from '../cache/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { FinancialStatementsService } from '../reports/financial-statements.service';
 import { ReportsService } from '../reports/reports.service';
 import { BudgetsService } from '../budgets/budgets.service';
@@ -137,7 +138,7 @@ export class DashboardService {
             ...params.context,
           }),
           userId: user.id,
-          permissionUsed: 'dashboard.view',
+          permissionUsed: PERMISSIONS.DASHBOARD.VIEW,
         },
       })
       .catch(() => undefined);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import type { ApiError } from '../services/api';
 import { listAllGlAccounts, listGlPeriods, type AccountingPeriod, type GlAccountLookup } from '../services/gl';
 import {
@@ -16,11 +17,13 @@ import {
 export function FixedAssetsPage() {
   const { hasPermission } = useAuth();
 
-  const canManageCategories = hasPermission('FA_CATEGORY_MANAGE');
-  const canCreateAsset = hasPermission('FA_ASSET_CREATE');
-  const canCapitalize = hasPermission('FA_ASSET_CAPITALIZE') && hasPermission('FINANCE_GL_POST');
-  const canRunDep = hasPermission('FA_DEPRECIATION_RUN') && hasPermission('FINANCE_GL_POST');
-  const canDispose = hasPermission('FA_DISPOSE') && hasPermission('FINANCE_GL_POST');
+  const canManageCategories = hasPermission(PERMISSIONS.FA.CATEGORY_MANAGE);
+  const canCreateAsset = hasPermission(PERMISSIONS.FA.ASSET_CREATE);
+  const canCapitalize =
+    hasPermission(PERMISSIONS.FA.ASSET_CAPITALIZE) && hasPermission(PERMISSIONS.GL.POST);
+  const canRunDep =
+    hasPermission(PERMISSIONS.FA.DEPRECIATION_RUN) && hasPermission(PERMISSIONS.GL.POST);
+  const canDispose = hasPermission(PERMISSIONS.FA.DISPOSE) && hasPermission(PERMISSIONS.GL.POST);
 
   const canView = canManageCategories || canCreateAsset || canCapitalize || canRunDep || canDispose;
 

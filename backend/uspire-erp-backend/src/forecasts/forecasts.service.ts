@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateForecastDto } from './dto/create-forecast.dto';
 import { UpdateForecastLinesDto } from './dto/update-forecast-lines.dto';
 
@@ -147,7 +148,7 @@ export class ForecastsService {
           outcome: 'SUCCESS',
           reason: `endpoint=${params.endpoint}; fiscalYear=${params.fiscalYear}; forecastVersionId=${params.forecastVersionId}`,
           userId: params.userId,
-          permissionUsed: 'forecast.view',
+          permissionUsed: PERMISSIONS.FORECAST.VIEW,
           forecastId: params.forecastId,
           forecastVersionId: params.forecastVersionId,
         },
@@ -448,7 +449,7 @@ export class ForecastsService {
             outcome: 'BLOCKED',
             reason: 'A forecast already exists for this fiscal year',
             userId: user.id,
-            permissionUsed: 'forecast.create',
+            permissionUsed: PERMISSIONS.FORECAST.CREATE,
             forecastId: existing.id,
           },
         })
@@ -530,7 +531,7 @@ export class ForecastsService {
             action: 'FORECAST_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'forecast.create',
+            permissionUsed: PERMISSIONS.FORECAST.CREATE,
             forecastId: forecast.id,
             forecastVersionId: version.id,
           },
@@ -597,7 +598,7 @@ export class ForecastsService {
           action: 'FORECAST_VIEW',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'forecast.view',
+          permissionUsed: PERMISSIONS.FORECAST.VIEW,
         },
       })
       .catch(() => undefined);
@@ -665,7 +666,7 @@ export class ForecastsService {
           action: 'FORECAST_VIEW',
           outcome: 'SUCCESS',
           userId: user.id,
-          permissionUsed: 'forecast.view',
+          permissionUsed: PERMISSIONS.FORECAST.VIEW,
           forecastId: forecast.id,
           forecastVersionId: latestVersion?.id,
         },
@@ -739,7 +740,7 @@ export class ForecastsService {
             action: 'FORECAST_SUBMIT',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'forecast.submit',
+            permissionUsed: PERMISSIONS.FORECAST.SUBMIT,
             forecastId: f.id,
             forecastVersionId: v.id,
           },
@@ -756,7 +757,7 @@ export class ForecastsService {
             action: 'FORECAST_UPDATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'forecast.submit',
+            permissionUsed: PERMISSIONS.FORECAST.SUBMIT,
             forecastId: f.id,
             forecastVersionId: v.id,
           },
@@ -794,7 +795,7 @@ export class ForecastsService {
             outcome: 'BLOCKED',
             reason: 'Creator cannot approve',
             userId: user.id,
-            permissionUsed: 'forecast.approve',
+            permissionUsed: PERMISSIONS.FORECAST.APPROVE,
             forecastId: forecast.id,
           },
         })
@@ -835,7 +836,7 @@ export class ForecastsService {
               action: 'FORECAST_SUPERSEDE',
               outcome: 'SUCCESS',
               userId: user.id,
-              permissionUsed: 'forecast.approve',
+              permissionUsed: PERMISSIONS.FORECAST.APPROVE,
               forecastId: forecast.id,
               forecastVersionId: existingApproved.id,
             },
@@ -852,7 +853,7 @@ export class ForecastsService {
               action: 'FORECAST_UPDATE',
               outcome: 'SUCCESS',
               userId: user.id,
-              permissionUsed: 'forecast.approve',
+              permissionUsed: PERMISSIONS.FORECAST.APPROVE,
               forecastId: forecast.id,
               forecastVersionId: existingApproved.id,
             },
@@ -896,7 +897,7 @@ export class ForecastsService {
             action: 'FORECAST_APPROVE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'forecast.approve',
+            permissionUsed: PERMISSIONS.FORECAST.APPROVE,
             forecastId: f.id,
             forecastVersionId: v.id,
           },
@@ -913,7 +914,7 @@ export class ForecastsService {
             action: 'FORECAST_UPDATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'forecast.approve',
+            permissionUsed: PERMISSIONS.FORECAST.APPROVE,
             forecastId: f.id,
             forecastVersionId: v.id,
           },
@@ -1019,7 +1020,7 @@ export class ForecastsService {
             action: 'FORECAST_UPDATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'forecast.edit',
+            permissionUsed: PERMISSIONS.FORECAST.EDIT,
             forecastId: f.id,
             forecastVersionId: version.id,
           },

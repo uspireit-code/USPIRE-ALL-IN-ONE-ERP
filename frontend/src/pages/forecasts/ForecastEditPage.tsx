@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import { listAllGlAccounts, type GlAccountLookup } from '../../services/gl';
 import { getForecast, updateForecastLines, type ForecastDetailsResponse } from '../../services/forecasts';
@@ -14,7 +15,7 @@ export function ForecastEditPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canEdit = hasPermission('forecast.edit');
+  const canEdit = hasPermission(PERMISSIONS.FORECAST.EDIT);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

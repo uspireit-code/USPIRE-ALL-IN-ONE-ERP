@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { SupplierInvoice } from '../../services/ap';
 import { approveInvoice, listInvoices, postInvoice, submitInvoice } from '../../services/ap';
 
@@ -12,9 +13,9 @@ export function InvoiceDetailsPage() {
   const { id } = useParams();
   const { hasPermission } = useAuth();
 
-  const canSubmit = hasPermission('AP_INVOICE_SUBMIT');
-  const canApprove = hasPermission('AP_INVOICE_APPROVE');
-  const canPost = hasPermission('AP_INVOICE_POST');
+  const canSubmit = hasPermission(PERMISSIONS.AP.INVOICE.SUBMIT);
+  const canApprove = hasPermission(PERMISSIONS.AP.INVOICE.APPROVE);
+  const canPost = hasPermission(PERMISSIONS.AP.INVOICE.POST);
 
   const [invoice, setInvoice] = useState<SupplierInvoice | null>(null);
   const [loading, setLoading] = useState(true);

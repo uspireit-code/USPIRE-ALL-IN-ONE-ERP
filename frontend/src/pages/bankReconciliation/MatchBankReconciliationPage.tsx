@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getReconciliationStatus, getStatements, getUnmatchedItems, matchPayment, type UnmatchedPayment, type UnmatchedStatementLine } from '../../services/bankReconciliation';
 
 function money(n: number) {
@@ -13,8 +14,8 @@ function round2(n: number) {
 
 export function MatchBankReconciliationPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('BANK_RECONCILIATION_VIEW');
-  const canReconcile = hasPermission('BANK_RECONCILE');
+  const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
+  const canReconcile = hasPermission(PERMISSIONS.BANK.RECONCILIATION.MATCH);
 
   const [searchParams] = useSearchParams();
   const bankAccountId = searchParams.get('bankAccountId') ?? '';

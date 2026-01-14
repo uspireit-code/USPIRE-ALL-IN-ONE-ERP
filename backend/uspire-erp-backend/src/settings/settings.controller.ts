@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { SettingsService } from './settings.service';
@@ -32,13 +33,13 @@ export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
   @Get('organisation')
-  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny(PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL)
   async getOrganisation(@Req() req: Request) {
     return this.settings.getOrganisation(req);
   }
 
   @Put('organisation')
-  @Permissions('SYSTEM_CONFIG_UPDATE')
+  @Permissions(PERMISSIONS.SYSTEM.CONFIG_UPDATE)
   async updateOrganisation(
     @Req() req: Request,
     @Body() dto: UpdateOrganisationDto,
@@ -47,7 +48,7 @@ export class SettingsController {
   }
 
   @Post('organisation/logo')
-  @Permissions('SYSTEM_CONFIG_UPDATE')
+  @Permissions(PERMISSIONS.SYSTEM.CONFIG_UPDATE)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -59,7 +60,7 @@ export class SettingsController {
   }
 
   @Get('organisation/logo')
-  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny(PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL)
   async downloadLogo(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadOrganisationLogo(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -68,13 +69,22 @@ export class SettingsController {
   }
 
   @Get('system')
-  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'FINANCE_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny(
+    PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.FINANCE.CONFIG_VIEW,
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
   async getSystemConfig(@Req() req: Request) {
     return this.settings.getSystemConfig(req);
   }
 
   @Put('system')
-  @PermissionsAny('SYSTEM_CONFIG_UPDATE', 'FINANCE_CONFIG_UPDATE', 'FINANCE_CONFIG_CHANGE', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny(
+    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+    PERMISSIONS.FINANCE.CONFIG_UPDATE,
+    PERMISSIONS.FINANCE.CONFIG_CHANGE,
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
   async updateSystemConfig(
     @Req() req: Request,
     @Body() dto: UpdateSystemConfigDto,
@@ -83,7 +93,7 @@ export class SettingsController {
   }
 
   @Post('system/favicon')
-  @Permissions('SYSTEM_CONFIG_UPDATE')
+  @Permissions(PERMISSIONS.SYSTEM.CONFIG_UPDATE)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -95,7 +105,7 @@ export class SettingsController {
   }
 
   @Get('system/favicon')
-  @PermissionsAny('SYSTEM_CONFIG_VIEW', 'SYSTEM_VIEW_ALL')
+  @PermissionsAny(PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL)
   async downloadFavicon(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadTenantFavicon(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -104,31 +114,31 @@ export class SettingsController {
   }
 
   @Get('users')
-  @Permissions('USER_VIEW')
+  @Permissions(PERMISSIONS.USER.VIEW)
   async listUsers(@Req() req: Request) {
     return this.settings.listUsers(req);
   }
 
   @Get('users/roles')
-  @Permissions('ROLE_VIEW')
+  @Permissions(PERMISSIONS.ROLE.VIEW)
   async listRoles(@Req() req: Request) {
     return this.settings.listRoles(req);
   }
 
   @Post('users/roles/validate')
-  @Permissions('ROLE_VIEW')
+  @Permissions(PERMISSIONS.ROLE.VIEW)
   async validateRoles(@Req() req: Request, @Body() dto: ValidateUserRolesDto) {
     return this.settings.validateRoles(req, dto);
   }
 
   @Post('users')
-  @Permissions('USER_CREATE')
+  @Permissions(PERMISSIONS.USER.CREATE)
   async createUser(@Req() req: Request, @Body() dto: CreateUserDto) {
     return this.settings.createUser(req, dto);
   }
 
   @Patch('users/:id/status')
-  @Permissions('USER_EDIT')
+  @Permissions(PERMISSIONS.USER.EDIT)
   async updateUserStatus(
     @Req() req: Request,
     @Param('id') id: string,
@@ -138,7 +148,7 @@ export class SettingsController {
   }
 
   @Patch('users/:id/roles')
-  @Permissions('ROLE_ASSIGN')
+  @Permissions(PERMISSIONS.ROLE.ASSIGN)
   async updateUserRoles(
     @Req() req: Request,
     @Param('id') id: string,
@@ -148,13 +158,13 @@ export class SettingsController {
   }
 
   @Get('roles')
-  @Permissions('ROLE_VIEW')
+  @Permissions(PERMISSIONS.ROLE.VIEW)
   async listRolesWithPermissions(@Req() req: Request) {
     return this.settings.listRolesWithPermissions(req);
   }
 
   @Get('roles/:id')
-  @Permissions('ROLE_VIEW')
+  @Permissions(PERMISSIONS.ROLE.VIEW)
   async getRoleDetails(@Req() req: Request, @Param('id') id: string) {
     return this.settings.getRoleDetails(req, id);
   }

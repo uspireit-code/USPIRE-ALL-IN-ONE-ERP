@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import type { Department, MasterStatus } from '../../services/master-data';
 import { createDepartment, listDepartments, updateDepartment } from '../../services/master-data';
@@ -12,9 +13,9 @@ function todayIsoDate() {
 export function SettingsDepartmentsPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('MASTER_DATA_DEPARTMENT_VIEW');
-  const canCreate = hasPermission('MASTER_DATA_DEPARTMENT_CREATE');
-  const canEdit = hasPermission('MASTER_DATA_DEPARTMENT_EDIT');
+  const canView = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE);
+  const canEdit = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT);
 
   const [rows, setRows] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);

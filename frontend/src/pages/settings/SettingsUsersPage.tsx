@@ -5,6 +5,7 @@ import { DataTable } from '../../components/DataTable';
 import { Input } from '../../components/Input';
 import { tokens } from '../../designTokens';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import type { SettingsRole, SettingsUser, SoDConflict } from '../../services/settings';
 import { getRoleDisplayInfo } from '../../roleDisplayMap';
 import {
@@ -126,9 +127,9 @@ export function SettingsUsersPage() {
   const { state, hasPermission } = useAuth();
   const me = state.me?.user;
 
-  const canCreateUser = hasPermission('USER_CREATE');
-  const canEditUser = hasPermission('USER_EDIT');
-  const canAssignRoles = hasPermission('ROLE_ASSIGN');
+  const canCreateUser = hasPermission(PERMISSIONS.USER.CREATE);
+  const canEditUser = hasPermission(PERMISSIONS.USER.EDIT);
+  const canAssignRoles = hasPermission(PERMISSIONS.ROLE.ASSIGN);
 
   const [users, setUsers] = useState<SettingsUser[]>([]);
   const [roles, setRoles] = useState<SettingsRole[]>([]);

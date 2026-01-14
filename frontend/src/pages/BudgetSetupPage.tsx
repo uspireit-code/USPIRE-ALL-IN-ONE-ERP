@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import { createBudget, listBudgets, approveBudget, type BudgetListRow } from '../services/budgets';
 import { listGlAccounts, listGlPeriods, type AccountingPeriod, type GlAccountLookup } from '../services/gl';
 import { Alert } from '../components/Alert';
@@ -14,9 +15,9 @@ type PeriodRow = AccountingPeriod;
 export function BudgetSetupPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('BUDGET_VIEW');
-  const canCreate = hasPermission('BUDGET_CREATE');
-  const canApprove = hasPermission('BUDGET_APPROVE');
+  const canView = hasPermission(PERMISSIONS.BUDGET.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.BUDGET.CREATE);
+  const canApprove = hasPermission(PERMISSIONS.BUDGET.APPROVE);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

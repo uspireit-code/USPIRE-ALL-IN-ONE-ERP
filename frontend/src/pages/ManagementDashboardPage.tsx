@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import { getApiErrorMessage } from '../services/api';
 import { getDashboardKpis, getDashboardTrends, type DashboardKpisResponse, type DashboardTrendsResponse } from '../services/dashboard';
 import { Card } from '../components/Card';
@@ -74,7 +75,7 @@ function LineChart(props: LineChartProps) {
 export function ManagementDashboardPage() {
   const { hasPermission } = useAuth();
 
-  if (!hasPermission('dashboard.view')) {
+  if (!hasPermission(PERMISSIONS.DASHBOARD.VIEW)) {
     return <Navigate to="/" replace />;
   }
 

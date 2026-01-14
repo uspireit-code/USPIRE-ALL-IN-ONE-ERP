@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 
 export function ApHomePage() {
   const { hasPermission } = useAuth();
 
-  const canViewInvoices = hasPermission('AP_INVOICE_VIEW');
-  const canCreateInvoice = hasPermission('AP_INVOICE_CREATE');
+  const canViewInvoices = hasPermission(PERMISSIONS.AP.INVOICE.VIEW);
+  const canCreateInvoice = hasPermission(PERMISSIONS.AP.INVOICE.CREATE);
 
-  const canCreateSupplier = hasPermission('AP_SUPPLIER_CREATE');
+  const canCreateSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.CREATE);
 
   return (
     <PageLayout title="Accounts Payable">

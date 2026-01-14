@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { assertCanPost } from '../periods/period-guard';
 import { AddBankStatementLinesDto } from './dto/add-bank-statement-lines.dto';
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';
 import { CreateBankStatementDto } from './dto/create-bank-statement.dto';
@@ -337,57 +341,133 @@ export class BankService {
       }),
     ]);
 
-    if (!paymentPeriod || paymentPeriod.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'BANK_RECONCILIATION_MATCH',
-            entityType: 'BANK_RECONCILIATION_MATCH',
-            entityId: dto.statementLineId,
-            action: 'BANK_RECONCILE',
-            outcome: 'BLOCKED',
-            reason: !paymentPeriod
-              ? 'No accounting period exists for the payment date'
-              : `Accounting period is not OPEN for payment date: ${paymentPeriod.name}`,
-            userId: user.id,
-            permissionUsed: 'BANK_RECONCILE',
+    if (!paymentPeriod) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.BANK_RECONCILIATION_MATCH,
+          entityType: AuditEntityType.BANK_RECONCILIATION_MATCH,
+          entityId: dto.statementLineId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'BANK_RECONCILE',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'POST',
+          reason: 'No accounting period exists for the payment date',
+          metadata: {
+            periodId: null,
+            periodName: null,
+            periodStatus: null,
+            paymentId: payment.id,
+            statementLineId: dto.statementLineId,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Reconciliation blocked by accounting period control',
-        reason: !paymentPeriod
-          ? 'No accounting period exists for the payment date'
-          : `Accounting period is not OPEN for payment date: ${paymentPeriod.name}`,
+        reason: 'No accounting period exists for the payment date',
       });
     }
 
-    if (!linePeriod || linePeriod.status !== 'OPEN') {
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'BANK_RECONCILIATION_MATCH',
-            entityType: 'BANK_RECONCILIATION_MATCH',
-            entityId: dto.statementLineId,
-            action: 'BANK_RECONCILE',
-            outcome: 'BLOCKED',
-            reason: !linePeriod
-              ? 'No accounting period exists for the statement transaction date'
-              : `Accounting period is not OPEN for statement date: ${linePeriod.name}`,
-            userId: user.id,
-            permissionUsed: 'BANK_RECONCILE',
+    // Canonical period semantics: posting-like actions are allowed only in OPEN.
+    // We preserve the existing ForbiddenException payload/messages on failure.
+    try {
+      assertCanPost(paymentPeriod.status, { periodName: paymentPeriod.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.BANK_RECONCILIATION_MATCH,
+          entityType: AuditEntityType.BANK_RECONCILIATION_MATCH,
+          entityId: dto.statementLineId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'BANK_RECONCILE',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'POST',
+          reason: `Accounting period is not OPEN for payment date: ${paymentPeriod.name}`,
+          metadata: {
+            periodId: paymentPeriod.id,
+            periodName: paymentPeriod.name,
+            periodStatus: paymentPeriod.status,
+            paymentId: payment.id,
+            statementLineId: dto.statementLineId,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new ForbiddenException({
         error: 'Reconciliation blocked by accounting period control',
-        reason: !linePeriod
-          ? 'No accounting period exists for the statement transaction date'
-          : `Accounting period is not OPEN for statement date: ${linePeriod.name}`,
+        reason: `Accounting period is not OPEN for payment date: ${paymentPeriod.name}`,
+      });
+    }
+
+    if (!linePeriod) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.BANK_RECONCILIATION_MATCH,
+          entityType: AuditEntityType.BANK_RECONCILIATION_MATCH,
+          entityId: dto.statementLineId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'BANK_RECONCILE',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'POST',
+          reason: 'No accounting period exists for the statement transaction date',
+          metadata: {
+            periodId: null,
+            periodName: null,
+            periodStatus: null,
+            paymentId: payment.id,
+            statementLineId: dto.statementLineId,
+          },
+        },
+        this.prisma,
+      );
+
+      throw new ForbiddenException({
+        error: 'Reconciliation blocked by accounting period control',
+        reason: 'No accounting period exists for the statement transaction date',
+      });
+    }
+
+    try {
+      assertCanPost(linePeriod.status, { periodName: linePeriod.name });
+    } catch {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.BANK_RECONCILIATION_MATCH,
+          entityType: AuditEntityType.BANK_RECONCILIATION_MATCH,
+          entityId: dto.statementLineId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'BLOCKED' as any,
+          action: 'BANK_RECONCILE',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'POST',
+          reason: `Accounting period is not OPEN for statement date: ${linePeriod.name}`,
+          metadata: {
+            periodId: linePeriod.id,
+            periodName: linePeriod.name,
+            periodStatus: linePeriod.status,
+            paymentId: payment.id,
+            statementLineId: dto.statementLineId,
+          },
+        },
+        this.prisma,
+      );
+
+      throw new ForbiddenException({
+        error: 'Reconciliation blocked by accounting period control',
+        reason: `Accounting period is not OPEN for statement date: ${linePeriod.name}`,
       });
     }
 
@@ -418,39 +498,49 @@ export class BankService {
         return createdRec;
       });
 
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'BANK_RECONCILIATION_MATCH',
-            entityType: 'BANK_RECONCILIATION_MATCH',
-            entityId: rec.id,
-            action: 'BANK_RECONCILE',
-            outcome: 'SUCCESS',
-            userId: user.id,
-            permissionUsed: 'BANK_RECONCILE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.BANK_RECONCILIATION_MATCH,
+          entityType: AuditEntityType.BANK_RECONCILIATION_MATCH,
+          entityId: rec.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'BANK_RECONCILE',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'POST',
+          metadata: {
+            paymentId: payment.id,
+            statementLineId: line.id,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       return { reconciliation: rec };
     } catch (e: any) {
       // Unique constraints enforce one-to-one matching.
-      await this.prisma.auditEvent
-        .create({
-          data: {
-            tenantId: tenant.id,
-            eventType: 'BANK_RECONCILIATION_MATCH',
-            entityType: 'BANK_RECONCILIATION_MATCH',
-            entityId: dto.statementLineId,
-            action: 'BANK_RECONCILE',
-            outcome: 'FAILED',
-            reason: e?.message,
-            userId: user.id,
-            permissionUsed: 'BANK_RECONCILE',
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.BANK_RECONCILIATION_MATCH,
+          entityType: AuditEntityType.BANK_RECONCILIATION_MATCH,
+          entityId: dto.statementLineId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'FAILED' as any,
+          action: 'BANK_RECONCILE',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'POST',
+          reason: e?.message,
+          metadata: {
+            paymentId: payment.id,
+            statementLineId: line.id,
           },
-        })
-        .catch(() => undefined);
+        },
+        this.prisma,
+      );
 
       throw new BadRequestException({
         error: 'Reconciliation failed (already reconciled?)',

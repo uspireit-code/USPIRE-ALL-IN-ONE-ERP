@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { listBankAccounts } from '../../services/payments';
 import type { BankAccount } from '../../services/payments';
 import { getStatements, type BankStatementListItem } from '../../services/bankReconciliation';
@@ -11,8 +12,8 @@ function money(n: number) {
 
 export function BankStatementsListPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('BANK_RECONCILIATION_VIEW');
-  const canImport = hasPermission('BANK_STATEMENT_IMPORT');
+  const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
+  const canImport = hasPermission(PERMISSIONS.BANK.STATEMENT.IMPORT);
 
   const [searchParams, setSearchParams] = useSearchParams();
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
@@ -10,10 +11,10 @@ import { createTaxRate, listTaxRates, setTaxRateActive, updateTaxRate } from '..
 export function SettingsTaxRatesPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('TAX_RATE_VIEW');
-  const canCreate = hasPermission('TAX_RATE_CREATE');
-  const canEdit = hasPermission('TAX_RATE_UPDATE');
-  const canDeactivate = hasPermission('TAX_RATE_UPDATE');
+  const canView = hasPermission(PERMISSIONS.TAX.RATE_VIEW);
+  const canCreate = hasPermission(PERMISSIONS.TAX.RATE_CREATE);
+  const canEdit = hasPermission(PERMISSIONS.TAX.RATE_UPDATE);
+  const canDeactivate = hasPermission(PERMISSIONS.TAX.RATE_UPDATE);
 
   const [rows, setRows] = useState<TaxRate[]>([]);
   const [coa, setCoa] = useState<CoaAccount[]>([]);

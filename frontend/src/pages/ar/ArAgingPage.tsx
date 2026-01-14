@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { ApiError } from '../../services/api';
 import { listCustomers, type Customer } from '../../services/ar';
 import { getArAgingReport, type ArAgingReportResponse, type ArAgingReportRow } from '../../services/arAging';
@@ -16,7 +17,7 @@ function money(n: number) {
 export function ArAgingPage() {
   const { hasPermission } = useAuth();
 
-  const canView = hasPermission('AR_AGING_VIEW');
+  const canView = hasPermission(PERMISSIONS.AR.AGING.VIEW);
   const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase() === 'true';
 
   const [asOf, setAsOf] = useState(todayIsoDate());

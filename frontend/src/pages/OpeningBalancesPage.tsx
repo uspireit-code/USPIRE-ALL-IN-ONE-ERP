@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS } from '../auth/permission-catalog';
 import type { ApiError } from '../services/api';
 import { getOpeningBalances, listGlAccounts, postOpeningBalances, upsertOpeningBalances } from '../services/gl';
 import { Card } from '../components/Card';
@@ -21,9 +22,9 @@ export function OpeningBalancesPage() {
     white: '#FCFCFC',
   };
 
-  const canView = hasPermission('FINANCE_GL_VIEW');
-  const canCreate = hasPermission('FINANCE_GL_CREATE');
-  const canPost = hasPermission('FINANCE_GL_FINAL_POST');
+  const canView = hasPermission(PERMISSIONS.GL.VIEW);
+  const canCreate = hasPermission(PERMISSIONS.GL.CREATE);
+  const canPost = hasPermission(PERMISSIONS.GL.FINAL_POST);
 
   const [cutoverDate, setCutoverDate] = useState(DEFAULT_CUTOVER_DATE);
   const [accounts, setAccounts] = useState<Array<{ id: string; code: string; name: string; type: string; isActive: boolean }>>([]);

@@ -5,6 +5,7 @@ import { Button } from '../../../components/Button';
 import { Card } from '../../../components/Card';
 import { Input } from '../../../components/Input';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getApiErrorMessage } from '../../../services/api';
 import { createBudget } from '../../../services/budgets';
 import { listAllGlAccounts, listGlPeriods, type AccountingPeriod, type GlAccountLookup } from '../../../services/gl';
@@ -16,8 +17,8 @@ export function BudgetCreatePage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
-  const canCreate = hasPermission('BUDGET_CREATE');
-  const canView = hasPermission('BUDGET_VIEW');
+  const canCreate = hasPermission(PERMISSIONS.BUDGET.CREATE);
+  const canView = hasPermission(PERMISSIONS.BUDGET.VIEW);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import {
   downloadTrialBalanceExport,
   getTrialBalance,
@@ -29,9 +30,9 @@ function money(n: number) {
 
 export function TrialBalancePage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('FINANCE_TB_VIEW');
-  const canGlView = hasPermission('FINANCE_GL_VIEW');
-  const canExport = hasPermission('FINANCE_REPORT_EXPORT');
+  const canView = hasPermission(PERMISSIONS.REPORT.VIEW.TRIAL_BALANCE);
+  const canGlView = hasPermission(PERMISSIONS.GL.VIEW);
+  const canExport = hasPermission(PERMISSIONS.REPORT.EXPORT);
 
   const [from, setFrom] = useState(firstDayOfMonthIso());
   const [to, setTo] = useState(todayIsoDate());
@@ -133,7 +134,9 @@ export function TrialBalancePage() {
         </label>
       </div>
 
-      {!canExport ? <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Export disabled: missing FINANCE_REPORT_EXPORT permission.</div> : null}
+      {!canExport ? (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>Export disabled: missing {PERMISSIONS.REPORT.EXPORT} permission.</div>
+      ) : null}
 
       {error ? (
         <Alert tone="error" title="Request failed" style={{ marginTop: 12 }}>

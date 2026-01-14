@@ -10,6 +10,7 @@ import type { Request } from 'express';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { getFirstEnv } from '../internal/env.util';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
@@ -328,18 +329,18 @@ export class AuthService {
 
     if (userAdminLikeRoles.length > 0) {
       const requiredPermissionCodes = [
-        'MASTER_DATA_DEPARTMENT_VIEW',
-        'MASTER_DATA_DEPARTMENT_CREATE',
-        'MASTER_DATA_DEPARTMENT_EDIT',
+        PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+        PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE,
+        PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT,
 
-        'MASTER_DATA_PROJECT_VIEW',
-        'MASTER_DATA_PROJECT_CREATE',
-        'MASTER_DATA_PROJECT_EDIT',
-        'MASTER_DATA_PROJECT_CLOSE',
+        PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+        PERMISSIONS.MASTER_DATA.PROJECT.CREATE,
+        PERMISSIONS.MASTER_DATA.PROJECT.EDIT,
+        PERMISSIONS.MASTER_DATA.PROJECT.CLOSE,
 
-        'MASTER_DATA_FUND_VIEW',
-        'MASTER_DATA_FUND_CREATE',
-        'MASTER_DATA_FUND_EDIT',
+        PERMISSIONS.MASTER_DATA.FUND.VIEW,
+        PERMISSIONS.MASTER_DATA.FUND.CREATE,
+        PERMISSIONS.MASTER_DATA.FUND.EDIT,
       ] as const;
 
       const perms = await this.prisma.permission.findMany({

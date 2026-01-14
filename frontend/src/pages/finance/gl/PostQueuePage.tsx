@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
+import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
@@ -25,7 +26,7 @@ export function PostQueuePage() {
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
-  const canFinalPost = hasPermission('FINANCE_GL_FINAL_POST');
+  const canFinalPost = hasPermission(PERMISSIONS.GL.FINAL_POST);
 
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);

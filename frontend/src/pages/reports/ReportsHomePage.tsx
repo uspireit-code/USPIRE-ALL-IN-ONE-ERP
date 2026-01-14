@@ -1,20 +1,21 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { PageLayout } from '../../components/PageLayout';
 
 export function ReportsHomePage() {
   const { hasPermission } = useAuth();
 
   const items: Array<{ to: string; label: string; visible: boolean }> = [
-    { to: '/reports/trial-balance', label: 'Trial Balance', visible: hasPermission('FINANCE_TB_VIEW') },
-    { to: '/reports/pnl', label: 'Profit & Loss', visible: hasPermission('report.view.pl') },
-    { to: '/reports/balance-sheet', label: 'Balance Sheet', visible: hasPermission('report.view.bs') },
-    { to: '/reports/soce', label: 'SOCE', visible: hasPermission('FINANCE_SOE_VIEW') },
-    { to: '/reports/cash-flow', label: 'Cash Flow (Indirect)', visible: hasPermission('FINANCE_CASHFLOW_VIEW') },
-    { to: '/reports/disclosure-notes', label: 'Disclosure Notes', visible: hasPermission('FINANCE_DISCLOSURE_VIEW') },
-    { to: '/reports/ap-aging', label: 'AP Aging', visible: hasPermission('FINANCE_AP_AGING_VIEW') },
-    { to: '/reports/ar-aging', label: 'AR Aging', visible: hasPermission('FINANCE_AR_AGING_VIEW') },
-    { to: '/reports/vat', label: 'VAT Summary', visible: hasPermission('TAX_REPORT_VIEW') },
+    { to: '/reports/trial-balance', label: 'Trial Balance', visible: hasPermission(PERMISSIONS.REPORT.VIEW.TRIAL_BALANCE) },
+    { to: '/reports/pnl', label: 'Profit & Loss', visible: hasPermission(PERMISSIONS.REPORT.VIEW.PROFIT_LOSS) },
+    { to: '/reports/balance-sheet', label: 'Balance Sheet', visible: hasPermission(PERMISSIONS.REPORT.VIEW.BALANCE_SHEET) },
+    { to: '/reports/soce', label: 'SOCE', visible: hasPermission(PERMISSIONS.REPORT.VIEW.SOCE) },
+    { to: '/reports/cash-flow', label: 'Cash Flow (Indirect)', visible: hasPermission(PERMISSIONS.REPORT.VIEW.CASH_FLOW) },
+    { to: '/reports/disclosure-notes', label: 'Disclosure Notes', visible: hasPermission(PERMISSIONS.DISCLOSURE.VIEW) },
+    { to: '/reports/ap-aging', label: 'AP Aging', visible: hasPermission(PERMISSIONS.REPORT.VIEW.AP_AGING) },
+    { to: '/reports/ar-aging', label: 'AR Aging', visible: hasPermission(PERMISSIONS.REPORT.VIEW.AR_AGING) },
+    { to: '/reports/vat', label: 'VAT Summary', visible: hasPermission(PERMISSIONS.REPORT.VIEW.VAT_SUMMARY) },
   ];
 
   const visibleItems = items.filter((i) => i.visible);

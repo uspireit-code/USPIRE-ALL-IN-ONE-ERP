@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import {
   approveForecast,
@@ -41,10 +42,10 @@ type Row = {
 export function ForecastDetailsPage() {
   const { forecastId } = useParams();
   const { state, hasPermission } = useAuth();
-  const canView = hasPermission('forecast.view');
-  const canSubmit = hasPermission('forecast.submit');
-  const canApprove = hasPermission('forecast.approve');
-  const canEdit = hasPermission('forecast.edit');
+  const canView = hasPermission(PERMISSIONS.FORECAST.VIEW);
+  const canSubmit = hasPermission(PERMISSIONS.FORECAST.SUBMIT);
+  const canApprove = hasPermission(PERMISSIONS.FORECAST.APPROVE);
+  const canEdit = hasPermission(PERMISSIONS.FORECAST.EDIT);
 
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(false);

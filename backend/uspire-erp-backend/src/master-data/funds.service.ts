@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreateFundDto, UpdateFundDto } from './funds.dto';
 
 @Injectable()
@@ -100,7 +101,7 @@ export class FundsService {
             action: 'MASTER_DATA_FUND_CREATE',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_FUND_CREATE',
+            permissionUsed: PERMISSIONS.MASTER_DATA.FUND.CREATE,
           },
         })
         .catch(() => undefined);
@@ -121,7 +122,7 @@ export class FundsService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to create fund'),
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_FUND_CREATE',
+            permissionUsed: PERMISSIONS.MASTER_DATA.FUND.CREATE,
           },
         })
         .catch(() => undefined);
@@ -240,7 +241,7 @@ export class FundsService {
             action: 'MASTER_DATA_FUND_EDIT',
             outcome: 'SUCCESS',
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_FUND_EDIT',
+            permissionUsed: PERMISSIONS.MASTER_DATA.FUND.EDIT,
           },
         })
         .catch(() => undefined);
@@ -261,7 +262,7 @@ export class FundsService {
             outcome: 'FAILED',
             reason: String(e?.message ?? 'Failed to update fund'),
             userId: user.id,
-            permissionUsed: 'MASTER_DATA_FUND_EDIT',
+            permissionUsed: PERMISSIONS.MASTER_DATA.FUND.EDIT,
           },
         })
         .catch(() => undefined);

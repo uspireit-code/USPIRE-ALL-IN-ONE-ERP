@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 
@@ -21,19 +22,19 @@ export class BudgetsController {
   constructor(private readonly budgets: BudgetsService) {}
 
   @Post()
-  @Permissions('BUDGET_CREATE')
+  @Permissions(PERMISSIONS.BUDGET.CREATE)
   async createBudget(@Req() req: Request, @Body() dto: CreateBudgetDto) {
     return this.budgets.createBudget(req, dto);
   }
 
   @Post(':id/approve')
-  @Permissions('BUDGET_APPROVE')
+  @Permissions(PERMISSIONS.BUDGET.APPROVE)
   async approveBudget(@Req() req: Request, @Param('id') id: string) {
     return this.budgets.approveBudget(req, id);
   }
 
   @Get()
-  @Permissions('BUDGET_VIEW')
+  @Permissions(PERMISSIONS.BUDGET.VIEW)
   async listBudgets(
     @Req() req: Request,
     @Query('fiscalYear') fiscalYear?: string,
@@ -45,7 +46,7 @@ export class BudgetsController {
   }
 
   @Get('vs-actual')
-  @Permissions('FINANCE_BUDGET_VIEW')
+  @Permissions(PERMISSIONS.BUDGET.FINANCE_VIEW)
   async budgetVsActualPaged(
     @Req() req: Request,
     @Query('fiscalYear') fiscalYear?: string,
@@ -72,7 +73,7 @@ export class BudgetsController {
   }
 
   @Get('vs-actual/:accountId/:periodId/journals')
-  @Permissions('FINANCE_BUDGET_VIEW')
+  @Permissions(PERMISSIONS.BUDGET.FINANCE_VIEW)
   async budgetVsActualDrilldownJournals(
     @Req() req: Request,
     @Param('accountId') accountId: string,
@@ -92,7 +93,7 @@ export class BudgetsController {
   }
 
   @Get('vs-actual/matrix')
-  @Permissions('BUDGET_VS_ACTUAL_VIEW')
+  @Permissions(PERMISSIONS.BUDGET.VS_ACTUAL_VIEW)
   async budgetVsActualMatrix(
     @Req() req: Request,
     @Query('fiscalYear') fiscalYear?: string,
@@ -104,7 +105,7 @@ export class BudgetsController {
   }
 
   @Get(':id')
-  @Permissions('BUDGET_VIEW')
+  @Permissions(PERMISSIONS.BUDGET.VIEW)
   async getBudget(@Req() req: Request, @Param('id') id: string) {
     return this.budgets.getBudget(req, id);
   }

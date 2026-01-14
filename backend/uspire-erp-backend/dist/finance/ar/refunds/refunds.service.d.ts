@@ -1,13 +1,17 @@
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { GlService } from '../../../gl/gl.service';
-import type { ApproveRefundDto, CreateCustomerRefundDto, ListRefundsQueryDto, VoidRefundDto } from './refunds.dto';
+import { ReportExportService } from '../../../reports/report-export.service';
+import type { CreateCustomerRefundDto, ListRefundsQueryDto, VoidRefundDto } from './refunds.dto';
 export declare class FinanceArRefundsService {
     private readonly prisma;
     private readonly gl;
+    private readonly exports;
     private readonly REFUND_NUMBER_SEQUENCE_NAME;
-    constructor(prisma: PrismaService, gl: GlService);
+    constructor(prisma: PrismaService, gl: GlService, exports: ReportExportService);
+    exportPdf(req: Request, id: string): Promise<Buffer>;
     private round2;
+    approve(req: Request, id: string): Promise<any>;
     private normalizeMoney;
     private ensureTenant;
     private ensureUser;
@@ -21,10 +25,14 @@ export declare class FinanceArRefundsService {
             creditNoteNumber: string;
             customerId: any;
             currency: string;
+            exchangeRate: number;
             totalAmount: number;
         };
         refunded: number;
         refundable: number;
+    }>;
+    listRefundableCustomers(req: Request): Promise<{
+        items: any;
     }>;
     listRefundableCreditNotes(req: Request, customerId: string): Promise<{
         items: any;
@@ -67,7 +75,6 @@ export declare class FinanceArRefundsService {
     private resolveClearingAccountId;
     create(req: Request, dto: CreateCustomerRefundDto): Promise<any>;
     submit(req: Request, id: string): Promise<any>;
-    approve(req: Request, id: string, _dto: ApproveRefundDto): Promise<any>;
     post(req: Request, id: string): Promise<any>;
     void(req: Request, id: string, dto: VoidRefundDto): Promise<any>;
 }

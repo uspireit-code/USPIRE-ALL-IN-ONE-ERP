@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getVatSummary, type VatSummaryResponse } from '../../services/reports';
 
 function todayIsoDate() {
@@ -19,7 +20,7 @@ function money(n: number) {
 
 export function VatSummaryPage() {
   const { hasPermission } = useAuth();
-  const canView = hasPermission('TAX_REPORT_VIEW');
+  const canView = hasPermission(PERMISSIONS.REPORT.VIEW.VAT_SUMMARY);
 
   const [from, setFrom] = useState(firstDayOfMonthIso());
   const [to, setTo] = useState(todayIsoDate());

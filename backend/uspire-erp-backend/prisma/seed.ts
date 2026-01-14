@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient, TenantStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { PERMISSIONS } from '../src/rbac/permission-catalog';
 
 const prisma = new PrismaClient();
 
@@ -137,189 +138,193 @@ async function main() {
   });
 
   const permissions = [
-    { code: 'SYSTEM_VIEW_ALL', description: 'System-wide visibility across all modules' },
-    { code: 'FINANCE_VIEW_ALL', description: 'View all finance modules and screens (visibility only)' },
-    { code: 'SETTINGS_VIEW', description: 'View system and finance settings' },
-    { code: 'SYSTEM_CONFIG_CHANGE', description: 'Change system configuration (non-finance)' },
-    { code: 'FINANCE_CONFIG_CHANGE', description: 'Change finance configuration (governed)' },
+    { code: PERMISSIONS.SYSTEM.VIEW_ALL, description: 'System-wide visibility across all modules' },
+    { code: PERMISSIONS.FINANCE.VIEW_ALL, description: 'View all finance modules and screens (visibility only)' },
+    { code: PERMISSIONS.SYSTEM.SETTINGS_VIEW, description: 'View system and finance settings' },
+    { code: PERMISSIONS.SYSTEM.CONFIG_CHANGE, description: 'Change system configuration (non-finance)' },
+    { code: PERMISSIONS.FINANCE.CONFIG_CHANGE, description: 'Change finance configuration (governed)' },
 
-    { code: 'SYSTEM_CONFIG_VIEW', description: 'View system configuration' },
-    { code: 'SYSTEM_CONFIG_UPDATE', description: 'Update system configuration' },
+    { code: PERMISSIONS.SYSTEM.CONFIG_VIEW, description: 'View system configuration' },
+    { code: PERMISSIONS.SYSTEM.CONFIG_UPDATE, description: 'Update system configuration' },
 
-    { code: 'USER_CREATE', description: 'Create users' },
-    { code: 'USER_VIEW', description: 'View users' },
-    { code: 'USER_EDIT', description: 'Edit users (status/profile)' },
-    { code: 'USER_ASSIGN_ROLE', description: 'Assign roles to users' },
-    { code: 'ROLE_VIEW', description: 'View roles' },
-    { code: 'ROLE_ASSIGN', description: 'Assign permissions to roles' },
+    { code: PERMISSIONS.USER.CREATE, description: 'Create users' },
+    { code: PERMISSIONS.USER.VIEW, description: 'View users' },
+    { code: PERMISSIONS.USER.EDIT, description: 'Edit users (status/profile)' },
+    { code: PERMISSIONS.USER.ASSIGN_ROLE, description: 'Assign roles to users' },
+    { code: PERMISSIONS.ROLE.VIEW, description: 'View roles' },
+    { code: PERMISSIONS.ROLE.ASSIGN, description: 'Assign permissions to roles' },
 
-    { code: 'RECEIPT_POST', description: 'Post receipts' },
-    { code: 'CREDIT_NOTE_POST', description: 'Post credit notes' },
-    { code: 'REFUND_POST', description: 'Post refunds' },
+    { code: PERMISSIONS.AR.RECEIPT_POST, description: 'Post receipts' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_POST, description: 'Post credit notes' },
+    { code: PERMISSIONS.AR.REFUND_POST, description: 'Post refunds' },
 
-    { code: 'FINANCE_GL_VIEW', description: 'View General Ledger' },
-    { code: 'FINANCE_GL_CREATE', description: 'Create draft journal entries and accounts' },
-    { code: 'FINANCE_GL_POST', description: 'Post General Ledger entries' },
-    { code: 'FINANCE_GL_FINAL_POST', description: 'Final post General Ledger entries (controller)' },
-    { code: 'FINANCE_GL_APPROVE', description: 'Approve General Ledger postings' },
-    { code: 'FINANCE_GL_RECURRING_MANAGE', description: 'Manage recurring journal templates' },
-    { code: 'FINANCE_GL_RECURRING_GENERATE', description: 'Generate journals from recurring templates' },
-    { code: 'FINANCE_COA_VIEW', description: 'View Chart of Accounts (finance)' },
-    { code: 'FINANCE_COA_UPDATE', description: 'Update Chart of Accounts (finance)' },
-    { code: 'FINANCE_COA_UNLOCK', description: 'Allows unlocking the Chart of Accounts for governed structural changes' },
-    { code: 'coa.view', description: 'View Chart of Accounts' },
-    { code: 'coa.create', description: 'Create Chart of Accounts entries' },
-    { code: 'coa.update', description: 'Update Chart of Accounts entries' },
-    { code: 'coa.freeze', description: 'Freeze / unfreeze the Chart of Accounts' },
-    { code: 'FINANCE_REPORTS_VIEW', description: 'Access financial reports module and view financial statements' },
-    { code: 'AUDIT_VIEW', description: 'View audit events' },
-    { code: 'AUDIT_EVIDENCE_UPLOAD', description: 'Upload audit evidence attachments' },
-    { code: 'AUDIT_EVIDENCE_VIEW', description: 'View and download audit evidence attachments' },
-    { code: 'AUDIT_REVIEW_PACK_VIEW', description: 'View management & audit review packs' },
-    { code: 'AUDIT_REVIEW_PACK_GENERATE', description: 'Generate and download management & audit review packs' },
-    { code: 'BUDGET_CREATE', description: 'Create draft budgets and budget revisions' },
-    { code: 'BUDGET_APPROVE', description: 'Approve budgets (activate for fiscal year)' },
-    { code: 'BUDGET_VIEW', description: 'View budgets and budget lines' },
-    { code: 'BUDGET_SETUP', description: 'Access budget setup / maintenance screens' },
-    { code: 'BUDGET_VS_ACTUAL_VIEW', description: 'View budget vs actual reporting' },
-    { code: 'FINANCE_BUDGET_VIEW', description: 'View Finance budgets and Budget vs Actual reporting' },
-    { code: 'dashboard.view', description: 'View management dashboards' },
-    { code: 'forecast.create', description: 'Create draft annual forecasts' },
-    { code: 'forecast.edit', description: 'Edit draft annual forecasts and versions' },
-    { code: 'forecast.submit', description: 'Submit forecasts for approval' },
-    { code: 'forecast.approve', description: 'Approve forecasts (maker-checker enforced)' },
-    { code: 'forecast.view', description: 'View annual forecasts and versions' },
-    { code: 'FA_CATEGORY_MANAGE', description: 'Manage fixed asset categories' },
-    { code: 'FA_ASSET_CREATE', description: 'Create fixed assets (draft)' },
-    { code: 'FA_ASSET_CAPITALIZE', description: 'Capitalize fixed assets' },
-    { code: 'FA_DEPRECIATION_RUN', description: 'Run fixed asset depreciation' },
-    { code: 'FA_DISPOSE', description: 'Dispose fixed assets' },
-    { code: 'FINANCE_PERIOD_CREATE', description: 'Create accounting periods' },
-    { code: 'FINANCE_PERIOD_VIEW', description: 'View accounting periods' },
-    { code: 'FINANCE_PERIOD_REVIEW', description: 'Review month-end close checklist for accounting periods' },
-    { code: 'FINANCE_PERIOD_CHECKLIST_VIEW', description: 'View month-end close checklist for accounting periods' },
-    { code: 'FINANCE_PERIOD_CHECKLIST_COMPLETE', description: 'Complete month-end close checklist items for accounting periods' },
-    { code: 'FINANCE_PERIOD_CLOSE', description: 'Close accounting periods' },
-    { code: 'FINANCE_PERIOD_CLOSE_APPROVE', description: 'Approve and execute accounting period close' },
-    { code: 'FINANCE_PERIOD_REOPEN', description: 'Re-open (unlock) an accounting period' },
-    { code: 'FINANCE_PERIOD_CORRECT', description: 'Correct accounting period dates (governed)' },
-    { code: 'FINANCE_TB_VIEW', description: 'View Trial Balance' },
-    { code: 'FINANCE_PL_VIEW', description: 'View Profit & Loss statement' },
-    { code: 'FINANCE_BS_VIEW', description: 'View Balance Sheet' },
-    { code: 'FINANCE_PNL_VIEW', description: 'View Profit & Loss (engine)' },
-    { code: 'FINANCE_BALANCE_SHEET_VIEW', description: 'View Balance Sheet (engine)' },
-    { code: 'FINANCE_SOCE_VIEW', description: 'View Statement of Changes in Equity' },
-    { code: 'FINANCE_CASH_FLOW_VIEW', description: 'View Cash Flow statement' },
-    { code: 'FINANCE_SOE_VIEW', description: 'View Statement of Changes in Equity' },
-    { code: 'FINANCE_CASHFLOW_VIEW', description: 'View Cash Flow statement' },
-    { code: 'FINANCE_AP_AGING_VIEW', description: 'View Accounts Payable aging report' },
-    { code: 'FINANCE_AR_AGING_VIEW', description: 'View Accounts Receivable aging report' },
-    { code: 'FINANCE_SUPPLIER_STATEMENT_VIEW', description: 'View supplier statement' },
-    { code: 'FINANCE_CUSTOMER_STATEMENT_VIEW', description: 'View customer statement' },
-    { code: 'report.view.pl', description: 'View Profit & Loss (presentation)' },
-    { code: 'report.view.bs', description: 'View Balance Sheet (presentation)' },
-    { code: 'report.view.soce', description: 'View Statement of Changes in Equity (presentation)' },
-    { code: 'report.view.cf', description: 'View Cash Flow (presentation)' },
-    { code: 'report.export', description: 'Export financial reports (PDF/CSV/XLSX)' },
-    { code: 'FINANCE_REPORT_GENERATE', description: 'Run / generate financial statements (SOCE, Cash Flow, etc.)' },
-    { code: 'FINANCE_REPORT_EXPORT', description: 'Export financial statements (PDF/CSV/XLSX)' },
-    { code: 'FINANCE_DISCLOSURE_GENERATE', description: 'Generate disclosure notes' },
-    { code: 'FINANCE_DISCLOSURE_VIEW', description: 'View disclosure notes' },
-    { code: 'TAX_RATE_CREATE', description: 'Create tax / VAT rates' },
-    { code: 'TAX_RATE_VIEW', description: 'View tax / VAT rates' },
-    { code: 'TAX_RATE_UPDATE', description: 'Update tax / VAT rates' },
-    { code: 'TAX_CONFIG_UPDATE', description: 'Update tax / VAT configuration' },
-    { code: 'TAX_REPORT_VIEW', description: 'View VAT reports' },
-    { code: 'AP_SUPPLIER_CREATE', description: 'Create suppliers' },
-    { code: 'AP_INVOICE_CREATE', description: 'Create supplier invoices' },
-    { code: 'AP_INVOICE_SUBMIT', description: 'Submit supplier invoices' },
-    { code: 'AP_INVOICE_APPROVE', description: 'Approve supplier invoices' },
-    { code: 'AP_INVOICE_POST', description: 'Post supplier invoices to GL' },
-    { code: 'AP_INVOICE_VIEW', description: 'View supplier invoices' },
-    { code: 'AR_CUSTOMER_CREATE', description: 'Create customers' },
-    { code: 'AR_INVOICE_CREATE', description: 'Create customer invoices' },
-    { code: 'INVOICE_CREATE', description: 'Create customer invoices (alias)' },
-    { code: 'AR_INVOICE_EDIT_DRAFT', description: 'Edit draft customer invoices' },
-    { code: 'AR_INVOICE_SUBMIT', description: 'Submit customer invoices' },
-    { code: 'AR_INVOICE_APPROVE', description: 'Approve customer invoices' },
-    { code: 'AR_INVOICE_POST', description: 'Post customer invoices to GL' },
-    { code: 'INVOICE_POST', description: 'Post customer invoices to GL (governed)' },
-    { code: 'AR_INVOICE_VIEW', description: 'View customer invoices' },
-    { code: 'INVOICE_VIEW', description: 'View customer invoices (alias)' },
-    { code: 'AR_RECEIPTS_VIEW', description: 'View customer receipts' },
-    { code: 'AR_RECEIPTS_CREATE', description: 'Create customer receipts' },
-    { code: 'RECEIPT_CREATE', description: 'Create customer receipts (alias)' },
-    { code: 'AR_RECEIPT_VOID', description: 'Void customer receipts' },
-    { code: 'RECEIPT_VIEW', description: 'View customer receipts (alias)' },
+    { code: PERMISSIONS.GL.VIEW, description: 'View General Ledger' },
+    { code: PERMISSIONS.GL.CREATE, description: 'Create draft journal entries and accounts' },
+    { code: PERMISSIONS.GL.POST, description: 'Post General Ledger entries' },
+    { code: PERMISSIONS.GL.FINAL_POST, description: 'Final post General Ledger entries (controller)' },
+    { code: PERMISSIONS.GL.APPROVE, description: 'Approve General Ledger postings' },
+    { code: PERMISSIONS.GL.RECURRING_MANAGE, description: 'Manage recurring journal templates' },
+    { code: PERMISSIONS.GL.RECURRING_GENERATE, description: 'Generate journals from recurring templates' },
+    { code: PERMISSIONS.COA.VIEW, description: 'View Chart of Accounts (finance)' },
+    { code: PERMISSIONS.COA.UPDATE, description: 'Update Chart of Accounts (finance)' },
+    { code: PERMISSIONS.COA.UNLOCK, description: 'Allows unlocking the Chart of Accounts for governed structural changes' },
+    { code: PERMISSIONS.COA.LEGACY_VIEW, description: 'View Chart of Accounts' },
+    { code: PERMISSIONS.COA.LEGACY_CREATE, description: 'Create Chart of Accounts entries' },
+    { code: PERMISSIONS.COA.LEGACY_UPDATE, description: 'Update Chart of Accounts entries' },
+    { code: PERMISSIONS.COA.FREEZE, description: 'Freeze / unfreeze the Chart of Accounts' },
+    { code: PERMISSIONS.REPORT.REPORTS_VIEW, description: 'Access financial reports module and view financial statements' },
+    { code: PERMISSIONS.AUDIT_VIEW, description: 'View audit events' },
+    { code: PERMISSIONS.AUDIT.EVIDENCE_UPLOAD, description: 'Upload audit evidence attachments' },
+    { code: PERMISSIONS.AUDIT.EVIDENCE_VIEW, description: 'View and download audit evidence attachments' },
+    { code: PERMISSIONS.AUDIT.REVIEW_PACK_VIEW, description: 'View management & audit review packs' },
+    { code: PERMISSIONS.AUDIT.REVIEW_PACK_GENERATE, description: 'Generate and download management & audit review packs' },
+    { code: PERMISSIONS.BUDGET.CREATE, description: 'Create draft budgets and budget revisions' },
+    { code: PERMISSIONS.BUDGET.APPROVE, description: 'Approve budgets (activate for fiscal year)' },
+    { code: PERMISSIONS.BUDGET.VIEW, description: 'View budgets and budget lines' },
+    { code: PERMISSIONS.BUDGET.SETUP, description: 'Access budget setup / maintenance screens' },
+    { code: PERMISSIONS.BUDGET.VS_ACTUAL_VIEW, description: 'View budget vs actual reporting' },
+    { code: PERMISSIONS.BUDGET.FINANCE_VIEW, description: 'View Finance budgets and Budget vs Actual reporting' },
+    { code: PERMISSIONS.DASHBOARD.VIEW, description: 'View management dashboards' },
+    { code: PERMISSIONS.FORECAST.CREATE, description: 'Create draft annual forecasts' },
+    { code: PERMISSIONS.FORECAST.EDIT, description: 'Edit draft annual forecasts and versions' },
+    { code: PERMISSIONS.FORECAST.SUBMIT, description: 'Submit forecasts for approval' },
+    { code: PERMISSIONS.FORECAST.APPROVE, description: 'Approve forecasts (maker-checker enforced)' },
+    { code: PERMISSIONS.FORECAST.VIEW, description: 'View annual forecasts and versions' },
+    { code: PERMISSIONS.FA.CATEGORY_MANAGE, description: 'Manage fixed asset categories' },
+    { code: PERMISSIONS.FA.ASSET_CREATE, description: 'Create fixed assets (draft)' },
+    { code: PERMISSIONS.FA.ASSET_CAPITALIZE, description: 'Capitalize fixed assets' },
+    { code: PERMISSIONS.FA.DEPRECIATION_RUN, description: 'Run fixed asset depreciation' },
+    { code: PERMISSIONS.FA.DISPOSE, description: 'Dispose fixed assets' },
+    { code: PERMISSIONS.PERIOD.CREATE, description: 'Create accounting periods' },
+    { code: PERMISSIONS.PERIOD.VIEW, description: 'View accounting periods' },
+    { code: PERMISSIONS.PERIOD.REVIEW, description: 'Review month-end close checklist for accounting periods' },
+    { code: PERMISSIONS.PERIOD.CHECKLIST_VIEW, description: 'View month-end close checklist for accounting periods' },
+    { code: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE, description: 'Complete month-end close checklist items for accounting periods' },
+    { code: PERMISSIONS.PERIOD.CLOSE, description: 'Close accounting periods' },
+    { code: PERMISSIONS.PERIOD.CLOSE_APPROVE, description: 'Approve and execute accounting period close' },
+    { code: PERMISSIONS.PERIOD.REOPEN, description: 'Re-open (unlock) an accounting period' },
+    { code: PERMISSIONS.PERIOD.CORRECT, description: 'Correct accounting period dates (governed)' },
+    { code: PERMISSIONS.REPORT.TB_VIEW, description: 'View Trial Balance' },
+    { code: PERMISSIONS.REPORT.PL_VIEW_LEGACY, description: 'View Profit & Loss statement' },
+    { code: PERMISSIONS.REPORT.BS_VIEW_LEGACY, description: 'View Balance Sheet' },
+    { code: PERMISSIONS.REPORT.PNL_VIEW, description: 'View Profit & Loss (engine)' },
+    { code: PERMISSIONS.REPORT.BALANCE_SHEET_VIEW, description: 'View Balance Sheet (engine)' },
+    { code: PERMISSIONS.REPORT.SOCE_VIEW, description: 'View Statement of Changes in Equity' },
+    { code: PERMISSIONS.REPORT.CASH_FLOW_VIEW, description: 'View Cash Flow statement' },
+    { code: PERMISSIONS.REPORT.SOE_VIEW, description: 'View Statement of Changes in Equity' },
+    { code: PERMISSIONS.REPORT.CASHFLOW_VIEW, description: 'View Cash Flow statement' },
+    { code: PERMISSIONS.REPORT.AP_AGING_VIEW, description: 'View Accounts Payable aging report' },
+    { code: PERMISSIONS.REPORT.AR_AGING_VIEW, description: 'View Accounts Receivable aging report' },
+    { code: PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW, description: 'View supplier statement' },
+    { code: PERMISSIONS.REPORT.CUSTOMER_STATEMENT_VIEW, description: 'View customer statement' },
+    { code: PERMISSIONS.REPORT.PRESENTATION_PL_VIEW, description: 'View Profit & Loss (presentation)' },
+    { code: PERMISSIONS.REPORT.PRESENTATION_BS_VIEW, description: 'View Balance Sheet (presentation)' },
+    { code: PERMISSIONS.REPORT.PRESENTATION_SOCE_VIEW, description: 'View Statement of Changes in Equity (presentation)' },
+    { code: PERMISSIONS.REPORT.PRESENTATION_CF_VIEW, description: 'View Cash Flow (presentation)' },
+    { code: PERMISSIONS.REPORT.EXPORT, description: 'Export financial reports (PDF/CSV/XLSX)' },
+    { code: PERMISSIONS.REPORT.REPORT_GENERATE, description: 'Run / generate financial statements (SOCE, Cash Flow, etc.)' },
+    { code: PERMISSIONS.REPORT.REPORT_EXPORT, description: 'Export financial statements (PDF/CSV/XLSX)' },
+    { code: PERMISSIONS.REPORT.DISCLOSURE_GENERATE, description: 'Generate disclosure notes' },
+    { code: PERMISSIONS.REPORT.DISCLOSURE_VIEW, description: 'View disclosure notes' },
+    { code: PERMISSIONS.TAX.RATE_CREATE, description: 'Create tax / VAT rates' },
+    { code: PERMISSIONS.TAX.RATE_VIEW, description: 'View tax / VAT rates' },
+    { code: PERMISSIONS.TAX.RATE_UPDATE, description: 'Update tax / VAT rates' },
+    { code: PERMISSIONS.TAX.CONFIG_UPDATE, description: 'Update tax / VAT configuration' },
+    { code: PERMISSIONS.TAX.REPORT_VIEW, description: 'View VAT reports' },
+    { code: PERMISSIONS.AP.SUPPLIER_CREATE, description: 'Create suppliers' },
+    { code: PERMISSIONS.AP.INVOICE_CREATE, description: 'Create supplier invoices' },
+    { code: PERMISSIONS.AP.INVOICE_SUBMIT, description: 'Submit supplier invoices' },
+    { code: PERMISSIONS.AP.INVOICE_APPROVE, description: 'Approve supplier invoices' },
+    { code: PERMISSIONS.AP.INVOICE_POST, description: 'Post supplier invoices to GL' },
+    { code: PERMISSIONS.AP.INVOICE_VIEW, description: 'View supplier invoices' },
+    { code: PERMISSIONS.AR.CUSTOMER_CREATE, description: 'Create customers' },
+    { code: PERMISSIONS.AR.INVOICE_CREATE_RBAC, description: 'Create customer invoices' },
+    { code: PERMISSIONS.AR.INVOICE_CREATE, description: 'Create customer invoices (alias)' },
+    { code: PERMISSIONS.AR.INVOICE_EDIT_DRAFT, description: 'Edit draft customer invoices' },
+    { code: PERMISSIONS.AR.INVOICE_SUBMIT_RBAC, description: 'Submit customer invoices' },
+    { code: PERMISSIONS.AR.INVOICE_APPROVE_RBAC, description: 'Approve customer invoices' },
+    { code: PERMISSIONS.AR.INVOICE_POST_RBAC, description: 'Post customer invoices to GL' },
+    { code: PERMISSIONS.AR.INVOICE_POST, description: 'Post customer invoices to GL (governed)' },
+    { code: PERMISSIONS.AR.INVOICE_VIEW_RBAC, description: 'View customer invoices' },
+    { code: PERMISSIONS.AR.INVOICE_VIEW, description: 'View customer invoices (alias)' },
+    { code: PERMISSIONS.AR.RECEIPT_VIEW_RBAC, description: 'View customer receipts' },
+    { code: PERMISSIONS.AR.RECEIPT_CREATE_RBAC, description: 'Create customer receipts' },
+    { code: PERMISSIONS.AR.RECEIPT_CREATE, description: 'Create customer receipts (alias)' },
+    { code: PERMISSIONS.AR.RECEIPT_VOID, description: 'Void customer receipts' },
+    { code: PERMISSIONS.AR.RECEIPT_VIEW, description: 'View customer receipts (alias)' },
 
-    { code: 'AR_AGING_VIEW', description: 'View Accounts Receivable aging report' },
+    { code: PERMISSIONS.AR_AGING.VIEW, description: 'View Accounts Receivable aging report' },
 
-    { code: 'AR_STATEMENT_VIEW', description: 'View customer statements (Accounts Receivable)' },
+    { code: PERMISSIONS.AR_STATEMENT.VIEW, description: 'View customer statements (Accounts Receivable)' },
 
-    { code: 'AR_REMINDER_VIEW', description: 'View Accounts Receivable reminder rules, templates, and logs' },
-    { code: 'AR_REMINDER_CONFIGURE', description: 'Configure Accounts Receivable reminder rules and templates' },
-    { code: 'AR_REMINDER_TRIGGER', description: 'Trigger Accounts Receivable reminders manually' },
-    { code: 'CUSTOMERS_VIEW', description: 'View customer master data' },
-    { code: 'CUSTOMERS_CREATE', description: 'Create customers (master)' },
-    { code: 'CUSTOMERS_EDIT', description: 'Edit customers (master)' },
-    { code: 'CUSTOMERS_IMPORT', description: 'Import customers in bulk' },
-    { code: 'BANK_ACCOUNT_CREATE', description: 'Create bank accounts' },
-    { code: 'PAYMENT_CREATE', description: 'Create payments' },
-    { code: 'PAYMENT_APPROVE', description: 'Approve payments' },
-    { code: 'PAYMENT_POST', description: 'Post payments to GL' },
-    { code: 'PAYMENT_VIEW', description: 'View payments' },
-    { code: 'BANK_STATEMENT_IMPORT', description: 'Import / record bank statements' },
-    { code: 'BANK_RECONCILE', description: 'Reconcile bank statement lines to posted payments' },
-    { code: 'BANK_RECONCILIATION_VIEW', description: 'View bank reconciliation status and unmatched items' },
-    { code: 'HR_PAYROLL_VIEW', description: 'View Payroll' },
-    { code: 'HR_PAYROLL_RUN', description: 'Run Payroll' },
-    { code: 'CRM_LEADS_VIEW', description: 'View Leads' },
-    { code: 'CRM_LEADS_EDIT', description: 'Edit Leads' },
+    { code: PERMISSIONS.AR_REMINDER.VIEW, description: 'View Accounts Receivable reminder rules, templates, and logs' },
+    { code: PERMISSIONS.AR_REMINDER.CONFIGURE, description: 'Configure Accounts Receivable reminder rules and templates' },
+    { code: PERMISSIONS.AR_REMINDER.TRIGGER, description: 'Trigger Accounts Receivable reminders manually' },
+    { code: PERMISSIONS.CUSTOMERS.VIEW, description: 'View customer master data' },
+    { code: PERMISSIONS.CUSTOMERS.CREATE, description: 'Create customers (master)' },
+    { code: PERMISSIONS.CUSTOMERS.EDIT, description: 'Edit customers (master)' },
+    { code: PERMISSIONS.CUSTOMERS.IMPORT, description: 'Import customers in bulk' },
+    { code: PERMISSIONS.BANK.ACCOUNT_CREATE, description: 'Create bank accounts' },
+    { code: PERMISSIONS.PAYMENT.CREATE, description: 'Create payments' },
+    { code: PERMISSIONS.PAYMENT.APPROVE, description: 'Approve payments' },
+    { code: PERMISSIONS.PAYMENT.RELEASE, description: 'Release payments' },
+    { code: PERMISSIONS.PAYMENT.POST, description: 'Post payments to GL' },
+    { code: PERMISSIONS.PAYMENT.VIEW, description: 'View payments' },
 
-    { code: 'MASTER_DATA_DEPARTMENT_VIEW', description: 'View Departments master data' },
-    { code: 'MASTER_DATA_DEPARTMENT_CREATE', description: 'Create Departments master data' },
-    { code: 'MASTER_DATA_DEPARTMENT_EDIT', description: 'Edit Departments master data' },
+    { code: PERMISSIONS.GL.JOURNAL_VIEW_LEGACY, description: 'View GL journals (legacy)' },
+    { code: PERMISSIONS.GL.JOURNAL_CREATE_LEGACY, description: 'Create GL journals (legacy)' },
+    { code: PERMISSIONS.BANK.STATEMENT_IMPORT, description: 'Import / record bank statements' },
+    { code: PERMISSIONS.BANK.RECONCILE, description: 'Reconcile bank statement lines to posted payments' },
+    { code: PERMISSIONS.BANK.RECONCILIATION_VIEW, description: 'View bank reconciliation status and unmatched items' },
+    { code: PERMISSIONS.HR.PAYROLL_VIEW, description: 'View Payroll' },
+    { code: PERMISSIONS.HR.PAYROLL_RUN, description: 'Run Payroll' },
+    { code: PERMISSIONS.CRM.LEADS_VIEW, description: 'View Leads' },
+    { code: PERMISSIONS.CRM.LEADS_EDIT, description: 'Edit Leads' },
 
-    { code: 'MASTER_DATA_PROJECT_VIEW', description: 'View Projects master data' },
-    { code: 'MASTER_DATA_PROJECT_CREATE', description: 'Create Projects master data' },
-    { code: 'MASTER_DATA_PROJECT_EDIT', description: 'Edit Projects master data' },
-    { code: 'MASTER_DATA_PROJECT_CLOSE', description: 'Close Projects master data' },
+    { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW, description: 'View Departments master data' },
+    { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE, description: 'Create Departments master data' },
+    { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT, description: 'Edit Departments master data' },
 
-    { code: 'MASTER_DATA_FUND_VIEW', description: 'View Funds master data' },
-    { code: 'MASTER_DATA_FUND_CREATE', description: 'Create Funds master data' },
-    { code: 'MASTER_DATA_FUND_EDIT', description: 'Edit Funds master data' },
+    { code: PERMISSIONS.MASTER_DATA.PROJECT.VIEW, description: 'View Projects master data' },
+    { code: PERMISSIONS.MASTER_DATA.PROJECT.CREATE, description: 'Create Projects master data' },
+    { code: PERMISSIONS.MASTER_DATA.PROJECT.EDIT, description: 'Edit Projects master data' },
+    { code: PERMISSIONS.MASTER_DATA.PROJECT.CLOSE, description: 'Close Projects master data' },
 
-    { code: 'INVOICE_CATEGORY_VIEW', description: 'View invoice categories' },
-    { code: 'INVOICE_CATEGORY_CREATE', description: 'Create invoice categories' },
-    { code: 'INVOICE_CATEGORY_UPDATE', description: 'Update invoice categories' },
-    { code: 'INVOICE_CATEGORY_DISABLE', description: 'Disable invoice categories' },
+    { code: PERMISSIONS.MASTER_DATA.FUND.VIEW, description: 'View Funds master data' },
+    { code: PERMISSIONS.MASTER_DATA.FUND.CREATE, description: 'Create Funds master data' },
+    { code: PERMISSIONS.MASTER_DATA.FUND.EDIT, description: 'Edit Funds master data' },
 
-    { code: 'FINANCE_CONFIG_VIEW', description: 'View finance configuration (posting controls)' },
-    { code: 'FINANCE_CONFIG_UPDATE', description: 'Update finance configuration (posting controls)' },
+    { code: PERMISSIONS.AR.INVOICE_CATEGORY_VIEW, description: 'View invoice categories' },
+    { code: PERMISSIONS.AR.INVOICE_CATEGORY_CREATE, description: 'Create invoice categories' },
+    { code: PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE, description: 'Update invoice categories' },
+    { code: PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE, description: 'Disable invoice categories' },
 
-    { code: 'AR_CREDIT_NOTE_CREATE', description: 'Create customer credit notes (draft)' },
-    { code: 'CREDIT_NOTE_CREATE', description: 'Create customer credit notes (alias)' },
-    { code: 'AR_CREDIT_NOTE_VIEW', description: 'View customer credit notes' },
-    { code: 'CREDIT_NOTE_VIEW', description: 'View customer credit notes (alias)' },
-    { code: 'AR_CREDIT_NOTE_SUBMIT', description: 'Submit customer credit notes for approval' },
-    { code: 'CREDIT_NOTE_SUBMIT', description: 'Submit customer credit notes for approval (alias)' },
-    { code: 'AR_CREDIT_NOTE_APPROVE', description: 'Approve customer credit notes' },
-    { code: 'CREDIT_NOTE_APPROVE', description: 'Approve customer credit notes (alias)' },
-    { code: 'AR_CREDIT_NOTE_POST', description: 'Post customer credit notes' },
-    { code: 'AR_CREDIT_NOTE_VOID', description: 'Void customer credit notes' },
-    { code: 'CREDIT_NOTE_VOID', description: 'Void customer credit notes (alias)' },
+    { code: PERMISSIONS.FINANCE.CONFIG_VIEW, description: 'View finance configuration (posting controls)' },
+    { code: PERMISSIONS.FINANCE.CONFIG_UPDATE, description: 'Update finance configuration (posting controls)' },
 
-    { code: 'AR_REFUND_VIEW', description: 'View customer refunds' },
-    { code: 'REFUND_VIEW', description: 'View customer refunds (alias)' },
-    { code: 'AR_REFUND_CREATE', description: 'Create customer refunds (draft)' },
-    { code: 'REFUND_CREATE', description: 'Create customer refunds (alias)' },
-    { code: 'AR_REFUND_SUBMIT', description: 'Submit customer refunds for approval' },
-    { code: 'REFUND_SUBMIT', description: 'Submit customer refunds for approval (alias)' },
-    { code: 'AR_REFUND_APPROVE', description: 'Approve customer refunds' },
-    { code: 'REFUND_APPROVE', description: 'Approve customer refunds (alias)' },
-    { code: 'AR_REFUND_POST', description: 'Post customer refunds' },
-    { code: 'AR_REFUND_VOID', description: 'Void customer refunds' },
-    { code: 'REFUND_VOID', description: 'Void customer refunds (alias)' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_CREATE_RBAC, description: 'Create customer credit notes (draft)' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_CREATE, description: 'Create customer credit notes (alias)' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_VIEW_RBAC, description: 'View customer credit notes' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_VIEW, description: 'View customer credit notes (alias)' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_SUBMIT_RBAC, description: 'Submit customer credit notes for approval' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_SUBMIT, description: 'Submit customer credit notes for approval (alias)' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_APPROVE_RBAC, description: 'Approve customer credit notes' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_APPROVE, description: 'Approve customer credit notes (alias)' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_POST_RBAC_ALT, description: 'Post customer credit notes' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_VOID_RBAC, description: 'Void customer credit notes' },
+    { code: PERMISSIONS.AR.CREDIT_NOTE_VOID, description: 'Void customer credit notes (alias)' },
+
+    { code: PERMISSIONS.AR.REFUND_VIEW_RBAC, description: 'View customer refunds' },
+    { code: PERMISSIONS.AR.REFUND_VIEW, description: 'View customer refunds (alias)' },
+    { code: PERMISSIONS.AR.REFUND_CREATE_RBAC, description: 'Create customer refunds (draft)' },
+    { code: PERMISSIONS.AR.REFUND_CREATE, description: 'Create customer refunds (alias)' },
+    { code: PERMISSIONS.AR.REFUND_SUBMIT_RBAC, description: 'Submit customer refunds for approval' },
+    { code: PERMISSIONS.AR.REFUND_SUBMIT, description: 'Submit customer refunds for approval (alias)' },
+    { code: PERMISSIONS.AR.REFUND_APPROVE_RBAC, description: 'Approve customer refunds' },
+    { code: PERMISSIONS.AR.REFUND_APPROVE, description: 'Approve customer refunds (alias)' },
+    { code: PERMISSIONS.AR.REFUND_POST_RBAC, description: 'Post customer refunds' },
+    { code: PERMISSIONS.AR.REFUND_VOID_RBAC, description: 'Void customer refunds' },
+    { code: PERMISSIONS.AR.REFUND_VOID, description: 'Void customer refunds (alias)' },
   ];
 
   await prisma.permission.createMany({
@@ -474,58 +479,58 @@ async function main() {
 
   {
     const refundPowersAndAliases = [
-      'REFUND_CREATE',
-      'AR_REFUND_CREATE',
-      'REFUND_SUBMIT',
-      'AR_REFUND_SUBMIT',
-      'REFUND_APPROVE',
-      'AR_REFUND_APPROVE',
-      'REFUND_POST',
-      'AR_REFUND_POST',
-      'REFUND_VOID',
-      'AR_REFUND_VOID',
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_APPROVE,
+      PERMISSIONS.AR.REFUND_APPROVE_RBAC,
+      PERMISSIONS.AR.REFUND_POST,
+      PERMISSIONS.AR.REFUND_POST_RBAC,
+      PERMISSIONS.AR.REFUND_VOID,
+      PERMISSIONS.AR.REFUND_VOID_RBAC,
     ];
 
     const officerForbidden = [
-      'REFUND_APPROVE',
-      'AR_REFUND_APPROVE',
-      'REFUND_POST',
-      'AR_REFUND_POST',
-      'REFUND_VOID',
-      'AR_REFUND_VOID',
+      PERMISSIONS.AR.REFUND_APPROVE,
+      PERMISSIONS.AR.REFUND_APPROVE_RBAC,
+      PERMISSIONS.AR.REFUND_POST,
+      PERMISSIONS.AR.REFUND_POST_RBAC,
+      PERMISSIONS.AR.REFUND_VOID,
+      PERMISSIONS.AR.REFUND_VOID_RBAC,
     ];
 
     const managerForbidden = [
-      'REFUND_CREATE',
-      'AR_REFUND_CREATE',
-      'REFUND_SUBMIT',
-      'AR_REFUND_SUBMIT',
-      'REFUND_POST',
-      'AR_REFUND_POST',
-      'REFUND_VOID',
-      'AR_REFUND_VOID',
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_POST,
+      PERMISSIONS.AR.REFUND_POST_RBAC,
+      PERMISSIONS.AR.REFUND_VOID,
+      PERMISSIONS.AR.REFUND_VOID_RBAC,
     ];
 
     const controllerForbidden = [
-      'REFUND_CREATE',
-      'AR_REFUND_CREATE',
-      'REFUND_SUBMIT',
-      'AR_REFUND_SUBMIT',
-      'REFUND_APPROVE',
-      'AR_REFUND_APPROVE',
-      'REFUND_VOID',
-      'AR_REFUND_VOID',
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_APPROVE,
+      PERMISSIONS.AR.REFUND_APPROVE_RBAC,
+      PERMISSIONS.AR.REFUND_VOID,
+      PERMISSIONS.AR.REFUND_VOID_RBAC,
     ];
 
     const adminForbidden = [
-      'REFUND_CREATE',
-      'AR_REFUND_CREATE',
-      'REFUND_SUBMIT',
-      'AR_REFUND_SUBMIT',
-      'REFUND_APPROVE',
-      'AR_REFUND_APPROVE',
-      'REFUND_POST',
-      'AR_REFUND_POST',
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_APPROVE,
+      PERMISSIONS.AR.REFUND_APPROVE_RBAC,
+      PERMISSIONS.AR.REFUND_POST,
+      PERMISSIONS.AR.REFUND_POST_RBAC,
     ];
 
     const rolesByName = await prisma.role.findMany({
@@ -563,46 +568,47 @@ async function main() {
     await removePermissionsByCode(managerRoleIds, managerForbidden);
     await removePermissionsByCode(controllerRoleIds, controllerForbidden);
 
+    await removePermissionsByCode(managerRoleIds, [
+      PERMISSIONS.AR.INVOICE_POST_RBAC,
+      PERMISSIONS.AP.INVOICE_POST,
+      PERMISSIONS.PAYMENT.POST,
+    ]);
+
+    await removePermissionsByCode(managerRoleIds, [
+      PERMISSIONS.AR.CREDIT_NOTE_POST,
+    ]);
+
     await removePermissionsByCode(controllerRoleIds, [
-      'INVOICE_POST',
-      'AR_INVOICE_POST',
-      'AP_INVOICE_POST',
-      'RECEIPT_POST',
-      'CREDIT_NOTE_POST',
-      'PAYMENT_POST',
+      PERMISSIONS.AR.INVOICE_POST,
+      PERMISSIONS.AR.INVOICE_POST_RBAC,
+      PERMISSIONS.AP.INVOICE_POST,
+      PERMISSIONS.AR.RECEIPT_POST,
+      PERMISSIONS.PAYMENT.POST,
     ]);
 
     await removePermissionsByCode(systemAdminRoleIds, adminForbidden);
     await removePermissionsByCode(superAdminRoleIds, adminForbidden);
 
-    await removePermissionsByCode(systemAdminRoleIds, [
-      ...refundPowersAndAliases.filter(
-        (p) => !['REFUND_VOID', 'AR_REFUND_VOID'].includes(p),
-      ),
-    ]);
-    await removePermissionsByCode(superAdminRoleIds, [
-      ...refundPowersAndAliases.filter(
-        (p) => !['REFUND_VOID', 'AR_REFUND_VOID'].includes(p),
-      ),
-    ]);
+    await removePermissionsByCode(systemAdminRoleIds, [...refundPowersAndAliases]);
+    await removePermissionsByCode(superAdminRoleIds, [...refundPowersAndAliases]);
   }
 
   await prisma.rolePermission.createMany({
     data: allPermissions
       .filter(
         (p) =>
-          p.code !== 'FINANCE_GL_FINAL_POST' &&
-          p.code !== 'FINANCE_GL_POST' &&
-          p.code !== 'FINANCE_COA_UNLOCK' &&
-          p.code !== 'AR_INVOICE_POST' &&
-          p.code !== 'INVOICE_POST' &&
-          p.code !== 'AP_INVOICE_POST' &&
-          p.code !== 'PAYMENT_POST' &&
-          p.code !== 'FINANCE_PERIOD_CLOSE_APPROVE' &&
-          p.code !== 'INVOICE_CATEGORY_VIEW' &&
-          p.code !== 'INVOICE_CATEGORY_CREATE' &&
-          p.code !== 'INVOICE_CATEGORY_UPDATE' &&
-          p.code !== 'INVOICE_CATEGORY_DISABLE',
+          p.code !== PERMISSIONS.GL.FINAL_POST &&
+          p.code !== PERMISSIONS.GL.POST &&
+          p.code !== PERMISSIONS.COA.UNLOCK &&
+          p.code !== PERMISSIONS.AR.INVOICE_POST_RBAC &&
+          p.code !== PERMISSIONS.AR.INVOICE_POST &&
+          p.code !== PERMISSIONS.AP.INVOICE_POST &&
+          p.code !== PERMISSIONS.PAYMENT.POST &&
+          p.code !== PERMISSIONS.PERIOD.CLOSE_APPROVE &&
+          p.code !== PERMISSIONS.AR.INVOICE_CATEGORY_VIEW &&
+          p.code !== PERMISSIONS.AR.INVOICE_CATEGORY_CREATE &&
+          p.code !== PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE &&
+          p.code !== PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE,
       )
       .map((p) => ({
         roleId: adminRole.id,
@@ -612,153 +618,151 @@ async function main() {
   });
 
   const forbiddenAdminBypassPermCodes = [
-    'FINANCE_GL_CREATE',
-    'FINANCE_GL_APPROVE',
-    'FINANCE_GL_POST',
-    'FINANCE_GL_FINAL_POST',
-    'FINANCE_GL_RECURRING_MANAGE',
-    'FINANCE_GL_RECURRING_GENERATE',
+    PERMISSIONS.GL.CREATE,
+    PERMISSIONS.GL.APPROVE,
+    PERMISSIONS.GL.POST,
+    PERMISSIONS.GL.FINAL_POST,
+    PERMISSIONS.GL.RECURRING_MANAGE,
+    PERMISSIONS.GL.RECURRING_GENERATE,
 
-    'AR_INVOICE_CREATE',
-    'AR_INVOICE_SUBMIT',
-    'AR_INVOICE_APPROVE',
-    'AR_INVOICE_POST',
-    'INVOICE_POST',
+    PERMISSIONS.AR.INVOICE_CREATE_RBAC,
+    PERMISSIONS.AR.INVOICE_SUBMIT_RBAC,
+    PERMISSIONS.AR.INVOICE_APPROVE_RBAC,
+    PERMISSIONS.AR.INVOICE_POST_RBAC,
+    PERMISSIONS.AR.INVOICE_POST,
 
-    'AP_INVOICE_CREATE',
-    'AP_INVOICE_SUBMIT',
-    'AP_INVOICE_APPROVE',
-    'AP_INVOICE_POST',
+    PERMISSIONS.AP.INVOICE_CREATE,
+    PERMISSIONS.AP.INVOICE_SUBMIT,
+    PERMISSIONS.AP.INVOICE_APPROVE,
+    PERMISSIONS.AP.INVOICE_POST,
 
-    'PAYMENT_CREATE',
-    'PAYMENT_APPROVE',
-    'PAYMENT_POST',
+    PERMISSIONS.PAYMENT.CREATE,
+    PERMISSIONS.PAYMENT.APPROVE,
+    PERMISSIONS.PAYMENT.POST,
 
-    'FINANCE_PERIOD_CREATE',
-    'FINANCE_PERIOD_CLOSE',
-    'FINANCE_PERIOD_CLOSE_APPROVE',
-    'FINANCE_PERIOD_REOPEN',
-    'FINANCE_PERIOD_CORRECT',
+    PERMISSIONS.PERIOD.CREATE,
+    PERMISSIONS.PERIOD.CLOSE,
+    PERMISSIONS.PERIOD.CLOSE_APPROVE,
+    PERMISSIONS.PERIOD.REOPEN,
+    PERMISSIONS.PERIOD.CORRECT,
 
-    'FINANCE_CONFIG_CHANGE',
+    PERMISSIONS.FINANCE.CONFIG_CHANGE,
 
-    'TAX_CONFIG_UPDATE',
-    'CREDIT_NOTE_APPROVE',
-    'AR_CREDIT_NOTE_CREATE',
-    'AR_CREDIT_NOTE_VIEW',
-    'AR_CREDIT_NOTE_SUBMIT',
-    'AR_CREDIT_NOTE_APPROVE',
-    'AR_CREDIT_NOTE_VOID',
-    'AR_REFUND_VIEW',
-    'REFUND_VIEW',
-    'AR_REFUND_CREATE',
-    'REFUND_CREATE',
-    'AR_REFUND_SUBMIT',
-    'REFUND_SUBMIT',
-    'AR_REFUND_APPROVE',
-    'REFUND_APPROVE',
-    'AR_REFUND_POST',
-    'REFUND_POST',
-    'AR_REFUND_VOID',
-    'REFUND_VOID',
+    PERMISSIONS.TAX.CONFIG_UPDATE,
+    PERMISSIONS.AR.CREDIT_NOTE_APPROVE,
+    PERMISSIONS.AR.CREDIT_NOTE_CREATE_RBAC,
+    PERMISSIONS.AR.CREDIT_NOTE_VIEW_RBAC,
+    PERMISSIONS.AR.CREDIT_NOTE_SUBMIT_RBAC,
+    PERMISSIONS.AR.CREDIT_NOTE_APPROVE_RBAC,
+    PERMISSIONS.AR.CREDIT_NOTE_VOID_RBAC,
+    PERMISSIONS.AR.REFUND_VIEW_RBAC,
+    PERMISSIONS.AR.REFUND_VIEW,
+    PERMISSIONS.AR.REFUND_CREATE_RBAC,
+    PERMISSIONS.AR.REFUND_CREATE,
+    PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+    PERMISSIONS.AR.REFUND_SUBMIT,
+    PERMISSIONS.AR.REFUND_APPROVE_RBAC,
+    PERMISSIONS.AR.REFUND_APPROVE,
+    PERMISSIONS.AR.REFUND_POST_RBAC,
+    PERMISSIONS.AR.REFUND_POST,
+    PERMISSIONS.AR.REFUND_VOID_RBAC,
+    PERMISSIONS.AR.REFUND_VOID,
 
-    'RECEIPT_POST',
-    'CREDIT_NOTE_POST',
+    PERMISSIONS.AR.RECEIPT_POST,
+    PERMISSIONS.AR.CREDIT_NOTE_POST,
   ] as const;
 
   await removePermissionsByCode([superAdminRole.id, systemAdminRole.id, adminRole.id], Array.from(forbiddenAdminBypassPermCodes));
 
   await assignPermissionsByCode(superAdminRole.id, [
-    'SYSTEM_VIEW_ALL',
-    'FINANCE_VIEW_ALL',
-    'SYSTEM_CONFIG_VIEW',
-    'SYSTEM_CONFIG_UPDATE',
-    'USER_CREATE',
-    'USER_VIEW',
-    'USER_EDIT',
-    'ROLE_VIEW',
-    'ROLE_ASSIGN',
-    'CREDIT_NOTE_VIEW',
-    'CREDIT_NOTE_VOID',
-    'REFUND_VOID',
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+    PERMISSIONS.FINANCE.VIEW_ALL,
+    PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+    PERMISSIONS.USER.CREATE,
+    PERMISSIONS.USER.VIEW,
+    PERMISSIONS.USER.EDIT,
+    PERMISSIONS.ROLE.VIEW,
+    PERMISSIONS.ROLE.ASSIGN,
+    PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+    PERMISSIONS.AR.CREDIT_NOTE_VOID,
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
-    'SYSTEM_VIEW_ALL',
-    'SYSTEM_CONFIG_VIEW',
-    'SYSTEM_CONFIG_UPDATE',
-    'USER_CREATE',
-    'USER_VIEW',
-    'USER_EDIT',
-    'ROLE_VIEW',
-    'ROLE_ASSIGN',
-    'REFUND_VOID',
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+    PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+    PERMISSIONS.USER.CREATE,
+    PERMISSIONS.USER.VIEW,
+    PERMISSIONS.USER.EDIT,
+    PERMISSIONS.ROLE.VIEW,
+    PERMISSIONS.ROLE.ASSIGN,
   ]);
 
   // AR Aging (AR-1) RBAC backfill (idempotent):
   // Allow view-only AR aging report access for governed roles.
-  await assignPermissionsByCode(superAdminRole.id, ['AR_AGING_VIEW']);
-  await assignPermissionsByCode(financeManagerRole.id, ['AR_AGING_VIEW']);
-  await assignPermissionsByCode(financeControllerRole.id, ['AR_AGING_VIEW']);
+  await assignPermissionsByCode(superAdminRole.id, [PERMISSIONS.AR_AGING.VIEW]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AR_AGING.VIEW]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AR_AGING.VIEW]);
 
   // AR Statements (AR-STATEMENTS) RBAC backfill (idempotent):
   // Allow view-only customer statement access for governed finance roles.
   // Do NOT auto-grant to ADMIN; admins rely on FINANCE_VIEW_ALL / SYSTEM_VIEW_ALL visibility only.
-  await assignPermissionsByCode(financeOfficerRole.id, ['AR_STATEMENT_VIEW']);
-  await assignPermissionsByCode(financeManagerRole.id, ['AR_STATEMENT_VIEW']);
-  await assignPermissionsByCode(financeControllerRole.id, ['AR_STATEMENT_VIEW']);
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.AR_STATEMENT.VIEW]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AR_STATEMENT.VIEW]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AR_STATEMENT.VIEW]);
 
   // AR Reminders (AR-REMINDERS) RBAC backfill (idempotent):
   // Permission-based governance only.
-  await assignPermissionsByCode(financeOfficerRole.id, ['AR_REMINDER_VIEW', 'AR_REMINDER_TRIGGER']);
-  await assignPermissionsByCode(financeManagerRole.id, ['AR_REMINDER_VIEW', 'AR_REMINDER_TRIGGER', 'AR_REMINDER_CONFIGURE']);
-  await assignPermissionsByCode(financeControllerRole.id, ['AR_REMINDER_VIEW', 'AR_REMINDER_TRIGGER', 'AR_REMINDER_CONFIGURE']);
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER, PERMISSIONS.AR_REMINDER.CONFIGURE]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER, PERMISSIONS.AR_REMINDER.CONFIGURE]);
 
   await assignPermissionsByCode(superAdminRole.id, [
-    'AUDIT_VIEW',
-    'AUDIT_EVIDENCE_UPLOAD',
-    'AUDIT_EVIDENCE_VIEW',
-    'AUDIT_REVIEW_PACK_VIEW',
-    'AUDIT_REVIEW_PACK_GENERATE',
-    'dashboard.view',
-    'MASTER_DATA_DEPARTMENT_VIEW',
-    'MASTER_DATA_DEPARTMENT_CREATE',
-    'MASTER_DATA_DEPARTMENT_EDIT',
-    'MASTER_DATA_PROJECT_VIEW',
-    'MASTER_DATA_PROJECT_CREATE',
-    'MASTER_DATA_PROJECT_EDIT',
-    'MASTER_DATA_PROJECT_CLOSE',
-    'MASTER_DATA_FUND_VIEW',
-    'MASTER_DATA_FUND_CREATE',
-    'MASTER_DATA_FUND_EDIT',
-    'INVOICE_CATEGORY_VIEW',
-    'INVOICE_CATEGORY_CREATE',
-    'INVOICE_CATEGORY_UPDATE',
-    'INVOICE_CATEGORY_DISABLE',
+    PERMISSIONS.AUDIT_VIEW,
+    PERMISSIONS.AUDIT.EVIDENCE_UPLOAD,
+    PERMISSIONS.AUDIT.EVIDENCE_VIEW,
+    PERMISSIONS.AUDIT.REVIEW_PACK_VIEW,
+    PERMISSIONS.AUDIT.REVIEW_PACK_GENERATE,
+    PERMISSIONS.DASHBOARD.VIEW,
+    PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+    PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE,
+    PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT,
+    PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+    PERMISSIONS.MASTER_DATA.PROJECT.CREATE,
+    PERMISSIONS.MASTER_DATA.PROJECT.EDIT,
+    PERMISSIONS.MASTER_DATA.PROJECT.CLOSE,
+    PERMISSIONS.MASTER_DATA.FUND.VIEW,
+    PERMISSIONS.MASTER_DATA.FUND.CREATE,
+    PERMISSIONS.MASTER_DATA.FUND.EDIT,
+    PERMISSIONS.AR.INVOICE_CATEGORY_VIEW,
+    PERMISSIONS.AR.INVOICE_CATEGORY_CREATE,
+    PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE,
+    PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE,
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
     // SYSTEM_ADMIN is system-only (no finance configuration/posting permissions).
   ]);
 
-  const forecastCreatePerm = await prisma.permission.findUnique({ where: { code: 'forecast.create' }, select: { id: true } });
-  const forecastEditPerm = await prisma.permission.findUnique({ where: { code: 'forecast.edit' }, select: { id: true } });
-  const forecastSubmitPerm = await prisma.permission.findUnique({ where: { code: 'forecast.submit' }, select: { id: true } });
-  const forecastApprovePerm = await prisma.permission.findUnique({ where: { code: 'forecast.approve' }, select: { id: true } });
-  const forecastViewPerm = await prisma.permission.findUnique({ where: { code: 'forecast.view' }, select: { id: true } });
+  const forecastCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.FORECAST.CREATE }, select: { id: true } });
+  const forecastEditPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.FORECAST.EDIT }, select: { id: true } });
+  const forecastSubmitPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.FORECAST.SUBMIT }, select: { id: true } });
+  const forecastApprovePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.FORECAST.APPROVE }, select: { id: true } });
+  const forecastViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.FORECAST.VIEW }, select: { id: true } });
 
   const financeOfficerRoleFound = await prisma.role.findFirst({
     where: { tenantId: tenant.id, name: 'FINANCE_OFFICER' },
     select: { id: true },
   });
 
-  const glViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_VIEW' }, select: { id: true } });
-  const glCreatePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_CREATE' }, select: { id: true } });
-  const glPostPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_POST' }, select: { id: true } });
-  const glFinalPostPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_FINAL_POST' }, select: { id: true } });
-  const glApprovePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_APPROVE' }, select: { id: true } });
-  const glRecurringManagePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_RECURRING_MANAGE' }, select: { id: true } });
-  const periodViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_VIEW' }, select: { id: true } });
+  const glViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.VIEW }, select: { id: true } });
+  const glCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.CREATE }, select: { id: true } });
+  const glPostPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.POST }, select: { id: true } });
+  const glFinalPostPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.FINAL_POST }, select: { id: true } });
+  const glApprovePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.APPROVE }, select: { id: true } });
+  const glRecurringManagePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.RECURRING_MANAGE }, select: { id: true } });
+  const periodViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.VIEW }, select: { id: true } });
 
   // Governance: FINANCE_OFFICER must not have FINANCE_GL_APPROVE. This is additive-only cleanup for past seeds.
   if (glApprovePerm?.id) {
@@ -777,49 +781,67 @@ async function main() {
     }
   }
 
+  // Governance: FINANCE_OFFICER must not have FINANCE_GL_FINAL_POST.
+  // This is additive-only cleanup for past seeds.
+  if (glFinalPostPerm?.id) {
+    const financeOfficerRoles = await prisma.role.findMany({
+      where: { name: 'FINANCE_OFFICER' },
+      select: { id: true },
+    });
+
+    if (financeOfficerRoles.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: {
+          roleId: { in: financeOfficerRoles.map((r) => r.id) },
+          permissionId: glFinalPostPerm.id,
+        },
+      });
+    }
+  }
+
   const periodChecklistViewPerm = await prisma.permission.findUnique({
-    where: { code: 'FINANCE_PERIOD_CHECKLIST_VIEW' },
+    where: { code: PERMISSIONS.PERIOD.CHECKLIST_VIEW },
     select: { id: true },
   });
   const periodChecklistCompletePerm = await prisma.permission.findUnique({
-    where: { code: 'FINANCE_PERIOD_CHECKLIST_COMPLETE' },
+    where: { code: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE },
     select: { id: true },
   });
   const periodClosePerm = await prisma.permission.findUnique({
-    where: { code: 'FINANCE_PERIOD_CLOSE' },
+    where: { code: PERMISSIONS.PERIOD.CLOSE },
     select: { id: true },
   });
-  const periodCloseApprovePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_CLOSE_APPROVE' }, select: { id: true } });
-  const periodReopenPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PERIOD_REOPEN' }, select: { id: true } });
-  const disclosureGeneratePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_DISCLOSURE_GENERATE' }, select: { id: true } });
-  const disclosureViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_DISCLOSURE_VIEW' }, select: { id: true } });
-  const budgetSetupPerm = await prisma.permission.findUnique({ where: { code: 'BUDGET_SETUP' }, select: { id: true } });
-  const financeBudgetViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_BUDGET_VIEW' }, select: { id: true } });
-  const reportGeneratePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_REPORT_GENERATE' }, select: { id: true } });
-  const reportExportPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_REPORT_EXPORT' }, select: { id: true } });
+  const periodCloseApprovePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.CLOSE_APPROVE }, select: { id: true } });
+  const periodReopenPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.REOPEN }, select: { id: true } });
+  const disclosureGeneratePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.DISCLOSURE_GENERATE }, select: { id: true } });
+  const disclosureViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.DISCLOSURE_VIEW }, select: { id: true } });
+  const budgetSetupPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.BUDGET.SETUP }, select: { id: true } });
+  const financeBudgetViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.BUDGET.FINANCE_VIEW }, select: { id: true } });
+  const reportGeneratePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.REPORT_GENERATE }, select: { id: true } });
+  const reportExportPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.REPORT_EXPORT }, select: { id: true } });
 
-  const mdDepartmentViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_DEPARTMENT_VIEW' }, select: { id: true } });
-  const mdDepartmentCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_DEPARTMENT_CREATE' }, select: { id: true } });
-  const mdDepartmentEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_DEPARTMENT_EDIT' }, select: { id: true } });
+  const mdDepartmentViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW }, select: { id: true } });
+  const mdDepartmentCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE }, select: { id: true } });
+  const mdDepartmentEditPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT }, select: { id: true } });
 
-  const mdProjectViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_VIEW' }, select: { id: true } });
-  const mdProjectCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_CREATE' }, select: { id: true } });
-  const mdProjectEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_EDIT' }, select: { id: true } });
-  const mdProjectClosePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_PROJECT_CLOSE' }, select: { id: true } });
+  const mdProjectViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.PROJECT.VIEW }, select: { id: true } });
+  const mdProjectCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.PROJECT.CREATE }, select: { id: true } });
+  const mdProjectEditPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.PROJECT.EDIT }, select: { id: true } });
+  const mdProjectClosePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.PROJECT.CLOSE }, select: { id: true } });
 
-  const mdFundViewPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_VIEW' }, select: { id: true } });
-  const mdFundCreatePerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_CREATE' }, select: { id: true } });
-  const mdFundEditPerm = await prisma.permission.findUnique({ where: { code: 'MASTER_DATA_FUND_EDIT' }, select: { id: true } });
+  const mdFundViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.FUND.VIEW }, select: { id: true } });
+  const mdFundCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.FUND.CREATE }, select: { id: true } });
+  const mdFundEditPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.MASTER_DATA.FUND.EDIT }, select: { id: true } });
 
-  const invoiceCategoryViewPerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_VIEW' }, select: { id: true } });
-  const invoiceCategoryCreatePerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_CREATE' }, select: { id: true } });
-  const invoiceCategoryUpdatePerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_UPDATE' }, select: { id: true } });
-  const invoiceCategoryDisablePerm = await prisma.permission.findUnique({ where: { code: 'INVOICE_CATEGORY_DISABLE' }, select: { id: true } });
+  const invoiceCategoryViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.AR.INVOICE_CATEGORY_VIEW }, select: { id: true } });
+  const invoiceCategoryCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.AR.INVOICE_CATEGORY_CREATE }, select: { id: true } });
+  const invoiceCategoryUpdatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.AR.INVOICE_CATEGORY_UPDATE }, select: { id: true } });
+  const invoiceCategoryDisablePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.AR.INVOICE_CATEGORY_DISABLE }, select: { id: true } });
 
-  const taxRateViewPerm = await prisma.permission.findUnique({ where: { code: 'TAX_RATE_VIEW' }, select: { id: true } });
-  const taxRateCreatePerm = await prisma.permission.findUnique({ where: { code: 'TAX_RATE_CREATE' }, select: { id: true } });
-  const taxRateUpdatePerm = await prisma.permission.findUnique({ where: { code: 'TAX_RATE_UPDATE' }, select: { id: true } });
-  const taxConfigUpdatePerm = await prisma.permission.findUnique({ where: { code: 'TAX_CONFIG_UPDATE' }, select: { id: true } });
+  const taxRateViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.TAX.RATE_VIEW }, select: { id: true } });
+  const taxRateCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.TAX.RATE_CREATE }, select: { id: true } });
+  const taxRateUpdatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.TAX.RATE_UPDATE }, select: { id: true } });
+  const taxConfigUpdatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.TAX.CONFIG_UPDATE }, select: { id: true } });
 
   // SYSTEM_ADMIN governance: allow managing invoice categories.
   // Additive-only and safe to re-run.
@@ -878,9 +900,9 @@ async function main() {
     });
   }
   const glRecurringGeneratePerm = await prisma.permission.upsert({
-    where: { code: 'FINANCE_GL_RECURRING_GENERATE' },
+    where: { code: PERMISSIONS.GL.RECURRING_GENERATE },
     create: {
-      code: 'FINANCE_GL_RECURRING_GENERATE',
+      code: PERMISSIONS.GL.RECURRING_GENERATE,
       description: 'Generate journals from recurring templates',
     },
     update: {
@@ -955,11 +977,11 @@ async function main() {
   // - Assign view-only permissions for Cash Flow, SOE, and Disclosure Notes to FINANCE_OFFICER / FINANCE_MANAGER / FINANCE_CONTROLLER.
   // - Do NOT assign to any other roles.
   const cashflowViewPerm = await prisma.permission.findUnique({
-    where: { code: 'FINANCE_CASHFLOW_VIEW' },
+    where: { code: PERMISSIONS.REPORT.CASHFLOW_VIEW },
     select: { id: true },
   });
   const soeViewPerm = await prisma.permission.findUnique({
-    where: { code: 'FINANCE_SOE_VIEW' },
+    where: { code: PERMISSIONS.REPORT.SOE_VIEW },
     select: { id: true },
   });
 
@@ -1098,69 +1120,71 @@ async function main() {
     });
 
     await assignPermissionsByCode(financeOfficerRole.id, [
-      'AR_INVOICE_CREATE',
-      'INVOICE_CREATE',
-      'AR_INVOICE_EDIT_DRAFT',
-      'AR_INVOICE_VIEW',
-      'INVOICE_VIEW',
-      'AR_RECEIPTS_CREATE',
-      'RECEIPT_CREATE',
-      'AR_RECEIPTS_VIEW',
-      'RECEIPT_VIEW',
-      'AR_CREDIT_NOTE_CREATE',
-      'CREDIT_NOTE_CREATE',
-      'AR_CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_VIEW',
-      'AR_CREDIT_NOTE_SUBMIT',
-      'CREDIT_NOTE_SUBMIT',
-      'AR_REFUND_CREATE',
-      'REFUND_CREATE',
-      'AR_REFUND_SUBMIT',
-      'REFUND_SUBMIT',
-      'AR_REFUND_VIEW',
-      'REFUND_VIEW',
+      PERMISSIONS.AR.INVOICE_CREATE_RBAC,
+      PERMISSIONS.AR.INVOICE_CREATE,
+      PERMISSIONS.AR.INVOICE_EDIT_DRAFT,
+      PERMISSIONS.AR.INVOICE_VIEW_RBAC,
+      PERMISSIONS.AR.INVOICE_VIEW,
+      PERMISSIONS.AR.RECEIPT_CREATE_RBAC,
+      PERMISSIONS.AR.RECEIPT_CREATE,
+      PERMISSIONS.AR.RECEIPT_VIEW_RBAC,
+      PERMISSIONS.AR.RECEIPT_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_SUBMIT_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_SUBMIT,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_VIEW_RBAC,
+      PERMISSIONS.AR.REFUND_VIEW,
 
-      'INVOICE_CATEGORY_VIEW',
-      'TAX_RATE_VIEW',
-      'FINANCE_GL_VIEW',
-      'MASTER_DATA_DEPARTMENT_VIEW',
-      'MASTER_DATA_PROJECT_VIEW',
-      'MASTER_DATA_FUND_VIEW',
+      PERMISSIONS.AR.INVOICE_CATEGORY_VIEW,
+      PERMISSIONS.TAX.RATE_VIEW,
+      PERMISSIONS.GL.VIEW,
+      PERMISSIONS.GL.CREATE,
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+      PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+      PERMISSIONS.MASTER_DATA.FUND.VIEW,
     ]);
 
     const financeOfficerAllowedCodes = [
-      'AR_INVOICE_CREATE',
-      'INVOICE_CREATE',
-      'AR_INVOICE_EDIT_DRAFT',
-      'AR_INVOICE_VIEW',
-      'INVOICE_VIEW',
-      'AR_RECEIPTS_CREATE',
-      'RECEIPT_CREATE',
-      'AR_RECEIPTS_VIEW',
-      'RECEIPT_VIEW',
-      'AR_CREDIT_NOTE_CREATE',
-      'CREDIT_NOTE_CREATE',
-      'AR_CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_VIEW',
-      'AR_CREDIT_NOTE_SUBMIT',
-      'CREDIT_NOTE_SUBMIT',
-      'AR_REFUND_CREATE',
-      'REFUND_CREATE',
-      'AR_REFUND_SUBMIT',
-      'REFUND_SUBMIT',
-      'AR_REFUND_VIEW',
-      'REFUND_VIEW',
+      PERMISSIONS.AR.INVOICE_CREATE_RBAC,
+      PERMISSIONS.AR.INVOICE_CREATE,
+      PERMISSIONS.AR.INVOICE_EDIT_DRAFT,
+      PERMISSIONS.AR.INVOICE_VIEW_RBAC,
+      PERMISSIONS.AR.INVOICE_VIEW,
+      PERMISSIONS.AR.RECEIPT_CREATE_RBAC,
+      PERMISSIONS.AR.RECEIPT_CREATE,
+      PERMISSIONS.AR.RECEIPT_VIEW_RBAC,
+      PERMISSIONS.AR.RECEIPT_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_CREATE,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_SUBMIT_RBAC,
+      PERMISSIONS.AR.CREDIT_NOTE_SUBMIT,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_VIEW_RBAC,
+      PERMISSIONS.AR.REFUND_VIEW,
 
-      'INVOICE_CATEGORY_VIEW',
-      'TAX_RATE_VIEW',
-      'FINANCE_GL_VIEW',
-      'MASTER_DATA_DEPARTMENT_VIEW',
-      'MASTER_DATA_PROJECT_VIEW',
-      'MASTER_DATA_FUND_VIEW',
-      'AR_STATEMENT_VIEW',
-      'AR_REMINDER_VIEW',
-      'AR_REMINDER_TRIGGER',
-      'FINANCE_PERIOD_VIEW',
+      PERMISSIONS.AR.INVOICE_CATEGORY_VIEW,
+      PERMISSIONS.TAX.RATE_VIEW,
+      PERMISSIONS.GL.VIEW,
+      PERMISSIONS.GL.CREATE,
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+      PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
+      PERMISSIONS.MASTER_DATA.FUND.VIEW,
+      PERMISSIONS.AR_STATEMENT.VIEW,
+      PERMISSIONS.AR_REMINDER.VIEW,
+      PERMISSIONS.AR_REMINDER.TRIGGER,
+      PERMISSIONS.PERIOD.VIEW,
     ] as const;
 
     await prisma.rolePermission.deleteMany({
@@ -1294,64 +1318,42 @@ async function main() {
     });
 
     await assignPermissionsByCode(financeManagerRole.id, [
-      'INVOICE_VIEW',
-      'AR_INVOICE_APPROVE',
-      'AP_INVOICE_APPROVE',
-      'PAYMENT_APPROVE',
-      'PAYMENT_RELEASE',
-      'FINANCE_GL_APPROVE',
-      'FINANCE_GL_RECURRING_MANAGE',
-      'FINANCE_GL_RECURRING_GENERATE',
-      'FINANCE_PERIOD_CHECKLIST_VIEW',
-      'FINANCE_PERIOD_CHECKLIST_COMPLETE',
-      'FINANCE_PERIOD_CLOSE',
+      PERMISSIONS.AR.INVOICE_VIEW,
+      PERMISSIONS.AR.INVOICE_APPROVE_RBAC,
+      PERMISSIONS.AP.INVOICE_APPROVE,
+      PERMISSIONS.PAYMENT.APPROVE,
+      PERMISSIONS.PAYMENT.RELEASE,
+      PERMISSIONS.GL.APPROVE,
+      PERMISSIONS.GL.RECURRING_MANAGE,
+      PERMISSIONS.GL.RECURRING_GENERATE,
+      PERMISSIONS.PERIOD.CHECKLIST_VIEW,
+      PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      PERMISSIONS.PERIOD.CLOSE,
 
-      'INVOICE_POST',
-      'AR_INVOICE_POST',
-      'AP_INVOICE_POST',
-      'PAYMENT_POST',
+      PERMISSIONS.AR.RECEIPT_VIEW,
+      PERMISSIONS.AR.RECEIPT_POST,
 
-      'RECEIPT_VIEW',
-      'RECEIPT_POST',
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_APPROVE,
 
-      'CREDIT_NOTE_VIEW',
-      'CREDIT_NOTE_APPROVE',
-      'CREDIT_NOTE_POST',
-      
-      'REFUND_VIEW',
-      'REFUND_APPROVE',
-
-      // Manager must not post refunds
+      PERMISSIONS.AR.REFUND_VIEW,
+      PERMISSIONS.AR.REFUND_APPROVE,
     ]);
 
-    await removePermissionsByCode([financeManagerRole.id], ['FINANCE_GL_FINAL_POST']);
-
-    // Governance: manager must not have maker/poster refund permissions.
-    await removePermissionsByCode([financeManagerRole.id], [
-      'REFUND_CREATE',
-      'AR_REFUND_CREATE',
-      'REFUND_SUBMIT',
-      'AR_REFUND_SUBMIT',
-      'REFUND_POST',
-      'AR_REFUND_POST',
-      'REFUND_VOID',
-      'AR_REFUND_VOID',
-    ]);
-  }
-
-  if (periodCloseApprovePerm?.id) {
-    const financeManagerRoles = await prisma.role.findMany({
-      where: { name: 'FINANCE_MANAGER' },
-      select: { id: true },
-    });
-
-    if (financeManagerRoles.length > 0) {
-      await prisma.rolePermission.deleteMany({
-        where: {
-          roleId: { in: financeManagerRoles.map((r) => r.id) },
-          permissionId: periodCloseApprovePerm.id,
-        },
+    if (periodCloseApprovePerm?.id) {
+      const financeManagerRoles = await prisma.role.findMany({
+        where: { name: 'FINANCE_MANAGER' },
+        select: { id: true },
       });
+
+      if (financeManagerRoles.length > 0) {
+        await prisma.rolePermission.deleteMany({
+          where: {
+            roleId: { in: financeManagerRoles.map((r) => r.id) },
+            permissionId: periodCloseApprovePerm.id,
+          },
+        });
+      }
     }
   }
 
@@ -1409,38 +1411,44 @@ async function main() {
     });
 
     await assignPermissionsByCode(financeControllerRole.id, [
-      'SYSTEM_CONFIG_VIEW',
-      'SYSTEM_CONFIG_UPDATE',
-      'FINANCE_CONFIG_CHANGE',
-      'FINANCE_CONFIG_VIEW',
-      'FINANCE_CONFIG_UPDATE',
-      'RECEIPT_VIEW',
+      PERMISSIONS.SYSTEM.CONFIG_VIEW,
+      PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+      PERMISSIONS.FINANCE.CONFIG_CHANGE,
+      PERMISSIONS.FINANCE.CONFIG_VIEW,
+      PERMISSIONS.FINANCE.CONFIG_UPDATE,
 
-      'CREDIT_NOTE_VIEW',
+      PERMISSIONS.AR.INVOICE_POST_RBAC,
+      PERMISSIONS.AP.INVOICE_POST,
+      PERMISSIONS.PAYMENT.POST,
 
-      'REFUND_VIEW',
-      'REFUND_POST',
-      'INVOICE_VIEW',
-      'FINANCE_PERIOD_CLOSE_APPROVE',
-      'FINANCE_PERIOD_CORRECT',
+      PERMISSIONS.AR.RECEIPT_VIEW,
 
-      'AR_CREDIT_NOTE_VIEW',
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW,
+      PERMISSIONS.AR.CREDIT_NOTE_POST,
 
-      'AR_REFUND_VIEW',
+      PERMISSIONS.AR.REFUND_VIEW,
+      PERMISSIONS.AR.REFUND_POST,
+      PERMISSIONS.AR.INVOICE_VIEW,
+      PERMISSIONS.PERIOD.CLOSE_APPROVE,
+      PERMISSIONS.PERIOD.CORRECT,
+
+      PERMISSIONS.AR.CREDIT_NOTE_VIEW_RBAC,
+
+      PERMISSIONS.AR.REFUND_VIEW_RBAC,
     ]);
 
     // Governance: controller must not be able to void credit notes or refunds.
     await removePermissionsByCode([financeControllerRole.id], [
-      'CREDIT_NOTE_VOID',
-      'AR_CREDIT_NOTE_VOID',
-      'REFUND_VOID',
-      'AR_REFUND_VOID',
-      'REFUND_APPROVE',
-      'AR_REFUND_APPROVE',
-      'REFUND_CREATE',
-      'AR_REFUND_CREATE',
-      'REFUND_SUBMIT',
-      'AR_REFUND_SUBMIT',
+      PERMISSIONS.AR.CREDIT_NOTE_VOID,
+      PERMISSIONS.AR.CREDIT_NOTE_VOID_RBAC,
+      PERMISSIONS.AR.REFUND_VOID,
+      PERMISSIONS.AR.REFUND_VOID_RBAC,
+      PERMISSIONS.AR.REFUND_APPROVE,
+      PERMISSIONS.AR.REFUND_APPROVE_RBAC,
+      PERMISSIONS.AR.REFUND_CREATE,
+      PERMISSIONS.AR.REFUND_CREATE_RBAC,
+      PERMISSIONS.AR.REFUND_SUBMIT,
+      PERMISSIONS.AR.REFUND_SUBMIT_RBAC,
     ]);
   }
 
@@ -1450,11 +1458,11 @@ async function main() {
   // - FINANCE_OFFICER must have:
   //   - AR_RECEIPTS_CREATE
   const arReceiptsViewPerm = await prisma.permission.findUnique({
-    where: { code: 'AR_RECEIPTS_VIEW' },
+    where: { code: PERMISSIONS.AR.RECEIPT_VIEW_RBAC },
     select: { id: true },
   });
   const arReceiptsCreatePerm = await prisma.permission.findUnique({
-    where: { code: 'AR_RECEIPTS_CREATE' },
+    where: { code: PERMISSIONS.AR.RECEIPT_CREATE_RBAC },
     select: { id: true },
   });
 
@@ -1508,19 +1516,19 @@ async function main() {
   //   - CUSTOMERS_EDIT
   //   - CUSTOMERS_IMPORT
   const customersViewPerm = await prisma.permission.findUnique({
-    where: { code: 'CUSTOMERS_VIEW' },
+    where: { code: PERMISSIONS.CUSTOMERS.VIEW },
     select: { id: true },
   });
   const customersCreatePerm = await prisma.permission.findUnique({
-    where: { code: 'CUSTOMERS_CREATE' },
+    where: { code: PERMISSIONS.CUSTOMERS.CREATE },
     select: { id: true },
   });
   const customersEditPerm = await prisma.permission.findUnique({
-    where: { code: 'CUSTOMERS_EDIT' },
+    where: { code: PERMISSIONS.CUSTOMERS.EDIT },
     select: { id: true },
   });
   const customersImportPerm = await prisma.permission.findUnique({
-    where: { code: 'CUSTOMERS_IMPORT' },
+    where: { code: PERMISSIONS.CUSTOMERS.IMPORT },
     select: { id: true },
   });
 
@@ -1577,10 +1585,10 @@ async function main() {
     }
   }
 
-  const coaViewFinancePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_COA_VIEW' }, select: { id: true } });
-  const coaUpdateFinancePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_COA_UPDATE' }, select: { id: true } });
-  const coaUnlockPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_COA_UNLOCK' }, select: { id: true } });
-  const reportsModuleViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_REPORTS_VIEW' }, select: { id: true } });
+  const coaViewFinancePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.VIEW }, select: { id: true } });
+  const coaUpdateFinancePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.UPDATE }, select: { id: true } });
+  const coaUnlockPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.UNLOCK }, select: { id: true } });
+  const reportsModuleViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.REPORTS_VIEW }, select: { id: true } });
 
   // COA RBAC backfill (idempotent):
   // - ADMIN: view + update
@@ -1645,13 +1653,13 @@ async function main() {
   // - FINANCE_MANAGER + FINANCE_CONTROLLER should be able to run financial statements.
   // - FINANCE_OFFICER must not.
   // NOTE: endpoints use a mix of legacy and new permissions; grant the minimal set to support TB/PL/BS and their presentation routes.
-  const tbViewPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_TB_VIEW' }, select: { id: true } });
-  const plLegacyPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PL_VIEW' }, select: { id: true } });
-  const bsLegacyPerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_BS_VIEW' }, select: { id: true } });
-  const pnlEnginePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_PNL_VIEW' }, select: { id: true } });
-  const bsEnginePerm = await prisma.permission.findUnique({ where: { code: 'FINANCE_BALANCE_SHEET_VIEW' }, select: { id: true } });
-  const plPresentationPerm = await prisma.permission.findUnique({ where: { code: 'report.view.pl' }, select: { id: true } });
-  const bsPresentationPerm = await prisma.permission.findUnique({ where: { code: 'report.view.bs' }, select: { id: true } });
+  const tbViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.TB_VIEW }, select: { id: true } });
+  const plLegacyPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PL_VIEW_LEGACY }, select: { id: true } });
+  const bsLegacyPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.BS_VIEW_LEGACY }, select: { id: true } });
+  const pnlEnginePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PNL_VIEW }, select: { id: true } });
+  const bsEnginePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.BALANCE_SHEET_VIEW }, select: { id: true } });
+  const plPresentationPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PRESENTATION_PL_VIEW }, select: { id: true } });
+  const bsPresentationPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PRESENTATION_BS_VIEW }, select: { id: true } });
 
   const reportPermIds = [
     reportsModuleViewPerm?.id,
@@ -1817,7 +1825,7 @@ async function main() {
     update: {},
   });
 
-  const glView = await prisma.permission.findUnique({ where: { code: 'FINANCE_GL_VIEW' }, select: { id: true } });
+  const glView = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.VIEW }, select: { id: true } });
   if (glView) {
     await prisma.rolePermission.createMany({
       data: [{ roleId: viewerRole.id, permissionId: glView.id }],

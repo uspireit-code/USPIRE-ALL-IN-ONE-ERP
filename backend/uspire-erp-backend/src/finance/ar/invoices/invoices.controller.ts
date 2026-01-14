@@ -19,6 +19,7 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../rbac/jwt-auth.guard';
 import { Permissions } from '../../../rbac/permissions.decorator';
 import { PermissionsGuard } from '../../../rbac/permissions.guard';
+import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import {
   CreateCustomerInvoiceDto,
   UpdateCustomerInvoiceDto,
@@ -34,19 +35,19 @@ export class FinanceArInvoicesController {
   constructor(private readonly invoices: FinanceArInvoicesService) {}
 
   @Get()
-  @Permissions('INVOICE_VIEW')
+  @Permissions(PERMISSIONS.AR.INVOICE_VIEW)
   async list(@Req() req: Request, @Query() q: ListInvoicesQueryDto) {
     return this.invoices.list(req, q);
   }
 
   @Post()
-  @Permissions('INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CREATE)
   async create(@Req() req: Request, @Body() dto: CreateCustomerInvoiceDto) {
     return this.invoices.create(req, dto);
   }
 
   @Put(':id')
-  @Permissions('AR_INVOICE_EDIT_DRAFT')
+  @Permissions(PERMISSIONS.AR.INVOICE_EDIT_DRAFT)
   async updateDraft(
     @Req() req: Request,
     @Param('id') id: string,
@@ -56,7 +57,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post('import')
-  @Permissions('INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CREATE)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -70,7 +71,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post('import/preview')
-  @Permissions('INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CREATE)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -82,7 +83,7 @@ export class FinanceArInvoicesController {
   }
 
   @Get('import/template.csv')
-  @Permissions('INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CREATE)
   async downloadImportCsvTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.invoices.getImportCsvTemplate(req);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -94,7 +95,7 @@ export class FinanceArInvoicesController {
   }
 
   @Get('import/template.xlsx')
-  @Permissions('INVOICE_CREATE')
+  @Permissions(PERMISSIONS.AR.INVOICE_CREATE)
   async downloadImportXlsxTemplate(@Req() req: Request, @Res() res: Response) {
     const out = await this.invoices.getImportXlsxTemplate(req);
     res.setHeader(
@@ -109,13 +110,13 @@ export class FinanceArInvoicesController {
   }
 
   @Get(':id')
-  @Permissions('INVOICE_VIEW')
+  @Permissions(PERMISSIONS.AR.INVOICE_VIEW)
   async getById(@Req() req: Request, @Param('id') id: string) {
     return this.invoices.getById(req, id);
   }
 
   @Get(':id/export')
-  @Permissions('INVOICE_VIEW')
+  @Permissions(PERMISSIONS.AR.INVOICE_VIEW)
   async exportInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -135,7 +136,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post(':id/post')
-  @Permissions('INVOICE_POST')
+  @Permissions(PERMISSIONS.AR.INVOICE_POST)
   async postInvoice(
     @Req() req: Request,
     @Param('id') id: string,
@@ -145,7 +146,7 @@ export class FinanceArInvoicesController {
   }
 
   @Post('post/bulk')
-  @Permissions('INVOICE_POST')
+  @Permissions(PERMISSIONS.AR.INVOICE_POST)
   async bulkPost(@Req() req: Request, @Body() dto: BulkPostInvoicesDto) {
     return this.invoices.bulkPost(req, dto);
   }

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
 import { getApiErrorMessage } from '../../services/api';
 import { createForecast } from '../../services/forecasts';
 
 export function ForecastCreatePage() {
   const { hasPermission } = useAuth();
-  const canCreate = hasPermission('forecast.create');
+  const canCreate = hasPermission(PERMISSIONS.FORECAST.CREATE);
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
