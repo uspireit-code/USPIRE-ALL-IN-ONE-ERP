@@ -309,6 +309,7 @@ export function Layout() {
   const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
   const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
   const hasSystemConfigView = hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
+  const hasSystemSettingsView = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
   const hasUserView = hasPermission(PERMISSIONS.USER.VIEW);
   const hasRoleView = hasPermission(PERMISSIONS.ROLE.VIEW);
 
@@ -387,7 +388,18 @@ export function Layout() {
 
   const showBankReconciliation = hasPermission(PERMISSIONS.BANK.RECONCILIATION_VIEW);
 
-  const showSettings = hasSystemViewAll || hasSystemConfigView || hasUserView || hasRoleView;
+  const showApBills =
+    hasPermission(PERMISSIONS.AP.INVOICE_VIEW) ||
+    hasPermission(PERMISSIONS.AP.INVOICE_CREATE) ||
+    hasFinanceViewAll ||
+    hasSystemViewAll;
+
+  const showSettings =
+    hasSystemViewAll ||
+    hasSystemConfigView ||
+    hasSystemSettingsView ||
+    hasUserView ||
+    hasRoleView;
 
   const showFinanceNav =
     hasFinanceViewAll ||
@@ -680,7 +692,9 @@ export function Layout() {
                 {openFinanceL2.ap ? (
                   <Indent level={3}>
                     <SidebarLink to="/finance/ap/suppliers" label="Suppliers" icon={<UsersIcon />} level={3} />
-                    <SidebarLink to="/finance/ap/invoices" label="Bills / Invoices" icon={<ReceiptIcon />} level={3} />
+                    {showApBills ? (
+                      <SidebarLink to="/finance/ap/bills" label="Bills / Invoices" icon={<ReceiptIcon />} level={3} />
+                    ) : null}
                     <SidebarLink to="/finance/ap/aging" label="AP Aging" icon={<BarChartIcon />} level={3} />
                     <SidebarLink to="/finance/ap/payments/proposals" label="Payment Proposals" icon={<ClipboardIcon />} level={3} />
                   </Indent>

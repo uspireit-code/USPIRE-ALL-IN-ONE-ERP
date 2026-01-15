@@ -11,6 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { translatePrismaError } from '../common/prisma-error.util';
 import { assertCanPost } from '../periods/period-guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
@@ -29,6 +31,95 @@ export class ApService {
 
   private round2(n: number) {
     return Math.round(n * 100) / 100;
+  }
+
+  private resolveSupplierAuditEntity(req: Request) {
+    // AuditEntityType does not currently include SUPPLIER / SUPPLIER_DOCUMENT / SUPPLIER_BANK_ACCOUNT.
+    // To avoid mislabeling supplier actions as SUPPLIER_INVOICE, anchor supplier-related events to TENANT.
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+    return { entityType: AuditEntityType.TENANT as any, entityId: tenant.id };
+  }
+
+  private normalizeHeaderKey(v: any) {
+    return String(v ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  private parseBooleanStrict(raw: any) {
+    const v = String(raw ?? '')
+      .trim()
+      .toLowerCase();
+    if (v === '') return null;
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return null;
+  }
+
+  private parseCsvRows(buf: Buffer): Array<{ rowNumber: number; row: Record<string, string> }> {
+    const text = buf.toString('utf8');
+    const lines = text
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .split('\n')
+      .filter((l) => l.trim().length > 0);
+
+    if (lines.length === 0) return [];
+
+    const parseLine = (line: string): string[] => {
+      const out: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (ch === ',' && !inQuotes) {
+          out.push(cur);
+          cur = '';
+          continue;
+        }
+        cur += ch;
+      }
+      out.push(cur);
+      return out;
+    };
+
+    const headers = parseLine(lines[0]).map((h) => this.normalizeHeaderKey(h));
+    const rows: Array<{ rowNumber: number; row: Record<string, string> }> = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseLine(lines[i]);
+      const row: Record<string, string> = {};
+      for (let j = 0; j < headers.length; j++) {
+        row[headers[j]] = String(cols[j] ?? '').trim();
+      }
+      const hasAny = Object.values(row).some((v) => String(v ?? '').trim() !== '');
+      if (hasAny) rows.push({ rowNumber: i + 1, row });
+    }
+
+    return rows;
+  }
+
+  private mapWithholdingProfileStrict(raw: any) {
+    const v = String(raw ?? '')
+      .trim()
+      .toUpperCase();
+    if (v === '') return null;
+    if (v === 'NONE') return 'NONE' as const;
+    if (v === 'STANDARD') return 'STANDARD' as const;
+    if (v === 'SPECIAL') return 'SPECIAL' as const;
+    return null;
   }
 
   private async assertActiveSupplier(params: { tenantId: string; supplierId: string }) {
@@ -64,6 +155,218 @@ export class ApService {
         actorUserId: params.actorUserId,
       },
     });
+  }
+
+  async getSupplierImportCsvTemplate(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    const headers = [
+      'name',
+      'taxNumber',
+      'registrationNumber',
+      'vatRegistered',
+      'defaultPaymentTerms',
+      'defaultCurrency',
+      'withholdingProfile',
+      'email',
+      'phone',
+      'address',
+    ];
+    const example = [
+      'Acme Supplies Ltd',
+      'TPIN-123456',
+      'REG-987654',
+      'false',
+      '30D',
+      'ZMW',
+      'NONE',
+      'ap@acme.example',
+      '+260000000000',
+      'Lusaka',
+    ];
+
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n'))
+        return `"${s.replaceAll('"', '""')}"`;
+      return s;
+    };
+
+    const body =
+      [headers.join(','), example.map(esc).join(',')].join('\n') + '\n';
+    return { fileName: 'supplier_import_template.csv', body };
+  }
+
+  async previewSupplierImport(req: Request, file?: any) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+    if (!file) throw new BadRequestException('Missing file');
+    if (!file.originalname) throw new BadRequestException('Missing file name');
+    if (!file.buffer) throw new BadRequestException('Missing file buffer');
+
+    const parsed = this.parseCsvRows(file.buffer as Buffer);
+
+    const existing = await this.prisma.supplier.findMany({
+      where: { tenantId: tenant.id, isActive: true },
+      select: { name: true, taxNumber: true },
+    });
+    const existingKey = new Set(
+      existing.map((s) => {
+        const name = String(s.name ?? '').trim().toLowerCase();
+        const tax = String(s.taxNumber ?? '').trim();
+        return `${name}::${tax}`;
+      }),
+    );
+
+    const errors: Array<{ rowNumber: number; field?: string; message: string }> = [];
+    const seenInFile = new Set<string>();
+
+    const rows = parsed.map(({ rowNumber, row }) => {
+      const name = String(row['name'] ?? '').trim();
+      const taxNumber = String(row['taxnumber'] ?? '').trim() || undefined;
+      const registrationNumber = String(row['registrationnumber'] ?? '').trim() || undefined;
+      const vatRegisteredRaw = row['vatregistered'];
+      const vatRegisteredParsed = this.parseBooleanStrict(vatRegisteredRaw);
+      const defaultPaymentTerms = String(row['defaultpaymentterms'] ?? '').trim() || undefined;
+      const defaultCurrency = String(row['defaultcurrency'] ?? '').trim() || undefined;
+      const withholdingProfileRaw = row['withholdingprofile'];
+      const withholdingProfile = this.mapWithholdingProfileStrict(withholdingProfileRaw);
+      const email = String(row['email'] ?? '').trim() || undefined;
+      const phone = String(row['phone'] ?? '').trim() || undefined;
+      const address = String(row['address'] ?? '').trim() || undefined;
+
+      let isValid = true;
+      if (!name) {
+        isValid = false;
+        errors.push({ rowNumber, field: 'name', message: 'Name is required' });
+      }
+      if (vatRegisteredRaw !== undefined && vatRegisteredRaw !== '' && vatRegisteredParsed === null) {
+        isValid = false;
+        errors.push({
+          rowNumber,
+          field: 'vatRegistered',
+          message: 'vatRegistered must be true or false',
+        });
+      }
+      if (withholdingProfileRaw !== undefined && withholdingProfileRaw !== '' && !withholdingProfile) {
+        isValid = false;
+        errors.push({
+          rowNumber,
+          field: 'withholdingProfile',
+          message: 'withholdingProfile must be NONE, STANDARD, or SPECIAL',
+        });
+      }
+
+      const key = `${name.trim().toLowerCase()}::${String(taxNumber ?? '').trim()}`;
+      const isDuplicate = Boolean(name) && (existingKey.has(key) || seenInFile.has(key));
+      if (seenInFile.has(key)) {
+        isValid = false;
+        errors.push({ rowNumber, message: 'Duplicate row within file (name + taxNumber)' });
+      }
+      if (name) seenInFile.add(key);
+
+      return {
+        rowNumber,
+        name,
+        taxNumber,
+        registrationNumber,
+        vatRegistered:
+          vatRegisteredParsed === null ? undefined : vatRegisteredParsed,
+        defaultPaymentTerms,
+        defaultCurrency,
+        withholdingProfile: (withholdingProfile ?? undefined) as any,
+        email,
+        phone,
+        address,
+        isDuplicate,
+        isValid,
+      };
+    });
+
+    return {
+      fileName: String(file.originalname ?? 'upload.csv'),
+      totalRows: rows.length,
+      errorCount: errors.length,
+      errors,
+      rows,
+    };
+  }
+
+  async commitSupplierImport(req: Request, rows: any[]) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+    if (!Array.isArray(rows)) throw new BadRequestException('Invalid rows payload');
+
+    const existing = await this.prisma.supplier.findMany({
+      where: { tenantId: tenant.id, isActive: true },
+      select: { name: true, taxNumber: true },
+    });
+    const existingKey = new Set(
+      existing.map((s) => {
+        const name = String(s.name ?? '').trim().toLowerCase();
+        const tax = String(s.taxNumber ?? '').trim();
+        return `${name}::${tax}`;
+      }),
+    );
+
+    let created = 0;
+    let skippedDuplicates = 0;
+    let skippedInvalid = 0;
+
+    for (const r of rows) {
+      const name = String(r?.name ?? '').trim();
+      const taxNumber = String(r?.taxNumber ?? '').trim() || undefined;
+      if (!name) {
+        skippedInvalid++;
+        continue;
+      }
+
+      const key = `${name.toLowerCase()}::${String(taxNumber ?? '').trim()}`;
+      if (existingKey.has(key) || r?.isDuplicate === true) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      try {
+        await this.prisma.supplier.create({
+          data: {
+            tenantId: tenant.id,
+            name,
+            taxNumber,
+            registrationNumber: r?.registrationNumber || undefined,
+            vatRegistered:
+              typeof r?.vatRegistered === 'boolean' ? r.vatRegistered : undefined,
+            defaultPaymentTerms: r?.defaultPaymentTerms || undefined,
+            defaultCurrency: r?.defaultCurrency || undefined,
+            withholdingProfile: (r?.withholdingProfile || undefined) as any,
+            email: r?.email || undefined,
+            phone: r?.phone || undefined,
+            address: r?.address || undefined,
+            isActive: true,
+          },
+          select: { id: true, name: true, taxNumber: true },
+        });
+        created++;
+        existingKey.add(key);
+      } catch (e: any) {
+        const isUniqueViolation =
+          e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
+        if (isUniqueViolation) {
+          skippedDuplicates++;
+          existingKey.add(key);
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    return {
+      created,
+      skippedDuplicates,
+      skippedInvalid,
+      received: rows.length,
+    };
   }
 
   // Supplier documents
@@ -152,12 +455,13 @@ export class ApService {
       newValue: `${created.docType}:${created.filename}`,
     });
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -201,12 +505,13 @@ export class ApService {
       newValue: 'DEACTIVATED',
     });
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -245,17 +550,18 @@ export class ApService {
 
     const buf = await this.storage.get(row.storageKey);
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'AP_SUPPLIER_DOC_DOWNLOAD',
-        permissionUsed: PERMISSIONS.AP.INVOICE_CREATE,
+        permissionUsed: PERMISSIONS.AP.SUPPLIER_VIEW,
         metadata: { supplierId, supplierDocumentId: row.id },
       },
       this.prisma,
@@ -327,12 +633,13 @@ export class ApService {
       newValue: `${created.bankName}:${created.accountNumber}`,
     });
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -488,12 +795,13 @@ export class ApService {
       });
     }
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -537,12 +845,13 @@ export class ApService {
       newValue: 'DEACTIVATED',
     });
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -591,12 +900,13 @@ export class ApService {
       newValue: 'true',
     });
 
+    const auditEntity = this.resolveSupplierAuditEntity(req);
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
         eventType: AuditEventType.AP_POST,
-        entityType: AuditEntityType.SUPPLIER_INVOICE,
-        entityId: supplierId,
+        entityType: auditEntity.entityType,
+        entityId: auditEntity.entityId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -631,14 +941,27 @@ export class ApService {
       throw new BadRequestException('Missing tenant context');
     }
 
-    return this.prisma.supplier.create({
-      data: {
-        tenantId: tenant.id,
-        name: dto.name,
-        taxNumber: dto.taxNumber,
-        isActive: true,
-      },
-    });
+    try {
+      return await this.prisma.supplier.create({
+        data: {
+          tenantId: tenant.id,
+          name: dto.name,
+          taxNumber: dto.taxNumber,
+          registrationNumber: dto.registrationNumber,
+          vatRegistered:
+            typeof dto.vatRegistered === 'boolean' ? dto.vatRegistered : undefined,
+          defaultPaymentTerms: dto.defaultPaymentTerms,
+          defaultCurrency: dto.defaultCurrency,
+          withholdingProfile: dto.withholdingProfile as any,
+          email: dto.email,
+          phone: dto.phone,
+          address: dto.address,
+          isActive: true,
+        },
+      });
+    } catch (e: any) {
+      throw new BadRequestException(translatePrismaError(e));
+    }
   }
 
   async listSuppliers(req: Request) {

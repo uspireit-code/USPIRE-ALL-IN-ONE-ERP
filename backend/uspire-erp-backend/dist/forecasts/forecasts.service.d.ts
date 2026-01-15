@@ -41,19 +41,19 @@ export declare class ForecastsService {
     createForecast(req: Request, dto: CreateForecastDto): Promise<{
         forecast: {
             id: string;
-            tenantId: string;
-            createdById: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
+            createdById: string;
             fiscalYear: number;
         };
         version: {
             id: string;
-            createdById: string;
             createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
+            createdById: string;
             forecastId: string;
             versionNumber: number;
         };
@@ -64,9 +64,9 @@ export declare class ForecastsService {
         offset?: number;
     }): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.ForecastStatus;
         updatedAt: Date;
         createdBy: {
@@ -78,9 +78,9 @@ export declare class ForecastsService {
     getForecast(req: Request, id: string): Promise<{
         forecast: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             createdBy: {
@@ -126,9 +126,9 @@ export declare class ForecastsService {
     submitForecast(req: Request, id: string): Promise<{
         forecast: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             fiscalYear: number;
@@ -144,9 +144,9 @@ export declare class ForecastsService {
     approveForecast(req: Request, id: string): Promise<{
         forecast: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             fiscalYear: number;
@@ -161,9 +161,9 @@ export declare class ForecastsService {
     }>;
     updateForecastLines(req: Request, id: string, dto: UpdateForecastLinesDto): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.ForecastStatus;
         updatedAt: Date;
         fiscalYear: number;

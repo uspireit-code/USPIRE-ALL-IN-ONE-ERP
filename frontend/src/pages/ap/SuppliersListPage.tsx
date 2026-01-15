@@ -7,7 +7,9 @@ import { listSuppliers } from '../../services/ap';
 
 export function SuppliersListPage() {
   const { hasPermission } = useAuth();
+  const canViewSuppliers = hasPermission(PERMISSIONS.AP.SUPPLIER.VIEW);
   const canCreateSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.CREATE);
+  const canImportSuppliers = hasPermission(PERMISSIONS.AP.SUPPLIER.IMPORT);
 
   const [rows, setRows] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +17,11 @@ export function SuppliersListPage() {
 
   useEffect(() => {
     let mounted = true;
+    if (!canViewSuppliers) {
+      setLoading(false);
+      setError('Permission denied');
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -35,7 +42,7 @@ export function SuppliersListPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [canViewSuppliers]);
 
   const content = useMemo(() => {
     if (loading) return <div>Loading...</div>;
@@ -69,7 +76,12 @@ export function SuppliersListPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Suppliers</h2>
-        {canCreateSupplier ? <Link to="/ap/suppliers/new">Create Supplier</Link> : null}
+        {canCreateSupplier || canImportSuppliers ? (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {canImportSuppliers ? <Link to="/ap/suppliers/import">Import Suppliers</Link> : null}
+            {canCreateSupplier ? <Link to="/ap/suppliers/new">Create Supplier</Link> : null}
+          </div>
+        ) : null}
       </div>
 
       {content}

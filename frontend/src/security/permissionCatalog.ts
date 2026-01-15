@@ -68,6 +68,8 @@ export const PERMISSIONS = {
   AP: {
     SUPPLIER: {
       CREATE: "AP_SUPPLIER_CREATE",
+      VIEW: "AP_SUPPLIER_VIEW",
+      IMPORT: "AP_SUPPLIER_IMPORT",
     },
     INVOICE: {
       VIEW: "AP_INVOICE_VIEW",
@@ -75,6 +77,14 @@ export const PERMISSIONS = {
       SUBMIT: "AP_INVOICE_SUBMIT",
       APPROVE: "AP_INVOICE_APPROVE",
       POST: "AP_INVOICE_POST",
+    },
+    BILL: {
+      VIEW: "AP_BILL_VIEW",
+      CREATE: "AP_BILL_CREATE",
+      EDIT: "AP_BILL_EDIT",
+      SUBMIT: "AP_BILL_SUBMIT",
+      APPROVE: "AP_BILL_APPROVE",
+      POST: "AP_BILL_POST",
     },
     PAYMENT: {
       CREATE: "PAYMENT_CREATE",

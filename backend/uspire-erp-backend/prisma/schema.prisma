@@ -836,6 +836,14 @@ model Supplier {
   tenantId    String
   name        String
   taxNumber   String?
+  registrationNumber String?
+  vatRegistered Boolean          @default(false)
+  defaultPaymentTerms String?
+  defaultCurrency String         @default("ZMW")
+  withholdingProfile WithholdingProfile @default(NONE)
+  email       String?
+  phone       String?
+  address     String?
   isActive    Boolean           @default(true)
   createdAt   DateTime          @default(now())
   fixedAssets FixedAsset[]
@@ -1775,6 +1783,12 @@ enum SupplierInvoiceStatus {
   SUBMITTED
   APPROVED
   POSTED
+}
+
+enum WithholdingProfile {
+  NONE
+  STANDARD
+  SPECIAL
 }
 
 enum CustomerInvoiceStatus {

@@ -12,12 +12,12 @@ export declare class BankController {
     createBankAccount(req: Request, dto: CreateBankAccountDto): Promise<{
         glAccount: {
             id: string;
-            tenantId: string;
-            createdById: string | null;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             updatedAt: Date;
+            createdById: string | null;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             isCashEquivalent: boolean;
@@ -40,10 +40,10 @@ export declare class BankController {
         };
     } & {
         id: string;
-        tenantId: string;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         bankName: string;
         accountNumber: string;
         currency: string;
@@ -52,12 +52,12 @@ export declare class BankController {
     listBankAccounts(req: Request): Promise<({
         glAccount: {
             id: string;
-            tenantId: string;
-            createdById: string | null;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             updatedAt: Date;
+            createdById: string | null;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             isCashEquivalent: boolean;
@@ -80,10 +80,10 @@ export declare class BankController {
         };
     } & {
         id: string;
-        tenantId: string;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         bankName: string;
         accountNumber: string;
         currency: string;

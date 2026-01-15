@@ -12,9 +12,9 @@ export declare class FaService {
     constructor(prisma: PrismaService, gl: GlService);
     listCategories(req: Request): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         code: string;
         assetAccountId: string;
         accumDepAccountId: string;
@@ -25,9 +25,9 @@ export declare class FaService {
     }[]>;
     createCategory(req: Request, dto: CreateFixedAssetCategoryDto): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         code: string;
         assetAccountId: string;
         accumDepAccountId: string;
@@ -39,9 +39,9 @@ export declare class FaService {
     listAssets(req: Request): Promise<({
         category: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -52,19 +52,19 @@ export declare class FaService {
         };
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
+        createdById: string;
         description: string | null;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: Prisma.Decimal;
         residualValue: Prisma.Decimal;
         usefulLifeMonths: number;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;
@@ -76,9 +76,9 @@ export declare class FaService {
     createAsset(req: Request, dto: CreateFixedAssetDto): Promise<{
         category: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -89,19 +89,19 @@ export declare class FaService {
         };
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
+        createdById: string;
         description: string | null;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: Prisma.Decimal;
         residualValue: Prisma.Decimal;
         usefulLifeMonths: number;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;
@@ -113,9 +113,9 @@ export declare class FaService {
     capitalizeAsset(req: Request, id: string, dto: CapitalizeFixedAssetDto): Promise<{
         category: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -126,19 +126,19 @@ export declare class FaService {
         };
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
+        createdById: string;
         description: string | null;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: Prisma.Decimal;
         residualValue: Prisma.Decimal;
         usefulLifeMonths: number;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;
@@ -159,8 +159,8 @@ export declare class FaService {
         run: {
             lines: {
                 id: string;
-                tenantId: string;
                 createdAt: Date;
+                tenantId: string;
                 amount: Prisma.Decimal;
                 runId: string;
                 assetId: string;
@@ -184,20 +184,20 @@ export declare class FaService {
     listDepreciationRuns(req: Request): Promise<({
         lines: {
             id: string;
-            tenantId: string;
             createdAt: Date;
+            tenantId: string;
             amount: Prisma.Decimal;
             runId: string;
             assetId: string;
         }[];
         period: {
             id: string;
-            tenantId: string;
-            createdById: string | null;
-            createdAt: Date;
             name: string;
+            createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             updatedAt: Date;
+            createdById: string | null;
             code: string | null;
             type: import("@prisma/client").$Enums.AccountingPeriodType;
             startDate: Date;
@@ -216,19 +216,19 @@ export declare class FaService {
     })[]>;
     disposeAsset(req: Request, id: string, dto: DisposeFixedAssetDto): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
+        createdById: string;
         description: string | null;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: Prisma.Decimal;
         residualValue: Prisma.Decimal;
         usefulLifeMonths: number;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;

@@ -232,11 +232,20 @@ async function main() {
     { code: PERMISSIONS.TAX.CONFIG_UPDATE, description: 'Update tax / VAT configuration' },
     { code: PERMISSIONS.TAX.REPORT_VIEW, description: 'View VAT reports' },
     { code: PERMISSIONS.AP.SUPPLIER_CREATE, description: 'Create suppliers' },
+    { code: PERMISSIONS.AP.SUPPLIER_VIEW, description: 'View suppliers' },
+    { code: PERMISSIONS.AP.SUPPLIER_IMPORT, description: 'Import suppliers in bulk' },
     { code: PERMISSIONS.AP.INVOICE_CREATE, description: 'Create supplier invoices' },
     { code: PERMISSIONS.AP.INVOICE_SUBMIT, description: 'Submit supplier invoices' },
     { code: PERMISSIONS.AP.INVOICE_APPROVE, description: 'Approve supplier invoices' },
     { code: PERMISSIONS.AP.INVOICE_POST, description: 'Post supplier invoices to GL' },
     { code: PERMISSIONS.AP.INVOICE_VIEW, description: 'View supplier invoices' },
+    { code: PERMISSIONS.AP.BILL_CREATE, description: 'Create supplier bills' },
+    { code: PERMISSIONS.AP.BILL_EDIT, description: 'Edit supplier bills' },
+    { code: PERMISSIONS.AP.BILL_SUBMIT, description: 'Submit supplier bills' },
+    { code: PERMISSIONS.AP.BILL_APPROVE, description: 'Approve supplier bills' },
+    { code: PERMISSIONS.AP.BILL_POST, description: 'Post supplier bills to GL' },
+    { code: PERMISSIONS.AP.BILL_VIEW, description: 'View supplier bills' },
+    { code: PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW, description: 'View system settings' },
     { code: PERMISSIONS.AR.CUSTOMER_CREATE, description: 'Create customers' },
     { code: PERMISSIONS.AR.INVOICE_CREATE_RBAC, description: 'Create customer invoices' },
     { code: PERMISSIONS.AR.INVOICE_CREATE, description: 'Create customer invoices (alias)' },
@@ -572,6 +581,7 @@ async function main() {
       PERMISSIONS.AR.INVOICE_POST_RBAC,
       PERMISSIONS.AP.INVOICE_POST,
       PERMISSIONS.PAYMENT.POST,
+      PERMISSIONS.AP.BILL_POST,
     ]);
 
     await removePermissionsByCode(managerRoleIds, [
@@ -717,6 +727,21 @@ async function main() {
   await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER]);
   await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER, PERMISSIONS.AR_REMINDER.CONFIGURE]);
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER, PERMISSIONS.AR_REMINDER.CONFIGURE]);
+
+  // AP Suppliers (AP-2/AP-3) RBAC backfill (idempotent):
+  // - Users who can create suppliers must also be able to view suppliers.
+  // - Import is allowed for governed finance roles only.
+  await assignPermissionsByCode(financeOfficerRole.id, [
+    PERMISSIONS.AP.SUPPLIER_CREATE,
+    PERMISSIONS.AP.SUPPLIER_VIEW,
+    PERMISSIONS.AP.SUPPLIER_IMPORT,
+  ]);
+  await assignPermissionsByCode(financeManagerRole.id, [
+    PERMISSIONS.AP.SUPPLIER_CREATE,
+    PERMISSIONS.AP.SUPPLIER_VIEW,
+    PERMISSIONS.AP.SUPPLIER_IMPORT,
+  ]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AP.SUPPLIER_VIEW]);
 
   await assignPermissionsByCode(superAdminRole.id, [
     PERMISSIONS.AUDIT_VIEW,
@@ -1149,6 +1174,13 @@ async function main() {
       PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
       PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
       PERMISSIONS.MASTER_DATA.FUND.VIEW,
+
+      PERMISSIONS.AP.BILL_VIEW,
+      PERMISSIONS.AP.BILL_CREATE,
+      PERMISSIONS.AP.BILL_EDIT,
+      PERMISSIONS.AP.BILL_SUBMIT,
+
+      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     ]);
 
     const financeOfficerAllowedCodes = [
@@ -1181,10 +1213,19 @@ async function main() {
       PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
       PERMISSIONS.MASTER_DATA.PROJECT.VIEW,
       PERMISSIONS.MASTER_DATA.FUND.VIEW,
+
+      PERMISSIONS.AP.SUPPLIER_VIEW,
+      PERMISSIONS.AP.SUPPLIER_CREATE,
+      PERMISSIONS.AP.SUPPLIER_IMPORT,
+      PERMISSIONS.AP.BILL_VIEW,
+      PERMISSIONS.AP.BILL_CREATE,
+      PERMISSIONS.AP.BILL_EDIT,
+      PERMISSIONS.AP.BILL_SUBMIT,
       PERMISSIONS.AR_STATEMENT.VIEW,
       PERMISSIONS.AR_REMINDER.VIEW,
       PERMISSIONS.AR_REMINDER.TRIGGER,
       PERMISSIONS.PERIOD.VIEW,
+      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     ] as const;
 
     await prisma.rolePermission.deleteMany({
@@ -1321,6 +1362,11 @@ async function main() {
       PERMISSIONS.AR.INVOICE_VIEW,
       PERMISSIONS.AR.INVOICE_APPROVE_RBAC,
       PERMISSIONS.AP.INVOICE_APPROVE,
+      PERMISSIONS.AP.BILL_VIEW,
+      PERMISSIONS.AP.BILL_CREATE,
+      PERMISSIONS.AP.BILL_EDIT,
+      PERMISSIONS.AP.BILL_SUBMIT,
+      PERMISSIONS.AP.BILL_APPROVE,
       PERMISSIONS.PAYMENT.APPROVE,
       PERMISSIONS.PAYMENT.RELEASE,
       PERMISSIONS.GL.APPROVE,
@@ -1420,6 +1466,13 @@ async function main() {
       PERMISSIONS.AR.INVOICE_POST_RBAC,
       PERMISSIONS.AP.INVOICE_POST,
       PERMISSIONS.PAYMENT.POST,
+
+      PERMISSIONS.AP.BILL_VIEW,
+      PERMISSIONS.AP.BILL_CREATE,
+      PERMISSIONS.AP.BILL_EDIT,
+      PERMISSIONS.AP.BILL_SUBMIT,
+      PERMISSIONS.AP.BILL_APPROVE,
+      PERMISSIONS.AP.BILL_POST,
 
       PERMISSIONS.AR.RECEIPT_VIEW,
 

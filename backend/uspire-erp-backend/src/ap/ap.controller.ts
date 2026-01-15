@@ -39,14 +39,41 @@ export class ApController {
   }
 
   @Get('suppliers')
-  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  @Permissions(PERMISSIONS.AP.SUPPLIER_VIEW)
   async listSuppliers(@Req() req: Request) {
     return this.ap.listSuppliers(req);
   }
 
+  @Get('suppliers/import/template.csv')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_IMPORT)
+  async downloadSupplierImportTemplate(@Req() req: Request, @Res() res: Response) {
+    const out = await this.ap.getSupplierImportCsvTemplate(req);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
+  }
+
+  @Post('suppliers/import/preview')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_IMPORT)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async previewSupplierImport(@Req() req: Request, @UploadedFile() file: any) {
+    return this.ap.previewSupplierImport(req, file);
+  }
+
+  @Post('suppliers/import/commit')
+  @Permissions(PERMISSIONS.AP.SUPPLIER_IMPORT)
+  async commitSupplierImport(@Req() req: Request, @Body() payload: { rows: any[] }) {
+    return this.ap.commitSupplierImport(req, payload?.rows ?? []);
+  }
+
   // Supplier documents
   @Get('suppliers/:id/documents')
-  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  @Permissions(PERMISSIONS.AP.SUPPLIER_VIEW)
   async listSupplierDocuments(@Req() req: Request, @Param('id') id: string) {
     return this.ap.listSupplierDocuments(req, id);
   }
@@ -79,7 +106,7 @@ export class ApController {
   }
 
   @Get('suppliers/:id/documents/:docId/download')
-  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  @Permissions(PERMISSIONS.AP.SUPPLIER_VIEW)
   async downloadSupplierDocument(
     @Req() req: Request,
     @Param('id') id: string,
@@ -98,7 +125,7 @@ export class ApController {
 
   // Supplier bank accounts
   @Get('suppliers/:id/bank-accounts')
-  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  @Permissions(PERMISSIONS.AP.SUPPLIER_VIEW)
   async listSupplierBankAccounts(@Req() req: Request, @Param('id') id: string) {
     return this.ap.listSupplierBankAccounts(req, id);
   }
@@ -146,7 +173,7 @@ export class ApController {
 
   // Supplier change history
   @Get('suppliers/:id/change-history')
-  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  @Permissions(PERMISSIONS.AP.SUPPLIER_VIEW)
   async listSupplierChangeHistory(@Req() req: Request, @Param('id') id: string) {
     return this.ap.listSupplierChangeHistory(req, id);
   }
@@ -166,15 +193,36 @@ export class ApController {
     return this.ap.createInvoice(req, dto);
   }
 
+  @Post('bills')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  async createBill(
+    @Req() req: Request,
+    @Body() dto: CreateSupplierInvoiceDto,
+  ) {
+    return this.ap.createInvoice(req, dto);
+  }
+
   @Post('invoices/:id/submit')
   @Permissions(PERMISSIONS.AP.INVOICE_SUBMIT)
   async submitInvoice(@Req() req: Request, @Param('id') id: string) {
     return this.ap.submitInvoice(req, id);
   }
 
+  @Post('bills/:id/submit')
+  @Permissions(PERMISSIONS.AP.INVOICE_SUBMIT)
+  async submitBill(@Req() req: Request, @Param('id') id: string) {
+    return this.ap.submitInvoice(req, id);
+  }
+
   @Post('invoices/:id/approve')
   @Permissions(PERMISSIONS.AP.INVOICE_APPROVE)
   async approveInvoice(@Req() req: Request, @Param('id') id: string) {
+    return this.ap.approveInvoice(req, id);
+  }
+
+  @Post('bills/:id/approve')
+  @Permissions(PERMISSIONS.AP.INVOICE_APPROVE)
+  async approveBill(@Req() req: Request, @Param('id') id: string) {
     return this.ap.approveInvoice(req, id);
   }
 
@@ -190,9 +238,27 @@ export class ApController {
     });
   }
 
+  @Post('bills/:id/post')
+  @Permissions(PERMISSIONS.AP.INVOICE_POST)
+  async postBill(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: PostInvoiceDto,
+  ) {
+    return this.ap.postInvoice(req, id, {
+      apControlAccountCode: dto.apControlAccountCode,
+    });
+  }
+
   @Get('invoices')
   @Permissions(PERMISSIONS.AP.INVOICE_VIEW)
   async listInvoices(@Req() req: Request) {
+    return this.ap.listInvoices(req);
+  }
+
+  @Get('bills')
+  @Permissions(PERMISSIONS.AP.INVOICE_VIEW)
+  async listBills(@Req() req: Request) {
     return this.ap.listInvoices(req);
   }
 }

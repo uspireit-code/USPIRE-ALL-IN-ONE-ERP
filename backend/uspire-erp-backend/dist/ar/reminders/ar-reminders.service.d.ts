@@ -8,10 +8,10 @@ export declare class ArRemindersService {
     constructor(prisma: PrismaService);
     listRules(req: Request): Promise<{
         id: string;
+        name: string;
+        createdAt: Date;
         tenantId: string;
         createdById: string;
-        createdAt: Date;
-        name: string;
         triggerType: import("@prisma/client").$Enums.ArReminderTriggerType;
         daysOffset: number;
         active: boolean;
@@ -26,10 +26,10 @@ export declare class ArRemindersService {
         escalationLevel: ReminderLevel;
     }): Promise<{
         id: string;
+        name: string;
+        createdAt: Date;
         tenantId: string;
         createdById: string;
-        createdAt: Date;
-        name: string;
         triggerType: import("@prisma/client").$Enums.ArReminderTriggerType;
         daysOffset: number;
         active: boolean;
@@ -38,10 +38,10 @@ export declare class ArRemindersService {
     listTemplates(req: Request): Promise<{
         id: string;
         tenantId: string;
-        active: boolean;
         level: import("@prisma/client").$Enums.ArReminderLevel;
-        subject: string;
         body: string;
+        active: boolean;
+        subject: string;
         lastUpdatedById: string;
         lastUpdatedAt: Date;
     }[]>;
@@ -54,10 +54,10 @@ export declare class ArRemindersService {
     }): Promise<{
         id: string;
         tenantId: string;
-        active: boolean;
         level: import("@prisma/client").$Enums.ArReminderLevel;
-        subject: string;
         body: string;
+        active: boolean;
+        subject: string;
         lastUpdatedById: string;
         lastUpdatedAt: Date;
     }>;
@@ -67,10 +67,10 @@ export declare class ArRemindersService {
         daysFromDue: number;
         matchingRules: {
             id: string;
+            name: string;
+            createdAt: Date;
             tenantId: string;
             createdById: string;
-            createdAt: Date;
-            name: string;
             triggerType: import("@prisma/client").$Enums.ArReminderTriggerType;
             daysOffset: number;
             active: boolean;

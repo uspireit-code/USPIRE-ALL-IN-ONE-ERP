@@ -8,12 +8,12 @@ export declare class PeriodsController {
     constructor(periods: PeriodsService);
     list(req: Request): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
+        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -55,12 +55,12 @@ export declare class PeriodsController {
     }>;
     close(req: Request, id: string): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
+        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -70,12 +70,12 @@ export declare class PeriodsController {
     }>;
     reopen(req: Request, id: string, dto: ReopenPeriodDto): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
+        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;

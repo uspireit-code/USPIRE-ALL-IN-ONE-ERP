@@ -182,8 +182,8 @@ export declare class GlService {
         effectiveOn?: string;
     }): Promise<{
         id: string;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
         code: string;
         effectiveFrom: Date;
         effectiveTo: Date | null;
@@ -206,11 +206,11 @@ export declare class GlService {
         }[];
     } & {
         id: string;
+        name: string;
+        isActive: boolean;
+        createdAt: Date;
         tenantId: string;
         createdById: string;
-        createdAt: Date;
-        isActive: boolean;
-        name: string;
         journalType: import("@prisma/client").$Enums.JournalType;
         startDate: Date;
         endDate: Date | null;
@@ -247,11 +247,11 @@ export declare class GlService {
         }[];
     } & {
         id: string;
+        name: string;
+        isActive: boolean;
+        createdAt: Date;
         tenantId: string;
         createdById: string;
-        createdAt: Date;
-        isActive: boolean;
-        name: string;
         journalType: import("@prisma/client").$Enums.JournalType;
         startDate: Date;
         endDate: Date | null;
@@ -272,11 +272,11 @@ export declare class GlService {
         }[];
     } & {
         id: string;
+        name: string;
+        isActive: boolean;
+        createdAt: Date;
         tenantId: string;
         createdById: string;
-        createdAt: Date;
-        isActive: boolean;
-        name: string;
         journalType: import("@prisma/client").$Enums.JournalType;
         startDate: Date;
         endDate: Date | null;
@@ -301,10 +301,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -344,12 +344,12 @@ export declare class GlService {
     getRecurringTemplateHistory(req: Request, id: string): Promise<{
         id: string;
         createdAt: Date;
+        runDate: Date;
         generatedBy: {
             id: string;
             name: string;
             email: string;
         };
-        runDate: Date;
         generatedJournal: {
             id: string;
             status: import("@prisma/client").$Enums.JournalStatus;
@@ -371,12 +371,12 @@ export declare class GlService {
     private ensureMinimalBalanceSheetCoaForTenant;
     createAccount(req: Request, dto: CreateAccountDto): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         updatedAt: Date;
+        createdById: string | null;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         isCashEquivalent: boolean;
@@ -447,12 +447,12 @@ export declare class GlService {
     }>;
     listAccountingPeriods(req: Request): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
+        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -469,12 +469,12 @@ export declare class GlService {
     }): Promise<any>;
     closeAccountingPeriod(req: Request, id: string): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
+        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -502,12 +502,12 @@ export declare class GlService {
         reason?: string;
     }): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
+        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
         startDate: Date;
@@ -564,10 +564,10 @@ export declare class GlService {
     }>;
     getJournalDetail(req: Request, id: string): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -606,10 +606,10 @@ export declare class GlService {
     }>;
     returnJournalToReview(req: Request, id: string, dto: ReturnToReviewDto): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -662,10 +662,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -718,10 +718,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -774,10 +774,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -830,10 +830,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -886,10 +886,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -942,10 +942,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -1000,10 +1000,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -1056,10 +1056,10 @@ export declare class GlService {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.JournalStatus;
+        createdById: string;
         approvedAt: Date | null;
         postedAt: Date | null;
         approvedById: string | null;
@@ -1122,10 +1122,10 @@ export declare class GlService {
             }[];
         } & {
             id: string;
-            tenantId: string;
-            createdById: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
+            createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
@@ -1182,10 +1182,10 @@ export declare class GlService {
             }[];
         } & {
             id: string;
-            tenantId: string;
-            createdById: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
+            createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
@@ -1240,10 +1240,10 @@ export declare class GlService {
             }[];
         } & {
             id: string;
-            tenantId: string;
-            createdById: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
+            createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;

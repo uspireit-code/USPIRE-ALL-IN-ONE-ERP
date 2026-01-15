@@ -10,8 +10,12 @@ export declare class AuditController {
         offset: number;
         rows: {
             id: string;
-            tenantId: string;
             createdAt: Date;
+            tenantId: string;
+            user: {
+                id: string;
+                email: string;
+            };
             eventType: import("@prisma/client").$Enums.AuditEventType;
             entityType: import("@prisma/client").$Enums.AuditEntityType;
             entityId: string;
@@ -19,10 +23,6 @@ export declare class AuditController {
             outcome: import("@prisma/client").$Enums.AuditOutcome;
             reason: string | null;
             permissionUsed: string | null;
-            user: {
-                id: string;
-                email: string;
-            };
         }[];
     }>;
 }

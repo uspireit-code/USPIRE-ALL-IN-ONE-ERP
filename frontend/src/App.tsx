@@ -11,8 +11,12 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ManagementDashboardPage } from './pages/ManagementDashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ApHomePage } from './pages/ap/ApHomePage';
+import { BillDetailsPage } from './pages/ap/BillDetailsPage';
+import { BillsListPage } from './pages/ap/BillsListPage';
+import { CreateBillPage } from './pages/ap/CreateBillPage';
 import { CreateInvoicePage } from './pages/ap/CreateInvoicePage';
 import { CreateSupplierPage } from './pages/ap/CreateSupplierPage';
+import { ImportSuppliersPage } from './pages/ap/ImportSuppliersPage';
 import { InvoiceDetailsPage } from './pages/ap/InvoiceDetailsPage';
 import { InvoicesListPage } from './pages/ap/InvoicesListPage';
 import { SupplierDetailsPage } from './pages/ap/SupplierDetailsPage';
@@ -109,6 +113,7 @@ function SettingsVisibleRoute(props: { children: React.ReactNode }) {
   const has = canAny(state.me, [
     PERMISSIONS.SYSTEM.VIEW_ALL,
     PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     PERMISSIONS.FINANCE.CONFIG_VIEW,
     PERMISSIONS.USER.VIEW,
     PERMISSIONS.ROLE.VIEW,
@@ -162,8 +167,33 @@ export default function App() {
               <Route path="dashboard" element={<ManagementDashboardPage />} />
               <Route path="ap" element={<ApHomePage />} />
               <Route path="ap/suppliers" element={<SuppliersListPage />} />
+              <Route path="ap/suppliers/import" element={<ImportSuppliersPage />} />
               <Route path="ap/suppliers/:id" element={<SupplierDetailsPage />} />
               <Route path="ap/suppliers/new" element={<CreateSupplierPage />} />
+              <Route
+                path="ap/bills"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AP.INVOICE_VIEW, PERMISSIONS.AP.INVOICE_CREATE]}>
+                    <BillsListPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="ap/bills/new"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.INVOICE_CREATE}>
+                    <CreateBillPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="ap/bills/:id"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AP.INVOICE_VIEW, PERMISSIONS.AP.INVOICE_CREATE]}>
+                    <BillDetailsPage />
+                  </PermissionAnyRoute>
+                }
+              />
               <Route path="ap/invoices" element={<InvoicesListPage />} />
               <Route path="ap/invoices/new" element={<CreateInvoicePage />} />
               <Route path="ap/invoices/:id" element={<InvoiceDetailsPage />} />
@@ -707,6 +737,14 @@ export default function App() {
               {/* AR Aging now lives at /ar/aging under Accounts Receivable and is permission-gated */}
               <Route path="finance/ap/suppliers" element={<SuppliersListPage />} />
               <Route path="finance/ap/invoices" element={<InvoicesListPage />} />
+              <Route
+                path="finance/ap/bills"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AP.INVOICE_VIEW, PERMISSIONS.AP.INVOICE_CREATE]}>
+                    <BillsListPage />
+                  </PermissionAnyRoute>
+                }
+              />
               <Route path="finance/ap/aging" element={<ApAgingPage />} />
               <Route path="finance/ap/payments/proposals" element={<FinanceApPaymentProposalsPage />} />
               <Route path="finance/cash/position" element={<CashPositionPage />} />

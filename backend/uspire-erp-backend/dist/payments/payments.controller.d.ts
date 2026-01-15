@@ -8,10 +8,10 @@ export declare class PaymentsController {
     createPayment(req: Request, dto: CreatePaymentDto): Promise<{
         bankAccount: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             bankName: string;
             accountNumber: string;
             currency: string;
@@ -26,10 +26,10 @@ export declare class PaymentsController {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
+        createdById: string;
         type: import("@prisma/client").$Enums.PaymentType;
         approvedAt: Date | null;
         postedAt: Date | null;
@@ -37,16 +37,16 @@ export declare class PaymentsController {
         postedById: string | null;
         amount: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
-        paymentDate: Date;
         bankAccountId: string;
+        paymentDate: Date;
     }>;
     approvePayment(req: Request, id: string): Promise<{
         bankAccount: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             bankName: string;
             accountNumber: string;
             currency: string;
@@ -61,10 +61,10 @@ export declare class PaymentsController {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
+        createdById: string;
         type: import("@prisma/client").$Enums.PaymentType;
         approvedAt: Date | null;
         postedAt: Date | null;
@@ -72,17 +72,17 @@ export declare class PaymentsController {
         postedById: string | null;
         amount: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
-        paymentDate: Date;
         bankAccountId: string;
+        paymentDate: Date;
     }>;
     postPayment(req: Request, id: string, dto: PostPaymentDto): Promise<{
         payment: {
             bankAccount: {
                 id: string;
-                tenantId: string;
-                createdAt: Date;
-                isActive: boolean;
                 name: string;
+                isActive: boolean;
+                createdAt: Date;
+                tenantId: string;
                 bankName: string;
                 accountNumber: string;
                 currency: string;
@@ -97,10 +97,10 @@ export declare class PaymentsController {
             }[];
         } & {
             id: string;
-            tenantId: string;
-            createdById: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.PaymentStatus;
+            createdById: string;
             type: import("@prisma/client").$Enums.PaymentType;
             approvedAt: Date | null;
             postedAt: Date | null;
@@ -108,8 +108,8 @@ export declare class PaymentsController {
             postedById: string | null;
             amount: import("@prisma/client/runtime/library").Decimal;
             reference: string | null;
-            paymentDate: Date;
             bankAccountId: string;
+            paymentDate: Date;
         };
         glJournal: {
             lines: {
@@ -127,10 +127,10 @@ export declare class PaymentsController {
             }[];
         } & {
             id: string;
-            tenantId: string;
-            createdById: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.JournalStatus;
+            createdById: string;
             approvedAt: Date | null;
             postedAt: Date | null;
             approvedById: string | null;
@@ -171,10 +171,10 @@ export declare class PaymentsController {
     listPayments(req: Request): Promise<({
         bankAccount: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             bankName: string;
             accountNumber: string;
             currency: string;
@@ -189,10 +189,10 @@ export declare class PaymentsController {
         }[];
     } & {
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
+        createdById: string;
         type: import("@prisma/client").$Enums.PaymentType;
         approvedAt: Date | null;
         postedAt: Date | null;
@@ -200,7 +200,7 @@ export declare class PaymentsController {
         postedById: string | null;
         amount: import("@prisma/client/runtime/library").Decimal;
         reference: string | null;
-        paymentDate: Date;
         bankAccountId: string;
+        paymentDate: Date;
     })[]>;
 }

@@ -11,45 +11,45 @@ export declare class FinanceArCustomersController {
         total: number;
         items: {
             id: string;
-            tenantId: string;
-            createdAt: Date;
             name: string;
-            status: import("@prisma/client").$Enums.CustomerStatus;
-            updatedAt: Date;
             taxNumber: string | null;
             email: string | null;
-            billingAddress: string | null;
-            customerCode: string | null;
             phone: string | null;
+            createdAt: Date;
+            tenantId: string;
+            status: import("@prisma/client").$Enums.CustomerStatus;
+            updatedAt: Date;
+            customerCode: string | null;
+            billingAddress: string | null;
             contactPerson: string | null;
         }[];
     }>;
     create(req: Request, dto: CreateCustomerDto): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
-        status: import("@prisma/client").$Enums.CustomerStatus;
-        updatedAt: Date;
         taxNumber: string | null;
         email: string | null;
-        billingAddress: string | null;
-        customerCode: string | null;
         phone: string | null;
+        createdAt: Date;
+        tenantId: string;
+        status: import("@prisma/client").$Enums.CustomerStatus;
+        updatedAt: Date;
+        customerCode: string | null;
+        billingAddress: string | null;
         contactPerson: string | null;
     }>;
     update(req: Request, id: string, dto: UpdateCustomerDto): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
-        status: import("@prisma/client").$Enums.CustomerStatus;
-        updatedAt: Date;
         taxNumber: string | null;
         email: string | null;
-        billingAddress: string | null;
-        customerCode: string | null;
         phone: string | null;
+        createdAt: Date;
+        tenantId: string;
+        status: import("@prisma/client").$Enums.CustomerStatus;
+        updatedAt: Date;
+        customerCode: string | null;
+        billingAddress: string | null;
         contactPerson: string | null;
     }>;
     import(req: Request, file: any): Promise<{
@@ -81,16 +81,16 @@ export declare class FinanceArCustomersController {
     downloadImportXlsxTemplate(req: Request, res: Response): Promise<void>;
     getById(req: Request, id: string): Promise<{
         id: string;
-        tenantId: string;
-        createdAt: Date;
         name: string;
-        status: import("@prisma/client").$Enums.CustomerStatus;
-        updatedAt: Date;
         taxNumber: string | null;
         email: string | null;
-        billingAddress: string | null;
-        customerCode: string | null;
         phone: string | null;
+        createdAt: Date;
+        tenantId: string;
+        status: import("@prisma/client").$Enums.CustomerStatus;
+        updatedAt: Date;
+        customerCode: string | null;
+        billingAddress: string | null;
         contactPerson: string | null;
     }>;
 }

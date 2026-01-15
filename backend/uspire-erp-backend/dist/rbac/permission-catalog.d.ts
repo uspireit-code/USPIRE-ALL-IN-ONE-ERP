@@ -75,11 +75,18 @@ export declare const PERMISSIONS: {
     };
     readonly AP: {
         readonly SUPPLIER_CREATE: "AP_SUPPLIER_CREATE";
+        readonly SUPPLIER_VIEW: "AP_SUPPLIER_VIEW";
+        readonly SUPPLIER_IMPORT: "AP_SUPPLIER_IMPORT";
         readonly INVOICE_CREATE: "AP_INVOICE_CREATE";
         readonly INVOICE_SUBMIT: "AP_INVOICE_SUBMIT";
         readonly INVOICE_APPROVE: "AP_INVOICE_APPROVE";
         readonly INVOICE_POST: "AP_INVOICE_POST";
         readonly INVOICE_VIEW: "AP_INVOICE_VIEW";
+        readonly BILL_CREATE: "AP_BILL_CREATE";
+        readonly BILL_SUBMIT: "AP_BILL_SUBMIT";
+        readonly BILL_APPROVE: "AP_BILL_APPROVE";
+        readonly BILL_POST: "AP_BILL_POST";
+        readonly BILL_VIEW: "AP_BILL_VIEW";
     };
     readonly BANK: {
         readonly ACCOUNT_CREATE: "BANK_ACCOUNT_CREATE";

@@ -15,8 +15,8 @@ export declare class PeriodCloseController {
             periodId: string;
             items: {
                 id: string;
-                createdAt: Date;
                 name: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.PeriodCloseChecklistItemStatus;
                 code: string;
                 completedAt: Date | null;
@@ -29,8 +29,8 @@ export declare class PeriodCloseController {
     }>;
     completeItem(req: Request, periodId: string, itemId: string): Promise<{
         id: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.PeriodCloseChecklistItemStatus;
         code: string;
         completedAt: Date | null;

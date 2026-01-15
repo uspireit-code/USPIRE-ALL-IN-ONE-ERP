@@ -72,6 +72,7 @@ export class SettingsController {
   @PermissionsAny(
     PERMISSIONS.SYSTEM.CONFIG_VIEW,
     PERMISSIONS.FINANCE.CONFIG_VIEW,
+    PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async getSystemConfig(@Req() req: Request) {

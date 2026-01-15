@@ -28,6 +28,11 @@ export function SettingsSystemPage() {
   const { setPreviewOverrides, clearPreviewOverrides, refresh: refreshBranding } = useBranding();
   const brand = useBrandColors();
   const { hasPermission } = useAuth();
+  const canSystemConfigView =
+    hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW) ||
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
   const canSystemConfigUpdate = hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
   const canFinanceConfigChange = hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE);
 
@@ -37,6 +42,10 @@ export function SettingsSystemPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [system, setSystem] = useState<TenantSystemConfig | null>(null);
+
+  if (!canSystemConfigView) {
+    return <Alert kind="error" title="Access denied" message="You do not have permission to view system settings." />;
+  }
 
   const [organisationName, setOrganisationName] = useState('');
   const [organisationShortName, setOrganisationShortName] = useState('');

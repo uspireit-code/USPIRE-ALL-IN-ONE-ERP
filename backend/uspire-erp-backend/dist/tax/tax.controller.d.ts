@@ -8,12 +8,12 @@ export declare class TaxController {
     listTaxRates(req: Request): Promise<({
         glAccount: {
             id: string;
-            tenantId: string;
-            createdById: string | null;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             updatedAt: Date;
+            createdById: string | null;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             isCashEquivalent: boolean;
@@ -36,10 +36,10 @@ export declare class TaxController {
         } | null;
     } & {
         id: string;
-        tenantId: string;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         code: string;
         type: import("@prisma/client").$Enums.TaxRateType;
         rate: import("@prisma/client/runtime/library").Decimal;

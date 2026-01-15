@@ -7,35 +7,35 @@ export declare class BudgetsController {
     createBudget(req: Request, dto: CreateBudgetDto): Promise<{
         budget: {
             id: string;
-            tenantId: string;
-            createdById: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.BudgetStatus;
+            createdById: string;
             approvedAt: Date | null;
             approvedById: string | null;
             fiscalYear: number;
         };
         revision: {
             id: string;
-            createdById: string;
             createdAt: Date;
+            createdById: string;
             revisionNo: number;
         };
     }>;
     approveBudget(req: Request, id: string): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.BudgetStatus;
+        createdById: string;
         approvedAt: Date | null;
         approvedById: string | null;
         fiscalYear: number;
     }>;
     listBudgets(req: Request, fiscalYear?: string): Promise<{
         id: string;
-        tenantId: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.BudgetStatus;
         createdBy: {
             id: string;
@@ -165,8 +165,8 @@ export declare class BudgetsController {
     getBudget(req: Request, id: string): Promise<{
         budget: {
             id: string;
-            tenantId: string;
             createdAt: Date;
+            tenantId: string;
             status: import("@prisma/client").$Enums.BudgetStatus;
             createdBy: {
                 id: string;

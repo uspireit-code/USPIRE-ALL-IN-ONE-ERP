@@ -90,12 +90,12 @@ export declare class CoaService {
         coaLockedAt: Date | null;
         accounts: {
             id: string;
-            tenantId: string;
-            createdById: string | null;
-            createdAt: Date;
-            isActive: boolean;
             name: string;
+            isActive: boolean;
+            createdAt: Date;
+            tenantId: string;
             updatedAt: Date;
+            createdById: string | null;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             ifrsMappingCode: string | null;
@@ -117,12 +117,12 @@ export declare class CoaService {
     }>;
     create(req: Request, dto: CreateCoaAccountDto): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         updatedAt: Date;
+        createdById: string | null;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         ifrsMappingCode: string | null;
@@ -145,12 +145,12 @@ export declare class CoaService {
     }>;
     get(req: Request, id: string): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         updatedAt: Date;
+        createdById: string | null;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         ifrsMappingCode: string | null;
@@ -169,12 +169,12 @@ export declare class CoaService {
     }>;
     update(req: Request, id: string, dto: UpdateCoaAccountDto): Promise<{
         id: string;
-        tenantId: string;
-        createdById: string | null;
-        createdAt: Date;
-        isActive: boolean;
         name: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         updatedAt: Date;
+        createdById: string | null;
         code: string;
         type: import("@prisma/client").$Enums.AccountType;
         ifrsMappingCode: string | null;

@@ -4,7 +4,45 @@ export type Supplier = {
   id: string;
   name: string;
   taxNumber?: string | null;
+  registrationNumber?: string | null;
+  vatRegistered?: boolean | null;
+  defaultPaymentTerms?: string | null;
+  defaultCurrency?: string | null;
+  withholdingProfile?: 'NONE' | 'STANDARD' | 'SPECIAL' | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
   isActive: boolean;
+};
+
+export type SupplierImportPreviewError = {
+  rowNumber: number;
+  field?: string;
+  message: string;
+};
+
+export type SupplierImportPreviewRow = {
+  rowNumber: number;
+  name: string;
+  taxNumber?: string;
+  registrationNumber?: string;
+  vatRegistered?: boolean;
+  defaultPaymentTerms?: string;
+  defaultCurrency?: string;
+  withholdingProfile?: 'NONE' | 'STANDARD' | 'SPECIAL';
+  email?: string;
+  phone?: string;
+  address?: string;
+  isDuplicate: boolean;
+  isValid: boolean;
+};
+
+export type SupplierImportPreviewResponse = {
+  fileName: string;
+  totalRows: number;
+  errorCount: number;
+  errors: SupplierImportPreviewError[];
+  rows: SupplierImportPreviewRow[];
 };
 
 export type SupplierDocument = {
@@ -90,11 +128,86 @@ export async function listSuppliers() {
   return apiFetch<Supplier[]>('/ap/suppliers', { method: 'GET' });
 }
 
-export async function createSupplier(params: { name: string; taxNumber?: string }) {
+export async function createSupplier(params: {
+  name: string;
+  taxNumber?: string;
+  registrationNumber?: string;
+  vatRegistered?: boolean;
+  defaultPaymentTerms?: string;
+  defaultCurrency?: string;
+  withholdingProfile?: 'NONE' | 'STANDARD' | 'SPECIAL';
+  email?: string;
+  phone?: string;
+  address?: string;
+}) {
   return apiFetch<Supplier>('/ap/suppliers', {
     method: 'POST',
-    body: JSON.stringify({ name: params.name, taxNumber: params.taxNumber || undefined }),
+    body: JSON.stringify({
+      name: params.name,
+      taxNumber: params.taxNumber || undefined,
+      registrationNumber: params.registrationNumber || undefined,
+      vatRegistered: typeof params.vatRegistered === 'boolean' ? params.vatRegistered : undefined,
+      defaultPaymentTerms: params.defaultPaymentTerms || undefined,
+      defaultCurrency: params.defaultCurrency || undefined,
+      withholdingProfile: params.withholdingProfile || undefined,
+      email: params.email || undefined,
+      phone: params.phone || undefined,
+      address: params.address || undefined,
+    }),
   });
+}
+
+export async function createBill(params: {
+  supplierId: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  totalAmount: number;
+  lines: Array<{ accountId: string; description: string; amount: number }>;
+}) {
+  return apiFetch<SupplierInvoice>('/ap/invoices', {
+    method: 'POST',
+    body: JSON.stringify({
+      supplierId: params.supplierId,
+      invoiceNumber: params.invoiceNumber,
+      invoiceDate: params.invoiceDate,
+      dueDate: params.dueDate,
+      totalAmount: params.totalAmount,
+      lines: params.lines,
+    }),
+  });
+}
+
+async function downloadBlob(path: string) {
+  const res = await apiFetchRaw(path, { method: 'GET' });
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="([^"]+)"/.exec(contentDisposition);
+  const fileName = match?.[1] || 'download';
+  return { blob, fileName };
+}
+
+export async function downloadSupplierImportTemplate() {
+  return downloadBlob('/ap/suppliers/import/template.csv');
+}
+
+export async function previewSupplierImport(file: File) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  return apiFetch<SupplierImportPreviewResponse>('/ap/suppliers/import/preview', {
+    method: 'POST',
+    body: fd,
+  });
+}
+
+export async function commitSupplierImport(rows: SupplierImportPreviewRow[]) {
+  return apiFetch<{ created: number; skippedDuplicates: number; skippedInvalid: number; received: number }>(
+    '/ap/suppliers/import/commit',
+    {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    },
+  );
 }
 
 // Supplier documents
@@ -199,6 +312,10 @@ export async function listInvoices() {
   return apiFetch<SupplierInvoice[]>('/ap/invoices', { method: 'GET' });
 }
 
+export async function listBills() {
+  return apiFetch<SupplierInvoice[]>('/ap/invoices', { method: 'GET' });
+}
+
 export async function createInvoice(params: {
   supplierId: string;
   invoiceNumber: string;
@@ -224,11 +341,26 @@ export async function submitInvoice(id: string) {
   return apiFetch<SupplierInvoice>(`/ap/invoices/${id}/submit`, { method: 'POST' });
 }
 
+export async function submitBill(id: string) {
+  return apiFetch<SupplierInvoice>(`/ap/invoices/${id}/submit`, { method: 'POST' });
+}
+
 export async function approveInvoice(id: string) {
   return apiFetch<SupplierInvoice>(`/ap/invoices/${id}/approve`, { method: 'POST' });
 }
 
+export async function approveBill(id: string) {
+  return apiFetch<SupplierInvoice>(`/ap/invoices/${id}/approve`, { method: 'POST' });
+}
+
 export async function postInvoice(id: string, params?: { apControlAccountCode?: string }) {
+  return apiFetch<any>(`/ap/invoices/${id}/post`, {
+    method: 'POST',
+    body: JSON.stringify({ apControlAccountCode: params?.apControlAccountCode || undefined }),
+  });
+}
+
+export async function postBill(id: string, params?: { apControlAccountCode?: string }) {
   return apiFetch<any>(`/ap/invoices/${id}/post`, {
     method: 'POST',
     body: JSON.stringify({ apControlAccountCode: params?.apControlAccountCode || undefined }),

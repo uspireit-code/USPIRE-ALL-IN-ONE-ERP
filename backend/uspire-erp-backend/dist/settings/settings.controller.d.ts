@@ -50,8 +50,8 @@ export declare class SettingsController {
     }[]>;
     listRoles(req: Request): Promise<{
         id: string;
-        createdAt: Date;
         name: string;
+        createdAt: Date;
         description: string | null;
     }[]>;
     validateRoles(req: Request, dto: ValidateUserRolesDto): Promise<{

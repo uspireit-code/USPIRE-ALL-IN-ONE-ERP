@@ -20,28 +20,28 @@ export declare class DisclosureNotesController {
         lines: {
             id: string;
             values: import("@prisma/client/runtime/library").JsonValue;
+            label: string;
             orderIndex: number;
             disclosureNoteId: string;
             rowKey: string;
-            label: string;
         }[];
     } & {
         id: string;
-        tenantId: string;
         createdAt: Date;
+        tenantId: string;
+        generatedById: string;
+        generatedAt: Date;
         accountingPeriodId: string;
         noteType: import("@prisma/client").$Enums.DisclosureNoteType;
-        generatedAt: Date;
-        generatedById: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
     }>;
     list(req: Request, dto: DisclosureNoteListQueryDto): Promise<{
         id: string;
         createdAt: Date;
+        generatedById: string;
+        generatedAt: Date;
         accountingPeriodId: string;
         noteType: import("@prisma/client").$Enums.DisclosureNoteType;
-        generatedAt: Date;
-        generatedById: string;
     }[]>;
     listIfrs(): Promise<import("./ifrs-disclosure-notes.types").IfrsDisclosureNotesIndexItem[]>;
     getIfrs(req: Request, noteCode: string, dto: IfrsDisclosureNoteQueryDto): Promise<import("./ifrs-disclosure-notes.types").IfrsDisclosureNoteDto>;
@@ -50,19 +50,19 @@ export declare class DisclosureNotesController {
         lines: {
             id: string;
             values: import("@prisma/client/runtime/library").JsonValue;
+            label: string;
             orderIndex: number;
             disclosureNoteId: string;
             rowKey: string;
-            label: string;
         }[];
     } & {
         id: string;
-        tenantId: string;
         createdAt: Date;
+        tenantId: string;
+        generatedById: string;
+        generatedAt: Date;
         accountingPeriodId: string;
         noteType: import("@prisma/client").$Enums.DisclosureNoteType;
-        generatedAt: Date;
-        generatedById: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
     }>;
 }

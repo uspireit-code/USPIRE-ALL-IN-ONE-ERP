@@ -1,0 +1,88 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS } from '../../auth/permission-catalog';
+import type { SupplierInvoice } from '../../services/ap';
+import { listBills } from '../../services/ap';
+
+function formatMoney(n: number) {
+  return n.toFixed(2);
+}
+
+export function BillsListPage() {
+  const { hasPermission } = useAuth();
+  const canViewBills = hasPermission(PERMISSIONS.AP.INVOICE_VIEW);
+  const canCreateBill = hasPermission(PERMISSIONS.AP.INVOICE_CREATE);
+
+  const [rows, setRows] = useState<SupplierInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    listBills()
+      .then((data) => {
+        if (!mounted) return;
+        setRows(data);
+      })
+      .catch((err: any) => {
+        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load bills';
+        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const content = useMemo(() => {
+    if (!canViewBills && !canCreateBill) {
+      return <div>You do not have permission to view Bills.</div>;
+    }
+    if (loading) return <div>Loading...</div>;
+    if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
+
+    return (
+      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Supplier</th>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Bill #</th>
+            <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Total</th>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((bill) => (
+            <tr key={bill.id}>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{bill.supplier?.name ?? '-'}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                <Link to={`/ap/bills/${bill.id}`}>{bill.invoiceNumber}</Link>
+              </td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(bill.totalAmount)}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{bill.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }, [error, loading, rows]);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>Bills</h2>
+        {canCreateBill ? <Link to="/ap/bills/new">Create Bill</Link> : null}
+      </div>
+
+      {content}
+    </div>
+  );
+}

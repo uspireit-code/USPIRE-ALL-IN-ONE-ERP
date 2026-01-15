@@ -9,36 +9,36 @@ export declare class AuditEvidenceService {
     constructor(prisma: PrismaService, storage: StorageProvider);
     uploadEvidence(req: Request, dto: AuditEvidenceUploadDto, file?: any): Promise<{
         id: string;
+        createdAt: Date;
         tenantId: string;
         mimeType: string;
         storageKey: string;
-        createdAt: Date;
-        sha256Hash: string;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
+        uploadedById: string;
         fileName: string;
-        size: number;
         uploadedBy: {
             id: string;
             email: string;
         };
-        uploadedById: string;
+        size: number;
+        sha256Hash: string;
     }>;
     listEvidence(req: Request, dto: AuditEvidenceQueryDto): Promise<{
         id: string;
+        createdAt: Date;
         tenantId: string;
         mimeType: string;
-        createdAt: Date;
-        sha256Hash: string;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
+        uploadedById: string;
         fileName: string;
-        size: number;
         uploadedBy: {
             id: string;
             email: string;
         };
-        uploadedById: string;
+        size: number;
+        sha256Hash: string;
     }[]>;
     downloadEvidence(req: Request, id: string): Promise<{
         fileName: string;

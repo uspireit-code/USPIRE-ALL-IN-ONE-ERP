@@ -25,6 +25,7 @@ export function SupplierDetailsPage() {
   const supplierId = params.id ?? '';
 
   const { hasPermission } = useAuth();
+  const canViewSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.VIEW);
   const canManageSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.CREATE);
 
   const [tab, setTab] = useState<TabKey>('OVERVIEW');
@@ -82,6 +83,12 @@ export function SupplierDetailsPage() {
       return;
     }
 
+    if (!canViewSupplier) {
+      setSupplierError('Permission denied');
+      setLoadingSupplier(false);
+      return;
+    }
+
     setLoadingSupplier(true);
     setSupplierError(null);
 
@@ -105,7 +112,7 @@ export function SupplierDetailsPage() {
     return () => {
       mounted = false;
     };
-  }, [supplierId]);
+  }, [supplierId, canViewSupplier]);
 
   async function refreshDocs() {
     setDocsLoading(true);

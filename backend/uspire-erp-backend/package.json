@@ -23,6 +23,8 @@
     "prisma:seed": "prisma db seed && ts-node scripts/verify-governance.ts",
     "rbac:verify-catalog": "ts-node scripts/verify-permission-catalog.ts",
     "rbac:repair": "ts-node scripts/rbac-repair.ts",
+    "bootstrap:ap-permissions": "ts-node scripts/bootstrap-ap-permissions.ts",
+    "patch:ap-supplier-permissions": "ts-node scripts/patch-ap-supplier-permissions.ts",
     "backfill:invoice-categories": "ts-node scripts/backfill-invoice-categories.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
