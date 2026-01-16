@@ -44,7 +44,11 @@ export function SettingsSystemPage() {
   const [system, setSystem] = useState<TenantSystemConfig | null>(null);
 
   if (!canSystemConfigView) {
-    return <Alert kind="error" title="Access denied" message="You do not have permission to view system settings." />;
+    return (
+      <Alert tone="error" title="Access denied">
+        You do not have permission to view system settings.
+      </Alert>
+    );
   }
 
   const [organisationName, setOrganisationName] = useState('');
