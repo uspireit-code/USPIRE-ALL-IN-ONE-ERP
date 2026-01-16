@@ -75,10 +75,13 @@ export function AuthProvider(props: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (state.isAuthenticated && !state.me) {
-      refreshMe().catch(() => {
-        setState((s) => ({ ...s, me: null, isAuthenticated: false, accessToken: '', refreshToken: '' }));
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+      refreshMe().catch((e: any) => {
+        const status = typeof e?.status === 'number' ? e.status : undefined;
+        if (status === 401) {
+          setState((s) => ({ ...s, me: null, isAuthenticated: false, accessToken: '', refreshToken: '' }));
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+        }
       });
     }
   }, [refreshMe, state.isAuthenticated, state.me]);

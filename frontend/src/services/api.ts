@@ -100,9 +100,9 @@ export async function apiFetch<T>(
   const body = text ? safeJsonParse(text) : null;
 
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       clearStoredAuth();
-      redirectToLoginIfNeeded(res.status === 401 ? 'unauthorized' : 'forbidden');
+      redirectToLoginIfNeeded('unauthorized');
     }
     const err: ApiError = { status: res.status, body };
     throw err;
@@ -147,9 +147,9 @@ export async function apiFetchRaw(
   });
 
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       clearStoredAuth();
-      redirectToLoginIfNeeded(res.status === 401 ? 'unauthorized' : 'forbidden');
+      redirectToLoginIfNeeded('unauthorized');
     }
     const text = await res.text();
     const body = text ? safeJsonParse(text) : null;
