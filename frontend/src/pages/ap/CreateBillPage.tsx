@@ -81,7 +81,7 @@ export function CreateBillPage() {
 
   async function submit() {
     if (!canCreate) {
-      setError('You do not have permission to create bills');
+      setError('You do not have permission to access this page.');
       return;
     }
 
@@ -128,7 +128,7 @@ export function CreateBillPage() {
     }
   }
 
-  if (!canCreate) return <div>You do not have permission to create bills.</div>;
+  if (!canCreate) return <div>You do not have permission to access this page.</div>;
   if (loadingLookups) return <div>Loading...</div>;
   if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 

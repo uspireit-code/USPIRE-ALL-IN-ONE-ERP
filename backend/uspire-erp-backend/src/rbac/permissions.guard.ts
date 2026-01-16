@@ -148,6 +148,19 @@ export class PermissionsGuard implements CanActivate {
         (p) => !codes.has(p) && !satisfiedBySystemView.has(p),
       );
       if (missing.length > 0) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('[PermissionsGuard][deny][all]', {
+            baseUrl: (req as any)?.baseUrl,
+            routePath: (req as any)?.route?.path,
+            method: (req as any)?.method,
+            requiredAll: required,
+            missing: missing,
+            tenantId: tenant.id,
+            userId: user.id,
+            userEmail: (user as any)?.email,
+          });
+        }
         if (missing[0] === PERMISSIONS.AR.RECEIPT_POST) {
           throw new ForbiddenException(
             'You do not have permission to post receipts. Required: RECEIPT_POST.',
@@ -160,6 +173,18 @@ export class PermissionsGuard implements CanActivate {
         (p) => codes.has(p) || satisfiedBySystemView.has(p),
       );
       if (!hasAny) {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.warn('[PermissionsGuard][deny][any]', {
+            baseUrl: (req as any)?.baseUrl,
+            routePath: (req as any)?.route?.path,
+            method: (req as any)?.method,
+            requiredAny: required,
+            tenantId: tenant.id,
+            userId: user.id,
+            userEmail: (user as any)?.email,
+          });
+        }
         throw new ForbiddenException(`Missing permission: ${required[0]}`);
       }
     }

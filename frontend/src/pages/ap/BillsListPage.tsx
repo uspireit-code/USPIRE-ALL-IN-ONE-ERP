@@ -42,14 +42,20 @@ export function BillsListPage() {
     };
   }, []);
 
-  const content = useMemo(() => {
-    if (!canViewBills && !canCreateBill) {
-      return <div>You do not have permission to view Bills.</div>;
-    }
-    if (loading) return <div>Loading...</div>;
-    if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
+  if (!canViewBills && !canCreateBill) {
+    return <div>You do not have permission to access this page.</div>;
+  }
 
-    return (
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>Bills</h2>
+        {canCreateBill ? <Link to="/ap/bills/new">Create Bill</Link> : null}
+      </div>
+
       <table style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead>
           <tr>
@@ -72,17 +78,6 @@ export function BillsListPage() {
           ))}
         </tbody>
       </table>
-    );
-  }, [error, loading, rows]);
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Bills</h2>
-        {canCreateBill ? <Link to="/ap/bills/new">Create Bill</Link> : null}
-      </div>
-
-      {content}
     </div>
   );
 }

@@ -135,15 +135,39 @@ function SettingsVisibleRoute(props: { children: React.ReactNode }) {
 
 function PermissionOnlyRoute(props: { permission: string; children: React.ReactNode }) {
   const { state } = useAuth();
+  if (state.isAuthenticated && !state.me) return <div>Loading...</div>;
   const has = can(state.me, props.permission);
-  if (!has) return <AccessDeniedPage requiredPermission={props.permission} />;
+  if (!has) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn('[route.guard][deny][only]', {
+        path: window.location.pathname,
+        requiredPermission: props.permission,
+        userEmail: state.me?.user?.email,
+        permissions: state.me?.permissions ?? [],
+      });
+    }
+    return <AccessDeniedPage requiredPermission={props.permission} />;
+  }
   return <>{props.children}</>;
 }
 
 function PermissionAnyRoute(props: { permissions: string[]; children: React.ReactNode }) {
   const { state } = useAuth();
+  if (state.isAuthenticated && !state.me) return <div>Loading...</div>;
   const has = canAny(state.me, props.permissions);
-  if (!has) return <AccessDeniedPage requiredAnyPermissions={props.permissions} />;
+  if (!has) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn('[route.guard][deny][any]', {
+        path: window.location.pathname,
+        requiredAnyPermissions: props.permissions,
+        userEmail: state.me?.user?.email,
+        permissions: state.me?.permissions ?? [],
+      });
+    }
+    return <AccessDeniedPage requiredAnyPermissions={props.permissions} />;
+  }
   return <>{props.children}</>;
 }
 

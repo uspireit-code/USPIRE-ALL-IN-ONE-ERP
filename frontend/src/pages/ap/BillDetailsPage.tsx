@@ -14,6 +14,7 @@ export function BillDetailsPage() {
   const { hasPermission } = useAuth();
 
   const canView = hasPermission(PERMISSIONS.AP.INVOICE_VIEW);
+  const canCreate = hasPermission(PERMISSIONS.AP.INVOICE_CREATE);
   const canSubmit = hasPermission(PERMISSIONS.AP.INVOICE_SUBMIT);
   const canApprove = hasPermission(PERMISSIONS.AP.INVOICE_APPROVE);
   const canPost = hasPermission(PERMISSIONS.AP.INVOICE_POST);
@@ -88,7 +89,7 @@ export function BillDetailsPage() {
     }
   }
 
-  if (!canView) return <div>You do not have permission to view Bills.</div>;
+  if (!canView && !canCreate) return <div>You do not have permission to access this page.</div>;
   if (loading) return <div>Loading...</div>;
   if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
   if (!bill) return <div style={{ color: 'crimson' }}>Bill not found</div>;

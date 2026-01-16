@@ -78,14 +78,6 @@ export const PERMISSIONS = {
       APPROVE: "AP_INVOICE_APPROVE",
       POST: "AP_INVOICE_POST",
     },
-    BILL: {
-      VIEW: "AP_BILL_VIEW",
-      CREATE: "AP_BILL_CREATE",
-      EDIT: "AP_BILL_EDIT",
-      SUBMIT: "AP_BILL_SUBMIT",
-      APPROVE: "AP_BILL_APPROVE",
-      POST: "AP_BILL_POST",
-    },
     PAYMENT: {
       CREATE: "PAYMENT_CREATE",
       APPROVE: "PAYMENT_APPROVE",

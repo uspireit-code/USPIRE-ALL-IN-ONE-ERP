@@ -411,6 +411,7 @@ export function Layout() {
     showForecasts ||
     showFixedAssets ||
     showBankReconciliation ||
+    showApBills ||
     showArCustomers ||
     showArInvoices ||
     showArReceipts ||

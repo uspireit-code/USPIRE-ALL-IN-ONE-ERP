@@ -49,6 +49,10 @@ export function AuthProvider(props: { children: React.ReactNode }) {
         )
         .sort();
 
+      const apPerms = perms
+        .filter((p) => /^(AP_)?(SUPPLIER|INVOICE)_(VIEW|CREATE|IMPORT|SUBMIT|APPROVE|POST)/i.test(p ?? ''))
+        .sort();
+
       // TEMP DEBUG: prove what the UI received from /auth/me.
       // eslint-disable-next-line no-console
       console.log('[auth.me][frontend]', {
@@ -57,6 +61,8 @@ export function AuthProvider(props: { children: React.ReactNode }) {
         permissionCount: perms.length,
         arPermissionCount: arPerms.length,
         arPermissions: arPerms,
+        apPermissionCount: apPerms.length,
+        apPermissions: apPerms,
       });
     }
 
