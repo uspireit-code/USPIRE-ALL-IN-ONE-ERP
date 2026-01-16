@@ -523,6 +523,7 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.SYSTEM.CONFIG_VIEW,
                       PERMISSIONS.FINANCE.CONFIG_VIEW,
+                      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
                       PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >

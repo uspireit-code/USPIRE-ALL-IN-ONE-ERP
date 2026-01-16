@@ -310,6 +310,7 @@ export function Layout() {
   const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
   const hasSystemConfigView = hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
   const hasSystemSettingsView = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
+  const hasFinanceConfigView = hasPermission(PERMISSIONS.FINANCE.CONFIG_VIEW);
   const hasUserView = hasPermission(PERMISSIONS.USER.VIEW);
   const hasRoleView = hasPermission(PERMISSIONS.ROLE.VIEW);
 
@@ -398,8 +399,12 @@ export function Layout() {
     hasSystemViewAll ||
     hasSystemConfigView ||
     hasSystemSettingsView ||
+    hasFinanceConfigView ||
     hasUserView ||
     hasRoleView;
+
+  const showSystemConfigurationSettings =
+    hasSystemViewAll || hasSystemConfigView || hasSystemSettingsView || hasFinanceConfigView;
 
   const showFinanceNav =
     hasFinanceViewAll ||
@@ -799,7 +804,9 @@ export function Layout() {
                 {showSettings ? (
                   <>
                     <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} />
-                    <SidebarLink to="/settings/system" label="System Configuration" icon={<SettingsIcon />} level={2} />
+                    {showSystemConfigurationSettings ? (
+                      <SidebarLink to="/settings/system" label="System Configuration" icon={<SettingsIcon />} level={2} />
+                    ) : null}
                     <SidebarLink to="/settings/users" label="Users" icon={<UsersIcon />} level={2} />
                     <SidebarLink to="/settings/roles" label="Roles" icon={<ClipboardIcon />} level={2} />
                   </>
