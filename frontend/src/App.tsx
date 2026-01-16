@@ -5,7 +5,6 @@ import { can, canAny } from './auth/permissions';
 import { PERMISSIONS } from './auth/permission-catalog';
 import { BrandingProvider } from './branding/BrandingContext';
 import { Layout } from './components/Layout';
-import { ProtectedRoute } from './components/ProtectedRoute';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ManagementDashboardPage } from './pages/ManagementDashboardPage';
@@ -182,9 +181,7 @@ export default function App() {
             <Route
               path="/"
               element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
+                <Layout />
               }
             >
               <Route index element={<DashboardPage />} />
@@ -218,9 +215,30 @@ export default function App() {
                   </PermissionAnyRoute>
                 }
               />
-              <Route path="ap/invoices" element={<InvoicesListPage />} />
-              <Route path="ap/invoices/new" element={<CreateInvoicePage />} />
-              <Route path="ap/invoices/:id" element={<InvoiceDetailsPage />} />
+              <Route
+                path="ap/invoices"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AP.INVOICE_VIEW, PERMISSIONS.AP.INVOICE_CREATE]}>
+                    <InvoicesListPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="ap/invoices/new"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.INVOICE_CREATE}>
+                    <CreateInvoicePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="ap/invoices/:id"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.AP.INVOICE_VIEW, PERMISSIONS.AP.INVOICE_CREATE]}>
+                    <InvoiceDetailsPage />
+                  </PermissionAnyRoute>
+                }
+              />
               <Route path="ar" element={<ArHomePage />} />
               <Route path="ar/customers" element={<CustomersListPage />} />
               <Route path="ar/customers/new" element={<CreateCustomerPage />} />

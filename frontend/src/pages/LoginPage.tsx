@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -10,6 +10,7 @@ import { useBrandColors, useBranding } from '../branding/BrandingContext';
 export function LoginPage() {
   const { login, state } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const brand = useBrandColors();
   const { effective } = useBranding();
 
@@ -30,7 +31,9 @@ export function LoginPage() {
 
     try {
       await login({ tenantId: tenantId.trim() ? tenantId.trim() : undefined, email, password });
-      navigate('/', { replace: true });
+      const sp = new URLSearchParams(location.search);
+      const next = sp.get('next');
+      navigate(next && next.startsWith('/') ? next : '/', { replace: true });
     } catch (err: any) {
       const msg = err?.body?.message ?? err?.body?.error ?? 'Login failed';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -38,6 +41,20 @@ export function LoginPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    const reason = (sp.get('reason') ?? '').trim().toLowerCase();
+    if (!reason) return;
+
+    if (reason === 'unauthorized') {
+      setError('Your session has expired. Please sign in again.');
+    } else if (reason === 'forbidden') {
+      setError('Access denied. Please sign in with an account that has permission.');
+    } else if (reason === 'session') {
+      setError('Session could not load. Please sign in again.');
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const update = () => setIsCompact(window.innerWidth < 920);

@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { canAny } from '../auth/permissions';
 import { PERMISSIONS } from '../auth/permission-catalog';
 import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
+import { AuthBootstrapGate } from './AuthBootstrapGate';
 
 export function Layout() {
   const location = useLocation();
@@ -935,7 +936,9 @@ export function Layout() {
         }}
       >
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <Outlet />
+          <AuthBootstrapGate>
+            <Outlet />
+          </AuthBootstrapGate>
         </div>
       </div>
     </div>

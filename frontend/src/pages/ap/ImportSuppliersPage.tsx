@@ -83,7 +83,7 @@ export function ImportSuppliersPage() {
   };
 
   const previewSummary = useMemo(() => {
-    if (!preview) return null;
+    if (!preview) return undefined;
     const total = preview.totalRows ?? preview.rows?.length ?? 0;
     const invalid = (preview.rows ?? []).filter((r: any) => r?.isValid === false).length;
     const dup = (preview.rows ?? []).filter((r: any) => r?.isDuplicate === true).length;

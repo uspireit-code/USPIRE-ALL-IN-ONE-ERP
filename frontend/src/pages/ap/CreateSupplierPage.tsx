@@ -29,7 +29,7 @@ export function CreateSupplierPage() {
     if (!n) return 'Supplier name is required.';
     const e = email.trim();
     if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return 'Email address is not valid.';
-    return null;
+    return undefined;
   }
 
   async function onSubmit(e: React.FormEvent) {

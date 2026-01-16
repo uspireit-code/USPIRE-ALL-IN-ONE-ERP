@@ -21,7 +21,7 @@ export function SettingsOrganisationPage() {
   const [organisationName, setOrganisationName] = useState('');
   const [organisationShortName, setOrganisationShortName] = useState('');
 
-  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const NAVY = '#020445';
@@ -42,14 +42,14 @@ export function SettingsOrganisationPage() {
       if (s.logoUrl) {
         const blob = await fetchOrganisationLogoBlob();
         const url = URL.createObjectURL(blob);
-        setLogoPreviewUrl((prev) => {
+        setLogoPreviewUrl((prev: string | undefined) => {
           if (prev) URL.revokeObjectURL(prev);
           return url;
         });
       } else {
-        setLogoPreviewUrl((prev) => {
+        setLogoPreviewUrl((prev: string | undefined) => {
           if (prev) URL.revokeObjectURL(prev);
-          return null;
+          return undefined;
         });
       }
     } catch (e) {
@@ -62,9 +62,9 @@ export function SettingsOrganisationPage() {
   useEffect(() => {
     refresh().catch(() => undefined);
     return () => {
-      setLogoPreviewUrl((prev) => {
+      setLogoPreviewUrl((prev: string | undefined) => {
         if (prev) URL.revokeObjectURL(prev);
-        return null;
+        return undefined;
       });
     };
   }, []);

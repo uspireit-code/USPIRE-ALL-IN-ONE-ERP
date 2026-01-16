@@ -106,7 +106,7 @@ export function SettingsSystemPage() {
   const [accounts, setAccounts] = useState<GlAccountLookup[]>([]);
 
   const [pendingFaviconFile, setPendingFaviconFile] = useState<File | null>(null);
-  const [faviconPreviewUrl, setFaviconPreviewUrl] = useState<string | null>(null);
+  const [faviconPreviewUrl, setFaviconPreviewUrl] = useState<string | undefined>(undefined);
   const faviconInputRef = useRef<HTMLInputElement | null>(null);
 
   const [coaActionLoading, setCoaActionLoading] = useState(false);
@@ -174,7 +174,7 @@ export function SettingsSystemPage() {
       setPendingFaviconFile(null);
       setFaviconPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
-        return null;
+        return undefined;
       });
       clearPreviewOverrides();
     } catch (e) {
@@ -189,7 +189,7 @@ export function SettingsSystemPage() {
     return () => {
       setFaviconPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
-        return null;
+        return undefined;
       });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -442,7 +442,7 @@ export function SettingsSystemPage() {
       setPendingFaviconFile(null);
       setFaviconPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
-        return null;
+        return undefined;
       });
       clearPreviewOverrides();
       await refreshBranding();

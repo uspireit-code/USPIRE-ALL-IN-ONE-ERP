@@ -48,6 +48,19 @@ function getStoredAuth() {
   return { accessToken, tenantId };
 }
 
+function clearStoredAuth() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
+function redirectToLoginIfNeeded(reason: string) {
+  if (typeof window === 'undefined') return;
+  const path = window.location?.pathname ?? '';
+  if (path.startsWith('/login')) return;
+  const next = encodeURIComponent(window.location?.pathname ?? '/');
+  window.location.assign(`/login?reason=${encodeURIComponent(reason)}&next=${next}`);
+}
+
 export async function apiFetch<T>(
   inputPath: string,
   init?: RequestInit,
@@ -87,6 +100,10 @@ export async function apiFetch<T>(
   const body = text ? safeJsonParse(text) : null;
 
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      clearStoredAuth();
+      redirectToLoginIfNeeded(res.status === 401 ? 'unauthorized' : 'forbidden');
+    }
     const err: ApiError = { status: res.status, body };
     throw err;
   }
@@ -130,6 +147,10 @@ export async function apiFetchRaw(
   });
 
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      clearStoredAuth();
+      redirectToLoginIfNeeded(res.status === 401 ? 'unauthorized' : 'forbidden');
+    }
     const text = await res.text();
     const body = text ? safeJsonParse(text) : null;
     const err: ApiError = { status: res.status, body };
