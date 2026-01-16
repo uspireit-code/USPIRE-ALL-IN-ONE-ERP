@@ -2,6 +2,7 @@ import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import type { StorageProvider } from '../storage/storage.provider';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
+import { UpdateApControlAccountDto } from './dto/update-ap-control-account.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
@@ -11,6 +12,12 @@ export declare class SettingsService {
     private readonly prisma;
     private readonly storage;
     constructor(prisma: PrismaService, storage: StorageProvider);
+    getFinanceApControlAccount(req: Request): Promise<{
+        apControlAccountId: string | null;
+    }>;
+    updateFinanceApControlAccount(req: Request, dto: UpdateApControlAccountDto): Promise<{
+        apControlAccountId: string | null;
+    }>;
     private ensureFinanceOfficerRole;
     private ensureFinanceManagerRole;
     private ensureFinanceControllerRole;
@@ -60,8 +67,8 @@ export declare class SettingsService {
         createdAt: Date;
     }[]>;
     listRoles(req: Request): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         description: string | null;
     }[]>;

@@ -9,10 +9,10 @@ export declare class PeriodsService {
     constructor(prisma: PrismaService, gl: GlService);
     private auditPeriodCorrection;
     listPeriods(req: Request): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
         createdById: string | null;
@@ -26,15 +26,15 @@ export declare class PeriodsService {
     createPeriod(req: Request, dto: CreateAccountingPeriodDto): Promise<any>;
     getChecklist(req: Request, id: string): Promise<{
         period: {
-            id: string;
             name: string;
+            id: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
             closedAt: Date | null;
             closedBy: {
-                id: string;
                 email: string;
+                id: string;
             } | null;
         };
         items: any;
@@ -59,10 +59,10 @@ export declare class PeriodsService {
         createdAt: any;
     }>;
     closePeriod(req: Request, id: string): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
         createdById: string | null;
@@ -76,10 +76,10 @@ export declare class PeriodsService {
     reopenPeriod(req: Request, id: string, dto: {
         reason?: string;
     }): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
         createdById: string | null;

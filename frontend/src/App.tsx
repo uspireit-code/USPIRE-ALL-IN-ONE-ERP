@@ -93,6 +93,7 @@ import { SettingsFundsPage } from './pages/settings/SettingsFundsPage';
 import { SettingsInvoiceCategoriesPage } from './pages/settings/SettingsInvoiceCategoriesPage';
 import { SettingsTaxRatesPage } from './pages/settings/SettingsTaxRatesPage';
 import { SettingsTaxConfigurationPage } from './pages/settings/SettingsTaxConfigurationPage';
+import { SettingsFinanceControlAccountsPage } from './pages/settings/SettingsFinanceControlAccountsPage';
 
 import { CreditNotesListPage } from './pages/ar/CreditNotesListPage';
 import { CreditNoteCreatePage } from './pages/ar/CreditNoteCreatePage';
@@ -546,6 +547,20 @@ export default function App() {
                     ]}
                   >
                     <SettingsSystemPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="settings/finance/control-accounts"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.FINANCE.CONFIG_UPDATE,
+                      PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
+                    <SettingsFinanceControlAccountsPage />
                   </PermissionAnyRoute>
                 }
               />

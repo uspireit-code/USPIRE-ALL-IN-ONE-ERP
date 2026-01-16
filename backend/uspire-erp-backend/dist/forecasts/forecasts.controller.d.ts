@@ -7,10 +7,10 @@ export declare class ForecastsController {
     constructor(forecasts: ForecastsService);
     createForecast(req: Request, dto: CreateForecastDto): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             createdById: string;
@@ -26,29 +26,29 @@ export declare class ForecastsController {
         };
     }>;
     listForecasts(req: Request, fiscalYear?: string, limit?: string, offset?: string): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.ForecastStatus;
         updatedAt: Date;
         createdBy: {
-            id: string;
             email: string;
+            id: string;
         };
         fiscalYear: number;
     }[]>;
     getForecast(req: Request, id: string): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             fiscalYear: number;
         };
@@ -57,8 +57,8 @@ export declare class ForecastsController {
             createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             forecastId: string;
             versionNumber: number;
@@ -68,8 +68,8 @@ export declare class ForecastsController {
             createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             forecastId: string;
             versionNumber: number;
@@ -77,12 +77,12 @@ export declare class ForecastsController {
         lines: {
             id: string;
             account: {
-                id: string;
                 name: string;
+                id: string;
                 code: string;
             };
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             month: number;
         }[];
     }>;
@@ -111,10 +111,10 @@ export declare class ForecastsController {
     }>;
     submitForecast(req: Request, id: string): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             fiscalYear: number;
@@ -129,10 +129,10 @@ export declare class ForecastsController {
     }>;
     approveForecast(req: Request, id: string): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             fiscalYear: number;
@@ -146,10 +146,10 @@ export declare class ForecastsController {
         };
     }>;
     updateForecastLines(req: Request, id: string, dto: UpdateForecastLinesDto): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.ForecastStatus;
         updatedAt: Date;
         fiscalYear: number;

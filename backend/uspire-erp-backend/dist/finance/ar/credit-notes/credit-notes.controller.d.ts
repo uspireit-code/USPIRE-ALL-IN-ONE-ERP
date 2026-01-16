@@ -28,9 +28,9 @@ export declare class FinanceArCreditNotesController {
         invoiceSummary: {
             invoiceId: ({
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -43,9 +43,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -58,9 +58,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -75,36 +75,36 @@ export declare class FinanceArCreditNotesController {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             } | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -119,18 +119,18 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -145,42 +145,42 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
+                invoiceId: string;
                 receiptId: string;
-                invoiceId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -195,10 +195,10 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             }[];
             invoiceNumber: any;
@@ -239,9 +239,9 @@ export declare class FinanceArCreditNotesController {
         invoiceSummary: {
             invoiceId: ({
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -254,9 +254,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -269,9 +269,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -286,36 +286,36 @@ export declare class FinanceArCreditNotesController {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             } | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -330,18 +330,18 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -356,42 +356,42 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
+                invoiceId: string;
                 receiptId: string;
-                invoiceId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -406,10 +406,10 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             }[];
             invoiceNumber: any;
@@ -449,9 +449,9 @@ export declare class FinanceArCreditNotesController {
         invoiceSummary: {
             invoiceId: ({
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -464,9 +464,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -479,9 +479,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -496,36 +496,36 @@ export declare class FinanceArCreditNotesController {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             } | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -540,18 +540,18 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -566,42 +566,42 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
+                invoiceId: string;
                 receiptId: string;
-                invoiceId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -616,10 +616,10 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             }[];
             invoiceNumber: any;
@@ -659,9 +659,9 @@ export declare class FinanceArCreditNotesController {
         invoiceSummary: {
             invoiceId: ({
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -674,9 +674,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -689,9 +689,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -706,36 +706,36 @@ export declare class FinanceArCreditNotesController {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             } | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -750,18 +750,18 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -776,42 +776,42 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
+                invoiceId: string;
                 receiptId: string;
-                invoiceId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -826,10 +826,10 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             }[];
             invoiceNumber: any;
@@ -869,9 +869,9 @@ export declare class FinanceArCreditNotesController {
         invoiceSummary: {
             invoiceId: ({
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -884,9 +884,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -899,9 +899,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -916,36 +916,36 @@ export declare class FinanceArCreditNotesController {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             } | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -960,18 +960,18 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -986,42 +986,42 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
+                invoiceId: string;
                 receiptId: string;
-                invoiceId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -1036,10 +1036,10 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             }[];
             invoiceNumber: any;
@@ -1079,9 +1079,9 @@ export declare class FinanceArCreditNotesController {
         invoiceSummary: {
             invoiceId: ({
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -1094,9 +1094,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -1109,9 +1109,9 @@ export declare class FinanceArCreditNotesController {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -1126,36 +1126,36 @@ export declare class FinanceArCreditNotesController {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             } | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -1170,18 +1170,18 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -1196,42 +1196,42 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             })[] | ({
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
+                invoiceId: string;
                 receiptId: string;
-                invoiceId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             } | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             })[] | {
                 id: string;
                 tenantId: string;
                 customerId: string;
-                invoiceId: string;
-                reminderRuleId: string | null;
                 reminderLevel: import("@prisma/client").$Enums.ArReminderLevel;
                 triggerMode: import("@prisma/client").$Enums.ArReminderTriggerMode;
-                sentById: string;
                 sentAt: Date;
+                invoiceId: string;
+                reminderRuleId: string | null;
+                sentById: string;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.DocumentStatus;
                 updatedAt: Date;
                 createdById: string;
                 currency: string;
+                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
                 totalAmount: import("@prisma/client/runtime/library").Decimal;
-                approvedAt: Date | null;
-                postedAt: Date | null;
                 approvedById: string | null;
                 postedById: string | null;
-                taxAmount: import("@prisma/client/runtime/library").Decimal | null;
+                approvedAt: Date | null;
+                postedAt: Date | null;
                 customerId: string;
                 subtotal: import("@prisma/client/runtime/library").Decimal;
                 exchangeRate: import("@prisma/client/runtime/library").Decimal;
@@ -1246,10 +1246,10 @@ export declare class FinanceArCreditNotesController {
                 postedJournalId: string | null;
             }[] | {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
-                receiptId: string;
+                createdAt: Date;
                 invoiceId: string;
+                receiptId: string;
                 appliedAmount: import("@prisma/client/runtime/library").Decimal;
             }[];
             invoiceNumber: any;

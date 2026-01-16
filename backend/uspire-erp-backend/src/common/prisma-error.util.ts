@@ -7,6 +7,9 @@ export function translatePrismaError(err: any): string {
       if (Array.isArray(target) && target.includes('name')) {
         return 'A supplier with this name already exists.';
       }
+      if (Array.isArray(target) && target.includes('invoiceNumber')) {
+        return 'A bill/invoice with this number already exists for this supplier.';
+      }
       return 'Duplicate record detected.';
     }
   }

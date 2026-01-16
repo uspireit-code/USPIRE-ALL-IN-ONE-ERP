@@ -13,14 +13,14 @@ export declare class ArService {
     listEligibleAccounts(req: Request): Promise<{
         [x: string]: {
             id: string;
-            description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
             supplierInvoiceId: string;
+            accountId: string;
+            description: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
         }[] | {
             id: string;
-            description: string | null;
             accountId: string;
+            description: string | null;
             debit: import("@prisma/client/runtime/library").Decimal;
             credit: import("@prisma/client/runtime/library").Decimal;
             lineNumber: number | null;
@@ -30,236 +30,9 @@ export declare class ArService {
             projectId: string | null;
             journalEntryId: string;
         }[] | ({
-            id: string;
-            description: string;
-            accountId: string;
-            taxRateId: string | null;
-            departmentId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            customerInvoiceId: string;
-            lineTotal: import("@prisma/client/runtime/library").Decimal;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
-            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
-            discountTotal: import("@prisma/client/runtime/library").Decimal;
-        } | {
-            id: string;
-            description: string;
-            accountId: string;
-            taxRateId: string | null;
-            departmentId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            customerInvoiceId: string;
-            lineTotal: import("@prisma/client/runtime/library").Decimal;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
-            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
-            discountTotal: import("@prisma/client/runtime/library").Decimal;
-        })[] | ({
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
-            periodId: string;
-            departmentId: string | null;
-            legalEntityId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            budgetId: string;
-            revisionId: string;
-        } | {
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
-            periodId: string;
-            departmentId: string | null;
-            legalEntityId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            budgetId: string;
-            revisionId: string;
-        })[] | ({
-            id: string;
-            description: string;
-            departmentId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            creditNoteId: string;
-            lineAmount: import("@prisma/client/runtime/library").Decimal;
-            revenueAccountId: string;
-        } | {
-            id: string;
-            description: string;
-            departmentId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            creditNoteId: string;
-            lineAmount: import("@prisma/client/runtime/library").Decimal;
-            revenueAccountId: string;
-        })[] | ({
-            id: string;
-            description: string | null;
-            accountId: string;
-            debit: import("@prisma/client/runtime/library").Decimal;
-            credit: import("@prisma/client/runtime/library").Decimal;
-            lineNumber: number | null;
-            departmentId: string | null;
-            legalEntityId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            journalEntryId: string;
-        } | {
-            id: string;
-            description: string | null;
-            accountId: string;
-            debit: import("@prisma/client/runtime/library").Decimal;
-            credit: import("@prisma/client/runtime/library").Decimal;
-            lineNumber: number | null;
-            departmentId: string | null;
-            legalEntityId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            journalEntryId: string;
-        })[] | {
-            id: string;
-            description: string;
-            accountId: string;
-            taxRateId: string | null;
-            departmentId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            customerInvoiceId: string;
-            lineTotal: import("@prisma/client/runtime/library").Decimal;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
-            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
-            discountTotal: import("@prisma/client/runtime/library").Decimal;
-        }[] | {
-            id: string;
-            createdAt: Date;
-            tenantId: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
-            periodId: string;
-            departmentId: string | null;
-            legalEntityId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            budgetId: string;
-            revisionId: string;
-        }[] | {
-            id: string;
-            description: string;
-            departmentId: string | null;
-            fundId: string | null;
-            projectId: string | null;
-            quantity: import("@prisma/client/runtime/library").Decimal;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            creditNoteId: string;
-            lineAmount: import("@prisma/client/runtime/library").Decimal;
-            revenueAccountId: string;
-        }[] | ({
-            id: string;
-            name: string;
-            createdAt: Date;
-            tenantId: string;
-            status: import("@prisma/client").$Enums.FixedAssetStatus;
-            createdById: string;
-            description: string | null;
-            categoryId: string;
-            acquisitionDate: Date;
-            capitalizationDate: Date | null;
-            cost: import("@prisma/client/runtime/library").Decimal;
-            residualValue: import("@prisma/client/runtime/library").Decimal;
-            usefulLifeMonths: number;
-            method: import("@prisma/client").$Enums.DepreciationMethod;
-            assetAccountId: string | null;
-            accumDepAccountId: string | null;
-            depExpenseAccountId: string | null;
-            vendorId: string | null;
-            apInvoiceId: string | null;
-            capitalizationJournalId: string | null;
-            disposalJournalId: string | null;
-        } | {
-            id: string;
-            name: string;
-            createdAt: Date;
-            tenantId: string;
-            status: import("@prisma/client").$Enums.FixedAssetStatus;
-            createdById: string;
-            description: string | null;
-            categoryId: string;
-            acquisitionDate: Date;
-            capitalizationDate: Date | null;
-            cost: import("@prisma/client/runtime/library").Decimal;
-            residualValue: import("@prisma/client/runtime/library").Decimal;
-            usefulLifeMonths: number;
-            method: import("@prisma/client").$Enums.DepreciationMethod;
-            assetAccountId: string | null;
-            accumDepAccountId: string | null;
-            depExpenseAccountId: string | null;
-            vendorId: string | null;
-            apInvoiceId: string | null;
-            capitalizationJournalId: string | null;
-            disposalJournalId: string | null;
-        })[] | {
-            id: string;
-            name: string;
-            createdAt: Date;
-            tenantId: string;
-            status: import("@prisma/client").$Enums.FixedAssetStatus;
-            createdById: string;
-            description: string | null;
-            categoryId: string;
-            acquisitionDate: Date;
-            capitalizationDate: Date | null;
-            cost: import("@prisma/client/runtime/library").Decimal;
-            residualValue: import("@prisma/client/runtime/library").Decimal;
-            usefulLifeMonths: number;
-            method: import("@prisma/client").$Enums.DepreciationMethod;
-            assetAccountId: string | null;
-            accumDepAccountId: string | null;
-            depExpenseAccountId: string | null;
-            vendorId: string | null;
-            apInvoiceId: string | null;
-            capitalizationJournalId: string | null;
-            disposalJournalId: string | null;
-        }[] | {
-            id: string;
-            name: string;
-            createdAt: Date;
-            tenantId: string;
-            code: string;
-            assetAccountId: string;
-            accumDepAccountId: string;
-            depExpenseAccountId: string;
-            defaultMethod: import("@prisma/client").$Enums.DepreciationMethod;
-            defaultUsefulLifeMonths: number;
-            defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
-        }[] | {
-            id: string;
-            accountId: string;
-            templateId: string;
-            descriptionTemplate: string | null;
-            debitAmount: import("@prisma/client/runtime/library").Decimal;
-            creditAmount: import("@prisma/client/runtime/library").Decimal;
-            lineOrder: number;
-        }[] | ({
-            id: string;
             name: string;
             defaultCurrency: string | null;
+            id: string;
             createdAt: Date;
             status: import("@prisma/client").$Enums.TenantStatus;
             logoUrl: string | null;
@@ -285,6 +58,7 @@ export declare class ArService {
             coaFrozen: boolean;
             coaLockedAt: Date | null;
             arControlAccountId: string | null;
+            apControlAccountId: string | null;
             defaultBankClearingAccountId: string | null;
             unappliedReceiptsAccountId: string | null;
             allowSelfPosting: boolean;
@@ -298,9 +72,9 @@ export declare class ArService {
             requiresProjectOnInvoices: boolean;
             cashClearingAccountId: string | null;
         } | {
-            id: string;
             name: string;
             defaultCurrency: string | null;
+            id: string;
             createdAt: Date;
             status: import("@prisma/client").$Enums.TenantStatus;
             logoUrl: string | null;
@@ -326,6 +100,7 @@ export declare class ArService {
             coaFrozen: boolean;
             coaLockedAt: Date | null;
             arControlAccountId: string | null;
+            apControlAccountId: string | null;
             defaultBankClearingAccountId: string | null;
             unappliedReceiptsAccountId: string | null;
             allowSelfPosting: boolean;
@@ -339,11 +114,11 @@ export declare class ArService {
             requiresProjectOnInvoices: boolean;
             cashClearingAccountId: string | null;
         })[] | ({
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -366,11 +141,11 @@ export declare class ArService {
             subCategory: string | null;
             requiresDepartment: boolean;
         } | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -393,62 +168,208 @@ export declare class ArService {
             subCategory: string | null;
             requiresDepartment: boolean;
         })[] | ({
+            name: string;
             id: string;
-            description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
-            supplierInvoiceId: string;
+            tenantId: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.FixedAssetStatus;
+            createdById: string;
+            description: string | null;
+            method: import("@prisma/client").$Enums.DepreciationMethod;
+            categoryId: string;
+            acquisitionDate: Date;
+            capitalizationDate: Date | null;
+            cost: import("@prisma/client/runtime/library").Decimal;
+            residualValue: import("@prisma/client/runtime/library").Decimal;
+            usefulLifeMonths: number;
+            assetAccountId: string | null;
+            accumDepAccountId: string | null;
+            depExpenseAccountId: string | null;
+            vendorId: string | null;
+            apInvoiceId: string | null;
+            capitalizationJournalId: string | null;
+            disposalJournalId: string | null;
         } | {
+            name: string;
             id: string;
-            description: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
-            accountId: string;
-            supplierInvoiceId: string;
+            tenantId: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.FixedAssetStatus;
+            createdById: string;
+            description: string | null;
+            method: import("@prisma/client").$Enums.DepreciationMethod;
+            categoryId: string;
+            acquisitionDate: Date;
+            capitalizationDate: Date | null;
+            cost: import("@prisma/client/runtime/library").Decimal;
+            residualValue: import("@prisma/client/runtime/library").Decimal;
+            usefulLifeMonths: number;
+            assetAccountId: string | null;
+            accumDepAccountId: string | null;
+            depExpenseAccountId: string | null;
+            vendorId: string | null;
+            apInvoiceId: string | null;
+            capitalizationJournalId: string | null;
+            disposalJournalId: string | null;
         })[] | ({
             id: string;
+            supplierInvoiceId: string;
+            accountId: string;
+            description: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+        } | {
+            id: string;
+            supplierInvoiceId: string;
+            accountId: string;
+            description: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+        })[] | ({
+            id: string;
+            accountId: string;
+            description: string | null;
+            debit: import("@prisma/client/runtime/library").Decimal;
+            credit: import("@prisma/client/runtime/library").Decimal;
+            lineNumber: number | null;
+            departmentId: string | null;
+            legalEntityId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            journalEntryId: string;
+        } | {
+            id: string;
+            accountId: string;
+            description: string | null;
+            debit: import("@prisma/client/runtime/library").Decimal;
+            credit: import("@prisma/client/runtime/library").Decimal;
+            lineNumber: number | null;
+            departmentId: string | null;
+            legalEntityId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            journalEntryId: string;
+        })[] | ({
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             code: string;
             type: import("@prisma/client").$Enums.TaxRateType;
             rate: import("@prisma/client/runtime/library").Decimal;
             glAccountId: string | null;
         } | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             code: string;
             type: import("@prisma/client").$Enums.TaxRateType;
             rate: import("@prisma/client/runtime/library").Decimal;
             glAccountId: string | null;
         })[] | ({
             id: string;
+            taxRateId: string | null;
+            accountId: string;
+            description: string;
+            departmentId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            customerInvoiceId: string;
+            lineTotal: import("@prisma/client/runtime/library").Decimal;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
+            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
+            discountTotal: import("@prisma/client/runtime/library").Decimal;
+        } | {
+            id: string;
+            taxRateId: string | null;
+            accountId: string;
+            description: string;
+            departmentId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            customerInvoiceId: string;
+            lineTotal: import("@prisma/client/runtime/library").Decimal;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
+            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
+            discountTotal: import("@prisma/client/runtime/library").Decimal;
+        })[] | ({
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             bankName: string;
             accountNumber: string;
             currency: string;
             glAccountId: string;
         } | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             bankName: string;
             accountNumber: string;
             currency: string;
             glAccountId: string;
         })[] | ({
             id: string;
-            name: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
+            accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            periodId: string;
+            departmentId: string | null;
+            legalEntityId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            budgetId: string;
+            revisionId: string;
+        } | {
+            id: string;
+            tenantId: string;
+            createdAt: Date;
+            accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            periodId: string;
+            departmentId: string | null;
+            legalEntityId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            budgetId: string;
+            revisionId: string;
+        })[] | ({
+            id: string;
+            description: string;
+            departmentId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            creditNoteId: string;
+            lineAmount: import("@prisma/client/runtime/library").Decimal;
+            revenueAccountId: string;
+        } | {
+            id: string;
+            description: string;
+            departmentId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            creditNoteId: string;
+            lineAmount: import("@prisma/client/runtime/library").Decimal;
+            revenueAccountId: string;
+        })[] | ({
+            name: string;
+            id: string;
+            tenantId: string;
+            createdAt: Date;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -457,10 +378,10 @@ export declare class ArService {
             defaultUsefulLifeMonths: number;
             defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
         } | {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -470,22 +391,22 @@ export declare class ArService {
             defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
         })[] | ({
             id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             forecastVersionId: string;
             month: number;
         } | {
             id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             forecastVersionId: string;
             month: number;
         })[] | ({
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             code: string;
             requiresFund: boolean;
@@ -494,11 +415,11 @@ export declare class ArService {
             revenueAccountId: string;
             isSystemDefault: boolean;
         } | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             code: string;
             requiresFund: boolean;
@@ -531,9 +452,9 @@ export declare class ArService {
             outputVatAccountId: string | null;
             inputVatAccountId: string | null;
         })[] | {
-            id: string;
             name: string;
             defaultCurrency: string | null;
+            id: string;
             createdAt: Date;
             status: import("@prisma/client").$Enums.TenantStatus;
             logoUrl: string | null;
@@ -559,6 +480,7 @@ export declare class ArService {
             coaFrozen: boolean;
             coaLockedAt: Date | null;
             arControlAccountId: string | null;
+            apControlAccountId: string | null;
             defaultBankClearingAccountId: string | null;
             unappliedReceiptsAccountId: string | null;
             allowSelfPosting: boolean;
@@ -572,11 +494,11 @@ export declare class ArService {
             requiresProjectOnInvoices: boolean;
             cashClearingAccountId: string | null;
         }[] | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -599,37 +521,110 @@ export declare class ArService {
             subCategory: string | null;
             requiresDepartment: boolean;
         }[] | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.FixedAssetStatus;
+            createdById: string;
+            description: string | null;
+            method: import("@prisma/client").$Enums.DepreciationMethod;
+            categoryId: string;
+            acquisitionDate: Date;
+            capitalizationDate: Date | null;
+            cost: import("@prisma/client/runtime/library").Decimal;
+            residualValue: import("@prisma/client/runtime/library").Decimal;
+            usefulLifeMonths: number;
+            assetAccountId: string | null;
+            accumDepAccountId: string | null;
+            depExpenseAccountId: string | null;
+            vendorId: string | null;
+            apInvoiceId: string | null;
+            capitalizationJournalId: string | null;
+            disposalJournalId: string | null;
+        }[] | {
+            name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             code: string;
             type: import("@prisma/client").$Enums.TaxRateType;
             rate: import("@prisma/client/runtime/library").Decimal;
             glAccountId: string | null;
         }[] | {
             id: string;
+            taxRateId: string | null;
+            accountId: string;
+            description: string;
+            departmentId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            customerInvoiceId: string;
+            lineTotal: import("@prisma/client/runtime/library").Decimal;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            discountAmount: import("@prisma/client/runtime/library").Decimal | null;
+            discountPercent: import("@prisma/client/runtime/library").Decimal | null;
+            discountTotal: import("@prisma/client/runtime/library").Decimal;
+        }[] | {
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             bankName: string;
             accountNumber: string;
             currency: string;
             glAccountId: string;
         }[] | {
             id: string;
-            amount: import("@prisma/client/runtime/library").Decimal;
+            tenantId: string;
+            createdAt: Date;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            periodId: string;
+            departmentId: string | null;
+            legalEntityId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            budgetId: string;
+            revisionId: string;
+        }[] | {
+            id: string;
+            description: string;
+            departmentId: string | null;
+            fundId: string | null;
+            projectId: string | null;
+            quantity: import("@prisma/client/runtime/library").Decimal;
+            unitPrice: import("@prisma/client/runtime/library").Decimal;
+            creditNoteId: string;
+            lineAmount: import("@prisma/client/runtime/library").Decimal;
+            revenueAccountId: string;
+        }[] | {
+            name: string;
+            id: string;
+            tenantId: string;
+            createdAt: Date;
+            code: string;
+            assetAccountId: string;
+            accumDepAccountId: string;
+            depExpenseAccountId: string;
+            defaultMethod: import("@prisma/client").$Enums.DepreciationMethod;
+            defaultUsefulLifeMonths: number;
+            defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
+        }[] | {
+            id: string;
+            accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             forecastVersionId: string;
             month: number;
         }[] | {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             code: string;
             requiresFund: boolean;
@@ -637,6 +632,14 @@ export declare class ArService {
             requiresDepartment: boolean;
             revenueAccountId: string;
             isSystemDefault: boolean;
+        }[] | {
+            id: string;
+            accountId: string;
+            templateId: string;
+            descriptionTemplate: string | null;
+            debitAmount: import("@prisma/client/runtime/library").Decimal;
+            creditAmount: import("@prisma/client/runtime/library").Decimal;
+            lineOrder: number;
         }[] | {
             tenantId: string;
             outputVatAccountId: string | null;
@@ -647,18 +650,18 @@ export declare class ArService {
     }[]>;
     createInvoice(req: Request, dto: CreateCustomerInvoiceDto): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdById: string;
         currency: string;
+        taxAmount: import("@prisma/client/runtime/library").Decimal;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
-        postedAt: Date | null;
         postedById: string | null;
-        taxAmount: import("@prisma/client/runtime/library").Decimal;
+        postedAt: Date | null;
         reference: string | null;
         departmentId: string | null;
         fundId: string | null;
@@ -678,9 +681,9 @@ export declare class ArService {
         invoice: {
             lines: {
                 id: string;
-                description: string;
-                accountId: string;
                 taxRateId: string | null;
+                accountId: string;
+                description: string;
                 departmentId: string | null;
                 fundId: string | null;
                 projectId: string | null;
@@ -693,33 +696,33 @@ export declare class ArService {
                 discountTotal: import("@prisma/client/runtime/library").Decimal;
             }[];
             customer: {
-                id: string;
                 name: string;
                 taxNumber: string | null;
                 email: string | null;
                 phone: string | null;
-                createdAt: Date;
+                id: string;
                 tenantId: string;
+                createdAt: Date;
                 status: import("@prisma/client").$Enums.CustomerStatus;
                 updatedAt: Date;
-                customerCode: string | null;
                 billingAddress: string | null;
+                customerCode: string | null;
                 contactPerson: string | null;
             };
         } & {
             id: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
             createdById: string;
             currency: string;
+            taxAmount: import("@prisma/client/runtime/library").Decimal;
             invoiceNumber: string;
             invoiceDate: Date;
             dueDate: Date;
             totalAmount: import("@prisma/client/runtime/library").Decimal;
-            postedAt: Date | null;
             postedById: string | null;
-            taxAmount: import("@prisma/client/runtime/library").Decimal;
+            postedAt: Date | null;
             reference: string | null;
             departmentId: string | null;
             fundId: string | null;
@@ -738,8 +741,8 @@ export declare class ArService {
         glJournal: {
             lines: {
                 id: string;
-                description: string | null;
                 accountId: string;
+                description: string | null;
                 debit: import("@prisma/client/runtime/library").Decimal;
                 credit: import("@prisma/client/runtime/library").Decimal;
                 lineNumber: number | null;
@@ -751,17 +754,17 @@ export declare class ArService {
             }[];
         } & {
             id: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.JournalStatus;
             createdById: string;
-            approvedAt: Date | null;
-            postedAt: Date | null;
-            approvedById: string | null;
-            postedById: string | null;
-            description: string | null;
             sourceType: string | null;
             sourceId: string | null;
+            approvedById: string | null;
+            postedById: string | null;
+            approvedAt: Date | null;
+            postedAt: Date | null;
+            description: string | null;
             reference: string | null;
             journalDate: Date;
             journalNumber: number | null;
@@ -795,9 +798,9 @@ export declare class ArService {
     listInvoices(req: Request): Promise<({
         lines: {
             id: string;
-            description: string;
-            accountId: string;
             taxRateId: string | null;
+            accountId: string;
+            description: string;
             departmentId: string | null;
             fundId: string | null;
             projectId: string | null;
@@ -810,33 +813,33 @@ export declare class ArService {
             discountTotal: import("@prisma/client/runtime/library").Decimal;
         }[];
         customer: {
-            id: string;
             name: string;
             taxNumber: string | null;
             email: string | null;
             phone: string | null;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.CustomerStatus;
             updatedAt: Date;
-            customerCode: string | null;
             billingAddress: string | null;
+            customerCode: string | null;
             contactPerson: string | null;
         };
     } & {
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.CustomerInvoiceStatus;
         createdById: string;
         currency: string;
+        taxAmount: import("@prisma/client/runtime/library").Decimal;
         invoiceNumber: string;
         invoiceDate: Date;
         dueDate: Date;
         totalAmount: import("@prisma/client/runtime/library").Decimal;
-        postedAt: Date | null;
         postedById: string | null;
-        taxAmount: import("@prisma/client/runtime/library").Decimal;
+        postedAt: Date | null;
         reference: string | null;
         departmentId: string | null;
         fundId: string | null;

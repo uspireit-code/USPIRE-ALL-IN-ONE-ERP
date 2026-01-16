@@ -26,6 +26,11 @@ export function SettingsPage() {
     hasPermission(PERMISSIONS.ROLE.VIEW) ||
     hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
+  const canFinanceConfigEdit =
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+
   const sections: Array<{ key: string; title: string; description: string; to: string; icon: React.ReactNode }> = [
     ...((canSystemConfigView || canFinanceConfigView)
       ? [
@@ -94,6 +99,23 @@ export function SettingsPage() {
                 <path d="M4.93 19.07l1.41-1.41" />
                 <path d="M17.66 6.34l1.41-1.41" />
                 <circle cx="12" cy="12" r="4" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...(canFinanceConfigEdit
+      ? [
+          {
+            key: 'finance-control-accounts',
+            title: 'Finance: Control Accounts',
+            description: 'Configure AP control account used when posting supplier bills.',
+            to: '/settings/finance/control-accounts',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3h18v4H3z" />
+                <path d="M3 9h18v4H3z" />
+                <path d="M3 15h18v6H3z" />
               </svg>
             ),
           },

@@ -21,6 +21,7 @@ import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { SettingsService } from './settings.service';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
+import { UpdateApControlAccountDto } from './dto/update-ap-control-account.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
@@ -91,6 +92,29 @@ export class SettingsController {
     @Body() dto: UpdateSystemConfigDto,
   ) {
     return this.settings.updateSystemConfig(req, dto);
+  }
+
+  @Get('finance/ap-control-account')
+  @PermissionsAny(
+    PERMISSIONS.FINANCE.CONFIG_UPDATE,
+    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
+  async getFinanceApControlAccount(@Req() req: Request) {
+    return this.settings.getFinanceApControlAccount(req);
+  }
+
+  @Put('finance/ap-control-account')
+  @PermissionsAny(
+    PERMISSIONS.FINANCE.CONFIG_UPDATE,
+    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
+  async updateFinanceApControlAccount(
+    @Req() req: Request,
+    @Body() dto: UpdateApControlAccountDto,
+  ) {
+    return this.settings.updateFinanceApControlAccount(req, dto);
   }
 
   @Post('system/favicon')

@@ -5,8 +5,10 @@ import { PERMISSIONS } from '../../auth/permission-catalog';
 import type { SupplierInvoice } from '../../services/ap';
 import { listBills } from '../../services/ap';
 
-function formatMoney(n: number) {
-  return n.toFixed(2);
+function formatMoney(n: unknown) {
+  const value = typeof n === 'number' ? n : typeof n === 'string' ? Number(n) : NaN;
+  if (!Number.isFinite(value)) return '-';
+  return value.toFixed(2);
 }
 
 export function BillsListPage() {

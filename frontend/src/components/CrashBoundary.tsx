@@ -25,6 +25,13 @@ export class CrashBoundary extends React.Component<{ children: React.ReactNode }
   render() {
     if (!this.state.hasError) return this.props.children;
 
+    const message =
+      typeof (this.state.error as any)?.message === 'string'
+        ? ((this.state.error as any).message as string)
+        : typeof this.state.error === 'string'
+          ? this.state.error
+          : '';
+
     return (
       <div
         style={{
@@ -40,6 +47,12 @@ export class CrashBoundary extends React.Component<{ children: React.ReactNode }
         <div style={{ maxWidth: 640, width: '100%' }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>Something went wrong.</div>
           <div style={{ marginTop: 10, opacity: 0.85 }}>Reload or contact admin.</div>
+          {import.meta.env.DEV ? (
+            <div style={{ marginTop: 14, fontSize: 12, opacity: 0.9, whiteSpace: 'pre-wrap' }}>
+              {message ? `Error: ${message}\n\n` : null}
+              {this.state.componentStack ? `Component stack:\n${this.state.componentStack}` : null}
+            </div>
+          ) : null}
           <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
             <button
               type="button"

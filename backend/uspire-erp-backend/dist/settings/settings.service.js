@@ -129,6 +129,45 @@ let SettingsService = class SettingsService {
         this.prisma = prisma;
         this.storage = storage;
     }
+    async getFinanceApControlAccount(req) {
+        const tenant = req.tenant;
+        if (!tenant)
+            throw new common_1.BadRequestException('Missing tenant context');
+        const row = await this.prisma.tenant.findUnique({
+            where: { id: tenant.id },
+            select: { apControlAccountId: true },
+        });
+        return {
+            apControlAccountId: row?.apControlAccountId ?? null,
+        };
+    }
+    async updateFinanceApControlAccount(req, dto) {
+        const tenant = req.tenant;
+        if (!tenant)
+            throw new common_1.BadRequestException('Missing tenant context');
+        const id = dto.apControlAccountId;
+        if (!id) {
+            throw new common_1.BadRequestException('apControlAccountId is required');
+        }
+        const apAccount = await this.prisma.account.findFirst({
+            where: {
+                tenantId: tenant.id,
+                id,
+                isActive: true,
+                type: 'LIABILITY',
+            },
+            select: { id: true },
+        });
+        if (!apAccount) {
+            throw new common_1.BadRequestException('AP control account not found or invalid');
+        }
+        const updated = await this.prisma.tenant.update({
+            where: { id: tenant.id },
+            data: { apControlAccountId: apAccount.id },
+            select: { apControlAccountId: true },
+        });
+        return { apControlAccountId: updated.apControlAccountId };
+    }
     async ensureFinanceOfficerRole(tenantId) {
         const role = await this.prisma.role.upsert({
             where: { tenantId_name: { tenantId, name: 'FINANCE_OFFICER' } },
@@ -176,9 +215,7 @@ let SettingsService = class SettingsService {
             permission_catalog_1.PERMISSIONS.AP.INVOICE_VIEW,
             permission_catalog_1.PERMISSIONS.AP.INVOICE_CREATE,
             permission_catalog_1.PERMISSIONS.AP.INVOICE_SUBMIT,
-            permission_catalog_1.PERMISSIONS.AP.BILL_VIEW,
-            permission_catalog_1.PERMISSIONS.AP.BILL_CREATE,
-            permission_catalog_1.PERMISSIONS.AP.BILL_SUBMIT,
+            permission_catalog_1.PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
         ];
         const perms = await this.prisma.permission.findMany({
             where: { code: { in: [...allowedPermissionCodes] } },
@@ -222,8 +259,6 @@ let SettingsService = class SettingsService {
             permission_catalog_1.PERMISSIONS.AP.SUPPLIER_IMPORT,
             permission_catalog_1.PERMISSIONS.AP.INVOICE_VIEW,
             permission_catalog_1.PERMISSIONS.AP.INVOICE_APPROVE,
-            permission_catalog_1.PERMISSIONS.AP.BILL_VIEW,
-            permission_catalog_1.PERMISSIONS.AP.BILL_APPROVE,
             permission_catalog_1.PERMISSIONS.AR.INVOICE_VIEW,
             permission_catalog_1.PERMISSIONS.PERIOD.VIEW,
             permission_catalog_1.PERMISSIONS.PERIOD.CHECKLIST_VIEW,
@@ -292,8 +327,6 @@ let SettingsService = class SettingsService {
             permission_catalog_1.PERMISSIONS.AR.INVOICE_POST,
             permission_catalog_1.PERMISSIONS.AP.INVOICE_VIEW,
             permission_catalog_1.PERMISSIONS.AP.INVOICE_POST,
-            permission_catalog_1.PERMISSIONS.AP.BILL_VIEW,
-            permission_catalog_1.PERMISSIONS.AP.BILL_POST,
             permission_catalog_1.PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
             permission_catalog_1.PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE,
             permission_catalog_1.PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT,
@@ -940,6 +973,7 @@ let SettingsService = class SettingsService {
                 requiresProjectOnInvoices: true,
                 requiresFundOnInvoices: true,
                 arControlAccountId: true,
+                apControlAccountId: true,
                 defaultBankClearingAccountId: true,
                 cashClearingAccountId: true,
                 unappliedReceiptsAccountId: true,
@@ -967,6 +1001,7 @@ let SettingsService = class SettingsService {
             'requiresProjectOnInvoices',
             'requiresFundOnInvoices',
             'arControlAccountId',
+            'apControlAccountId',
             'defaultBankClearingAccountId',
             'arRefundClearingAccountId',
             'cashClearingAccountId',
@@ -1046,6 +1081,7 @@ let SettingsService = class SettingsService {
                 requiresProjectOnInvoices: true,
                 requiresFundOnInvoices: true,
                 arControlAccountId: true,
+                apControlAccountId: true,
                 defaultBankClearingAccountId: true,
                 cashClearingAccountId: true,
                 unappliedReceiptsAccountId: true,
@@ -1198,6 +1234,11 @@ let SettingsService = class SettingsService {
                     : dto.arControlAccountId === null
                         ? null
                         : String(dto.arControlAccountId).trim() || null,
+                apControlAccountId: dto.apControlAccountId === undefined
+                    ? undefined
+                    : dto.apControlAccountId === null
+                        ? null
+                        : String(dto.apControlAccountId).trim() || null,
                 defaultBankClearingAccountId: dto.arRefundClearingAccountId !== undefined
                     ? dto.arRefundClearingAccountId === null
                         ? null
@@ -1290,6 +1331,7 @@ let SettingsService = class SettingsService {
             requiresProjectOnInvoices: updated.requiresProjectOnInvoices,
             requiresFundOnInvoices: updated.requiresFundOnInvoices,
             arControlAccountId: updated.arControlAccountId ?? null,
+            apControlAccountId: updated.apControlAccountId ?? null,
             defaultBankClearingAccountId: updated.defaultBankClearingAccountId ?? null,
             cashClearingAccountId: updated.cashClearingAccountId ?? null,
             unappliedReceiptsAccountId: updated.unappliedReceiptsAccountId ?? null,

@@ -1060,25 +1060,34 @@ export class ApService {
       }
     }
 
-    const invoice = await this.prisma.supplierInvoice.create({
-      data: {
-        tenantId: tenant.id,
-        supplierId: dto.supplierId,
-        invoiceNumber: dto.invoiceNumber,
-        invoiceDate: new Date(dto.invoiceDate),
-        dueDate: new Date(dto.dueDate),
-        totalAmount: dto.totalAmount,
-        createdById: user.id,
-        lines: {
-          create: dto.lines.map((l) => ({
-            accountId: l.accountId,
-            description: l.description,
-            amount: l.amount,
-          })),
+    let invoice: any;
+    try {
+      invoice = await this.prisma.supplierInvoice.create({
+        data: {
+          tenantId: tenant.id,
+          supplierId: dto.supplierId,
+          invoiceNumber: dto.invoiceNumber,
+          invoiceDate: new Date(dto.invoiceDate),
+          dueDate: new Date(dto.dueDate),
+          totalAmount: dto.totalAmount,
+          createdById: user.id,
+          lines: {
+            create: dto.lines.map((l) => ({
+              accountId: l.accountId,
+              description: l.description,
+              amount: l.amount,
+            })),
+          },
         },
-      },
-      include: { lines: true, supplier: true },
-    });
+        include: { lines: true, supplier: true },
+      });
+    } catch (e: any) {
+      throw new BadRequestException({
+        error: 'VALIDATION_FAILED',
+        message: translatePrismaError(e),
+        fieldErrors: [],
+      });
+    }
 
     if (validatedTax.rows.length > 0) {
       await this.prisma.invoiceTaxLine.createMany({
@@ -1388,20 +1397,38 @@ export class ApService {
       });
     }
 
-    const apCode = opts?.apControlAccountCode ?? '2000';
-    const apAccount = await this.prisma.account.findFirst({
-      where: {
-        tenantId: tenant.id,
-        code: apCode,
-        isActive: true,
-        type: 'LIABILITY',
-      },
-      select: { id: true, code: true, name: true },
-    });
+    const apOverrideCode = opts?.apControlAccountCode?.trim();
+    const apControlAccountId = await this.prisma.tenant
+      .findUnique({ where: { id: tenant.id }, select: { apControlAccountId: true } })
+      .then((t) => t?.apControlAccountId ?? null);
+
+    const apAccount = apOverrideCode
+      ? await this.prisma.account.findFirst({
+          where: {
+            tenantId: tenant.id,
+            code: apOverrideCode,
+            isActive: true,
+            type: 'LIABILITY',
+          },
+          select: { id: true, code: true, name: true },
+        })
+      : apControlAccountId
+        ? await this.prisma.account.findFirst({
+            where: {
+              tenantId: tenant.id,
+              id: apControlAccountId,
+              isActive: true,
+              type: 'LIABILITY',
+            },
+            select: { id: true, code: true, name: true },
+          })
+        : null;
 
     if (!apAccount) {
       throw new BadRequestException(
-        `AP control account not found or invalid: ${apCode}`,
+        apOverrideCode
+          ? `AP control account not found or invalid: ${apOverrideCode}`
+          : 'AP control account is not configured. Please configure it in Settings before posting.',
       );
     }
 

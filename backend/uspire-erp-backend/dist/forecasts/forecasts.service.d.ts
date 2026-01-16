@@ -40,10 +40,10 @@ export declare class ForecastsService {
     }>;
     createForecast(req: Request, dto: CreateForecastDto): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             createdById: string;
@@ -63,29 +63,29 @@ export declare class ForecastsService {
         limit?: number;
         offset?: number;
     }): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.ForecastStatus;
         updatedAt: Date;
         createdBy: {
-            id: string;
             email: string;
+            id: string;
         };
         fiscalYear: number;
     }[]>;
     getForecast(req: Request, id: string): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             fiscalYear: number;
         };
@@ -94,8 +94,8 @@ export declare class ForecastsService {
             createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             forecastId: string;
             versionNumber: number;
@@ -105,8 +105,8 @@ export declare class ForecastsService {
             createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             forecastId: string;
             versionNumber: number;
@@ -114,21 +114,21 @@ export declare class ForecastsService {
         lines: {
             id: string;
             account: {
-                id: string;
                 name: string;
+                id: string;
                 code: string;
             };
-            amount: import("@prisma/client/runtime/library").Decimal;
             accountId: string;
+            amount: import("@prisma/client/runtime/library").Decimal;
             month: number;
         }[];
     }>;
     submitForecast(req: Request, id: string): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             fiscalYear: number;
@@ -143,10 +143,10 @@ export declare class ForecastsService {
     }>;
     approveForecast(req: Request, id: string): Promise<{
         forecast: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.ForecastStatus;
             updatedAt: Date;
             fiscalYear: number;
@@ -160,10 +160,10 @@ export declare class ForecastsService {
         };
     }>;
     updateForecastLines(req: Request, id: string, dto: UpdateForecastLinesDto): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.ForecastStatus;
         updatedAt: Date;
         fiscalYear: number;

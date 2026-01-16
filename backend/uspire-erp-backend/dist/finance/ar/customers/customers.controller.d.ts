@@ -10,46 +10,46 @@ export declare class FinanceArCustomersController {
         pageSize: number;
         total: number;
         items: {
-            id: string;
             name: string;
             taxNumber: string | null;
             email: string | null;
             phone: string | null;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.CustomerStatus;
             updatedAt: Date;
-            customerCode: string | null;
             billingAddress: string | null;
+            customerCode: string | null;
             contactPerson: string | null;
         }[];
     }>;
     create(req: Request, dto: CreateCustomerDto): Promise<{
-        id: string;
         name: string;
         taxNumber: string | null;
         email: string | null;
         phone: string | null;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.CustomerStatus;
         updatedAt: Date;
-        customerCode: string | null;
         billingAddress: string | null;
+        customerCode: string | null;
         contactPerson: string | null;
     }>;
     update(req: Request, id: string, dto: UpdateCustomerDto): Promise<{
-        id: string;
         name: string;
         taxNumber: string | null;
         email: string | null;
         phone: string | null;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.CustomerStatus;
         updatedAt: Date;
-        customerCode: string | null;
         billingAddress: string | null;
+        customerCode: string | null;
         contactPerson: string | null;
     }>;
     import(req: Request, file: any): Promise<{
@@ -80,17 +80,17 @@ export declare class FinanceArCustomersController {
     downloadImportCsvTemplate(req: Request, res: Response): Promise<void>;
     downloadImportXlsxTemplate(req: Request, res: Response): Promise<void>;
     getById(req: Request, id: string): Promise<{
-        id: string;
         name: string;
         taxNumber: string | null;
         email: string | null;
         phone: string | null;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.CustomerStatus;
         updatedAt: Date;
-        customerCode: string | null;
         billingAddress: string | null;
+        customerCode: string | null;
         contactPerson: string | null;
     }>;
 }

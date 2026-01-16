@@ -8,10 +8,10 @@ export declare class FaController {
     private readonly fa;
     constructor(fa: FaService);
     listCategories(req: Request): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         code: string;
         assetAccountId: string;
         accumDepAccountId: string;
@@ -21,10 +21,10 @@ export declare class FaController {
         defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
     }[]>;
     createCategory(req: Request, dto: CreateFixedAssetCategoryDto): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         code: string;
         assetAccountId: string;
         accumDepAccountId: string;
@@ -35,10 +35,10 @@ export declare class FaController {
     }>;
     listAssets(req: Request): Promise<({
         category: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -48,20 +48,20 @@ export declare class FaController {
             defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
         };
     } & {
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
         createdById: string;
         description: string | null;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: import("@prisma/client/runtime/library").Decimal;
         residualValue: import("@prisma/client/runtime/library").Decimal;
         usefulLifeMonths: number;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;
@@ -72,10 +72,10 @@ export declare class FaController {
     })[]>;
     createAsset(req: Request, dto: CreateFixedAssetDto): Promise<{
         category: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -85,20 +85,20 @@ export declare class FaController {
             defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
         };
     } & {
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
         createdById: string;
         description: string | null;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: import("@prisma/client/runtime/library").Decimal;
         residualValue: import("@prisma/client/runtime/library").Decimal;
         usefulLifeMonths: number;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;
@@ -109,10 +109,10 @@ export declare class FaController {
     }>;
     capitalizeAsset(req: Request, id: string, dto: CapitalizeFixedAssetDto): Promise<{
         category: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             code: string;
             assetAccountId: string;
             accumDepAccountId: string;
@@ -122,20 +122,20 @@ export declare class FaController {
             defaultResidualRate: import("@prisma/client/runtime/library").Decimal | null;
         };
     } & {
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
         createdById: string;
         description: string | null;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: import("@prisma/client/runtime/library").Decimal;
         residualValue: import("@prisma/client/runtime/library").Decimal;
         usefulLifeMonths: number;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;
@@ -156,8 +156,8 @@ export declare class FaController {
         run: {
             lines: {
                 id: string;
-                createdAt: Date;
                 tenantId: string;
+                createdAt: Date;
                 amount: import("@prisma/client/runtime/library").Decimal;
                 runId: string;
                 assetId: string;
@@ -181,17 +181,17 @@ export declare class FaController {
     listDepreciationRuns(req: Request): Promise<({
         lines: {
             id: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
             runId: string;
             assetId: string;
         }[];
         period: {
-            id: string;
             name: string;
-            createdAt: Date;
+            id: string;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             updatedAt: Date;
             createdById: string | null;
@@ -212,20 +212,20 @@ export declare class FaController {
         runDate: Date;
     })[]>;
     disposeAsset(req: Request, id: string, dto: DisposeFixedAssetDto): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.FixedAssetStatus;
         createdById: string;
         description: string | null;
+        method: import("@prisma/client").$Enums.DepreciationMethod;
         categoryId: string;
         acquisitionDate: Date;
         capitalizationDate: Date | null;
         cost: import("@prisma/client/runtime/library").Decimal;
         residualValue: import("@prisma/client/runtime/library").Decimal;
         usefulLifeMonths: number;
-        method: import("@prisma/client").$Enums.DepreciationMethod;
         assetAccountId: string | null;
         accumDepAccountId: string | null;
         depExpenseAccountId: string | null;

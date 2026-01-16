@@ -101,6 +101,10 @@ export function SettingsSystemPage() {
   const [arControlSearch, setArControlSearch] = useState('');
   const [arControlPickerOpen, setArControlPickerOpen] = useState(false);
 
+  const [apControlAccountId, setApControlAccountId] = useState<string>('');
+  const [apControlSearch, setApControlSearch] = useState('');
+  const [apControlPickerOpen, setApControlPickerOpen] = useState(false);
+
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<GlAccountLookup[]>([]);
@@ -171,6 +175,10 @@ export function SettingsSystemPage() {
       setArControlSearch('');
       setArControlPickerOpen(false);
 
+      setApControlAccountId((s as any).apControlAccountId ?? '');
+      setApControlSearch('');
+      setApControlPickerOpen(false);
+
       setPendingFaviconFile(null);
       setFaviconPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -233,6 +241,8 @@ export function SettingsSystemPage() {
 
   const selectedArControlAccount = arControlAccountId ? accountById.get(arControlAccountId) : undefined;
 
+  const selectedApControlAccount = apControlAccountId ? accountById.get(apControlAccountId) : undefined;
+
   const bankClearingCandidates = useMemo(() => {
     const q = bankClearingSearch.trim().toLowerCase();
     const base = (accounts ?? []).filter((a) => a.isActive && a.type === 'ASSET');
@@ -256,6 +266,18 @@ export function SettingsSystemPage() {
     });
     return filtered.slice(0, 12);
   }, [accounts, arRefundClearingSearch]);
+
+  const apControlCandidates = useMemo(() => {
+    const q = apControlSearch.trim().toLowerCase();
+    const base = (accounts ?? []).filter((a) => a.isActive && a.type === 'LIABILITY');
+    if (!q) return base.slice(0, 12);
+    const filtered = base.filter((a) => {
+      const code = String(a.code ?? '').toLowerCase();
+      const name = String(a.name ?? '').toLowerCase();
+      return code.includes(q) || name.includes(q);
+    });
+    return filtered.slice(0, 12);
+  }, [accounts, apControlSearch]);
 
   const arCashClearingCandidates = useMemo(() => {
     const q = arCashClearingSearch.trim().toLowerCase();
@@ -324,15 +346,16 @@ export function SettingsSystemPage() {
       Boolean(system.requiresProjectOnInvoices ?? false) !== requiresProjectOnInvoices ||
       (system.requiresFundOnInvoices ?? false) !== requiresFundOnInvoices ||
       (system.arControlAccountId ?? '') !== arControlAccountId.trim() ||
+      (system.apControlAccountId ?? '') !== apControlAccountId.trim() ||
       (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
       (system.arRefundClearingAccountId ?? '') !== arRefundClearingAccountId.trim() ||
-      (system.arCashClearingAccountId ?? '') !== arCashClearingAccountId.trim() ||
-      Boolean(pendingFaviconFile)
+      (system.arCashClearingAccountId ?? '') !== arCashClearingAccountId.trim()
     );
   }, [
     accentColor,
     allowSelfPosting,
     arCashClearingAccountId,
+    apControlAccountId,
     arControlAccountId,
     arRefundClearingAccountId,
     country,
@@ -364,6 +387,75 @@ export function SettingsSystemPage() {
     system,
     timezone,
   ]);
+
+  const isDirtyFinanceOnly = useMemo(() => {
+    if (!system) return false;
+    const financeDirty =
+      (system.allowSelfPosting === undefined ? true : Boolean(system.allowSelfPosting)) !== allowSelfPosting ||
+      Boolean(system.requiresDepartmentOnInvoices ?? false) !== requiresDepartmentOnInvoices ||
+      Boolean(system.requiresProjectOnInvoices ?? false) !== requiresProjectOnInvoices ||
+      Boolean(system.requiresFundOnInvoices ?? false) !== requiresFundOnInvoices ||
+      (system.arControlAccountId ?? '') !== arControlAccountId.trim() ||
+      ((system as any).apControlAccountId ?? '') !== apControlAccountId.trim() ||
+      (system.defaultBankClearingAccountId ?? '') !== defaultBankClearingAccountId.trim() ||
+      (system.arRefundClearingAccountId ?? '') !== arRefundClearingAccountId.trim() ||
+      (system.arCashClearingAccountId ?? '') !== arCashClearingAccountId.trim();
+
+    const nonFinanceDirty =
+      (system.organisationName ?? '') !== organisationName ||
+      (system.organisationShortName ?? '') !== organisationShortName ||
+      (system.legalName ?? '') !== legalName ||
+      (system.defaultCurrency ?? '') !== defaultCurrency ||
+      (system.country ?? '') !== country ||
+      (system.timezone ?? '') !== timezone ||
+      String(system.financialYearStartMonth ?? '') !== financialYearStartMonth ||
+      (system.dateFormat ?? '') !== dateFormat ||
+      (system.numberFormat ?? '') !== numberFormat ||
+      (system.defaultLandingPage ?? '') !== defaultLandingPage ||
+      (system.defaultDashboard ?? '') !== defaultDashboard ||
+      (system.defaultLanguage ?? '') !== defaultLanguage ||
+      (system.defaultUserRoleCode ?? '') !== defaultUserRoleCode ||
+      Boolean(system.demoModeEnabled ?? false) !== demoModeEnabled ||
+      (system.primaryColor || '#020445') !== primaryColor ||
+      (system.accentColor || '#EDBA35') !== accentColor ||
+      (system.secondaryColor ?? '') !== secondaryColor ||
+      (system.secondaryAccentColor ?? '') !== secondaryAccentColor ||
+      Boolean(pendingFaviconFile);
+
+    return financeDirty && !nonFinanceDirty;
+  }, [
+    system,
+    allowSelfPosting,
+    requiresDepartmentOnInvoices,
+    requiresProjectOnInvoices,
+    requiresFundOnInvoices,
+    arControlAccountId,
+    apControlAccountId,
+    defaultBankClearingAccountId,
+    arRefundClearingAccountId,
+    arCashClearingAccountId,
+    organisationName,
+    organisationShortName,
+    legalName,
+    defaultCurrency,
+    country,
+    timezone,
+    financialYearStartMonth,
+    dateFormat,
+    numberFormat,
+    defaultLandingPage,
+    defaultDashboard,
+    defaultLanguage,
+    defaultUserRoleCode,
+    demoModeEnabled,
+    primaryColor,
+    accentColor,
+    secondaryColor,
+    secondaryAccentColor,
+    pendingFaviconFile,
+  ]);
+
+  const canSave = canSystemConfigUpdate || (canFinanceConfigChange && isDirtyFinanceOnly);
 
   async function onPickFavicon() {
     faviconInputRef.current?.click();
@@ -402,43 +494,56 @@ export function SettingsSystemPage() {
         await uploadSystemFavicon(pendingFaviconFile);
       }
 
-      const fy = financialYearStartMonth.trim() ? Number(financialYearStartMonth) : null;
+      const payload = canSystemConfigUpdate
+        ? {
+            organisationName,
+            organisationShortName: organisationShortName.trim() ? organisationShortName.trim() : null,
+            legalName: legalName.trim() ? legalName.trim() : null,
+            defaultCurrency: defaultCurrency.trim() ? defaultCurrency.trim() : null,
+            country: country.trim() ? country.trim() : null,
+            timezone: timezone.trim() ? timezone.trim() : null,
+            financialYearStartMonth: financialYearStartMonth.trim() ? Number(financialYearStartMonth) : null,
+            dateFormat: dateFormat.trim() ? dateFormat.trim() : null,
+            numberFormat: numberFormat.trim() ? numberFormat.trim() : null,
+            defaultLandingPage: defaultLandingPage.trim() ? defaultLandingPage.trim() : null,
+            defaultDashboard: defaultDashboard.trim() ? defaultDashboard.trim() : null,
+            defaultLanguage: defaultLanguage.trim() ? defaultLanguage.trim() : null,
+            defaultUserRoleCode: defaultUserRoleCode.trim() ? defaultUserRoleCode.trim() : null,
+            demoModeEnabled,
+            primaryColor,
+            accentColor,
+            secondaryColor: secondaryColor.trim() ? secondaryColor.trim() : null,
+            secondaryAccentColor: secondaryAccentColor.trim() ? secondaryAccentColor.trim() : null,
+            allowSelfPosting,
+            receiptBankName: receiptBankName.trim() ? receiptBankName.trim() : null,
+            receiptBankAccountName: receiptBankAccountName.trim() ? receiptBankAccountName.trim() : null,
+            receiptBankAccountNumber: receiptBankAccountNumber.trim() ? receiptBankAccountNumber.trim() : null,
+            receiptBankBranch: receiptBankBranch.trim() ? receiptBankBranch.trim() : null,
+            receiptBankSwiftCode: receiptBankSwiftCode.trim() ? receiptBankSwiftCode.trim() : null,
+            requiresDepartmentOnInvoices,
+            requiresProjectOnInvoices,
+            requiresFundOnInvoices,
+            arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
+            apControlAccountId: apControlAccountId.trim() ? apControlAccountId.trim() : null,
+            defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
+            arRefundClearingAccountId: arRefundClearingAccountId.trim() ? arRefundClearingAccountId.trim() : null,
+            arCashClearingAccountId: arCashClearingAccountId.trim() ? arCashClearingAccountId.trim() : null,
+          }
+        : {
+            allowSelfPosting,
+            requiresDepartmentOnInvoices,
+            requiresProjectOnInvoices,
+            requiresFundOnInvoices,
+            arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
+            apControlAccountId: apControlAccountId.trim() ? apControlAccountId.trim() : null,
+            defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
+            arRefundClearingAccountId: arRefundClearingAccountId.trim() ? arRefundClearingAccountId.trim() : null,
+            arCashClearingAccountId: arCashClearingAccountId.trim() ? arCashClearingAccountId.trim() : null,
+          };
 
-      const updated = await updateSystemConfig({
-        organisationName: organisationName.trim(),
-        organisationShortName: organisationShortName.trim() ? organisationShortName.trim() : null,
-        legalName: legalName.trim() ? legalName.trim() : null,
-        defaultCurrency: defaultCurrency.trim() ? defaultCurrency.trim() : null,
-        country: country.trim() ? country.trim() : null,
-        timezone: timezone.trim() ? timezone.trim() : null,
-        financialYearStartMonth: Number.isFinite(fy as any) ? fy : null,
-        dateFormat: dateFormat.trim() ? dateFormat.trim() : null,
-        numberFormat: numberFormat.trim() ? numberFormat.trim() : null,
-        defaultLandingPage: defaultLandingPage.trim() ? defaultLandingPage.trim() : null,
-        defaultDashboard: defaultDashboard.trim() ? defaultDashboard.trim() : null,
-        defaultLanguage: defaultLanguage.trim() ? defaultLanguage.trim() : null,
-        demoModeEnabled,
-        defaultUserRoleCode: defaultUserRoleCode.trim() ? defaultUserRoleCode.trim() : null,
-        primaryColor: primaryColor.trim() || '#020445',
-        secondaryColor: secondaryColor.trim() ? secondaryColor.trim() : null,
-        accentColor: accentColor.trim() ? accentColor.trim() : null,
-        secondaryAccentColor: secondaryAccentColor.trim() ? secondaryAccentColor.trim() : null,
-        allowSelfPosting,
-        receiptBankName: receiptBankName.trim() ? receiptBankName.trim() : null,
-        receiptBankAccountName: receiptBankAccountName.trim() ? receiptBankAccountName.trim() : null,
-        receiptBankAccountNumber: receiptBankAccountNumber.trim() ? receiptBankAccountNumber.trim() : null,
-        receiptBankBranch: receiptBankBranch.trim() ? receiptBankBranch.trim() : null,
-        receiptBankSwiftCode: receiptBankSwiftCode.trim() ? receiptBankSwiftCode.trim() : null,
-        requiresDepartmentOnInvoices,
-        requiresProjectOnInvoices,
-        requiresFundOnInvoices,
-        arControlAccountId: arControlAccountId.trim() ? arControlAccountId.trim() : null,
-        defaultBankClearingAccountId: defaultBankClearingAccountId.trim() ? defaultBankClearingAccountId.trim() : null,
-        arRefundClearingAccountId: arRefundClearingAccountId.trim() ? arRefundClearingAccountId.trim() : null,
-        arCashClearingAccountId: arCashClearingAccountId.trim() ? arCashClearingAccountId.trim() : null,
-      });
+      const saved = await updateSystemConfig(payload);
 
-      setSystem(updated);
+      setSystem(saved);
       setPendingFaviconFile(null);
       setFaviconPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -490,7 +595,7 @@ export function SettingsSystemPage() {
           </Button>
           <Button
             variant="accent"
-            disabled={loading || saving || !system || !isDirty || !organisationName.trim() || !canSystemConfigUpdate}
+            disabled={loading || saving || !system || !isDirty || !organisationName.trim() || !canSave}
             onClick={() => void onSave()}
             title={!organisationName.trim() ? 'Organisation name is required' : !isDirty ? 'No changes to save' : undefined}
           >
@@ -531,6 +636,99 @@ export function SettingsSystemPage() {
           <div style={{ display: 'grid', gap: 12 }}>
             <Field label="Organisation / Tenant Name">
               <Input value={organisationName} disabled={loading || !system} onChange={(e) => setOrganisationName(e.target.value)} />
+            </Field>
+
+            <Field
+              label="Accounts Payable (AP) Control Account"
+              hint="Required to post supplier bills/invoices. Search by account code or name. Liability accounts only."
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  gap: 10,
+                  alignItems: 'start',
+                }}
+              >
+                <div>
+                  <Input
+                    value={apControlSearch}
+                    onChange={(e) => {
+                      setApControlSearch(e.target.value);
+                      setApControlPickerOpen(true);
+                    }}
+                    placeholder={
+                      selectedApControlAccount
+                        ? `${selectedApControlAccount.code} – ${selectedApControlAccount.name}`
+                        : apControlAccountId
+                          ? 'Selected'
+                          : 'Search liability accounts…'
+                    }
+                    disabled={accountsLoading || !!accountsError || loading || saving || !system}
+                  />
+                  {apControlPickerOpen ? (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        border: `1px solid ${tokens.colors.border.default}`,
+                        borderRadius: 10,
+                        padding: 8,
+                        background: '#fff',
+                        maxHeight: 260,
+                        overflow: 'auto',
+                      }}
+                    >
+                      {apControlCandidates.length === 0 ? (
+                        <div style={{ fontSize: 13, color: tokens.colors.text.secondary, padding: 8 }}>
+                          No matching liability accounts.
+                        </div>
+                      ) : (
+                        apControlCandidates.map((a) => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setApControlAccountId(a.id);
+                              setApControlSearch(`${a.code} – ${a.name}`);
+                              setApControlPickerOpen(false);
+                            }}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: 10,
+                              borderRadius: 8,
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 650, color: tokens.colors.text.primary }}>
+                              {a.code} – {a.name}
+                            </div>
+                            <div style={{ marginTop: 4, fontSize: 12, color: tokens.colors.text.muted }}>
+                              {a.type} {a.isActive ? '' : '(inactive)'}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={loading || saving || !system}
+                    onClick={() => {
+                      setApControlAccountId('');
+                      setApControlSearch('');
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
             </Field>
             <Field label="Legal Name" hint="Used for legal documents and audit references.">
               <Input value={legalName} disabled={loading || !system} onChange={(e) => setLegalName(e.target.value)} placeholder="Optional" />

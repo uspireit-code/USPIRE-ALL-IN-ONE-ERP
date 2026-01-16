@@ -4,10 +4,10 @@ export declare class ArRemindersController {
     private readonly reminders;
     constructor(reminders: ArRemindersService);
     listRules(req: Request): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         createdById: string;
         triggerType: import("@prisma/client").$Enums.ArReminderTriggerType;
         daysOffset: number;
@@ -22,10 +22,10 @@ export declare class ArRemindersController {
         active: boolean;
         escalationLevel: 'NORMAL' | 'ESCALATED' | 'FINAL';
     }): Promise<{
-        id: string;
         name: string;
-        createdAt: Date;
+        id: string;
         tenantId: string;
+        createdAt: Date;
         createdById: string;
         triggerType: import("@prisma/client").$Enums.ArReminderTriggerType;
         daysOffset: number;
@@ -35,10 +35,10 @@ export declare class ArRemindersController {
     listTemplates(req: Request): Promise<{
         id: string;
         tenantId: string;
-        level: import("@prisma/client").$Enums.ArReminderLevel;
-        body: string;
         active: boolean;
+        level: import("@prisma/client").$Enums.ArReminderLevel;
         subject: string;
+        body: string;
         lastUpdatedById: string;
         lastUpdatedAt: Date;
     }[]>;
@@ -51,10 +51,10 @@ export declare class ArRemindersController {
     }): Promise<{
         id: string;
         tenantId: string;
-        level: import("@prisma/client").$Enums.ArReminderLevel;
-        body: string;
         active: boolean;
+        level: import("@prisma/client").$Enums.ArReminderLevel;
         subject: string;
+        body: string;
         lastUpdatedById: string;
         lastUpdatedAt: Date;
     }>;

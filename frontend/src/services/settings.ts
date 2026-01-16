@@ -43,6 +43,7 @@ export type TenantSystemConfig = {
   requiresProjectOnInvoices?: boolean;
   requiresFundOnInvoices?: boolean;
   arControlAccountId?: string | null;
+  apControlAccountId?: string | null;
   defaultBankClearingAccountId?: string | null;
   arRefundClearingAccountId?: string | null;
   arCashClearingAccountId?: string | null;
@@ -146,6 +147,19 @@ export async function updateSystemConfig(params: Partial<Omit<TenantSystemConfig
   return apiFetch<TenantSystemConfig>('/settings/system', {
     method: 'PUT',
     body: JSON.stringify(params),
+  });
+}
+
+export async function getFinanceApControlAccount(): Promise<{ apControlAccountId: string | null }> {
+  return apiFetch('/settings/finance/ap-control-account', { method: 'GET' });
+}
+
+export async function updateFinanceApControlAccount(params: {
+  apControlAccountId: string;
+}): Promise<{ apControlAccountId: string | null }> {
+  return apiFetch('/settings/finance/ap-control-account', {
+    method: 'PUT',
+    body: JSON.stringify({ apControlAccountId: params.apControlAccountId }),
   });
 }
 

@@ -89,11 +89,11 @@ export declare class CoaService {
         coaFrozen: boolean;
         coaLockedAt: Date | null;
         accounts: {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -116,11 +116,11 @@ export declare class CoaService {
         tree: any[];
     }>;
     create(req: Request, dto: CreateCoaAccountDto): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;
@@ -144,11 +144,11 @@ export declare class CoaService {
         createdAccountIds: string[];
     }>;
     get(req: Request, id: string): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;
@@ -168,11 +168,11 @@ export declare class CoaService {
         subCategory: string | null;
     }>;
     update(req: Request, id: string, dto: UpdateCoaAccountDto): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;

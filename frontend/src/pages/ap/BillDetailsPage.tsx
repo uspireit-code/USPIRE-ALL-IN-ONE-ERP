@@ -5,8 +5,10 @@ import { PERMISSIONS } from '../../auth/permission-catalog';
 import type { SupplierInvoice } from '../../services/ap';
 import { approveBill, listBills, postBill, submitBill } from '../../services/ap';
 
-function formatMoney(n: number) {
-  return n.toFixed(2);
+function formatMoney(n: unknown) {
+  const value = typeof n === 'number' ? n : typeof n === 'string' ? Number(n) : NaN;
+  if (!Number.isFinite(value)) return '-';
+  return value.toFixed(2);
 }
 
 export function BillDetailsPage() {
@@ -18,6 +20,11 @@ export function BillDetailsPage() {
   const canSubmit = hasPermission(PERMISSIONS.AP.INVOICE_SUBMIT);
   const canApprove = hasPermission(PERMISSIONS.AP.INVOICE_APPROVE);
   const canPost = hasPermission(PERMISSIONS.AP.INVOICE_POST);
+
+  const canConfigureApControlAccount =
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
   const [bill, setBill] = useState<SupplierInvoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,18 +127,36 @@ export function BillDetailsPage() {
       </div>
 
       <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-        <button onClick={() => runAction('submit')} disabled={!allowed.submit || acting}>
-          Submit
-        </button>
-        <button onClick={() => runAction('approve')} disabled={!allowed.approve || acting}>
-          Approve
-        </button>
-        <button onClick={() => runAction('post')} disabled={!allowed.post || acting}>
-          Post
-        </button>
+        {canSubmit ? (
+          <button onClick={() => runAction('submit')} disabled={!allowed.submit || acting}>
+            Submit
+          </button>
+        ) : null}
+        {canApprove ? (
+          <button onClick={() => runAction('approve')} disabled={!allowed.approve || acting}>
+            Approve
+          </button>
+        ) : null}
+        {canPost ? (
+          <button onClick={() => runAction('post')} disabled={!allowed.post || acting}>
+            Post
+          </button>
+        ) : null}
       </div>
 
-      {actionError ? <div style={{ color: 'crimson', marginTop: 12 }}>{actionError}</div> : null}
+      {actionError ? (
+        <div style={{ color: 'crimson', marginTop: 12 }}>
+          <div>{actionError}</div>
+          {canConfigureApControlAccount &&
+          actionError.includes('AP control account is not configured') ? (
+            <div style={{ marginTop: 6, fontSize: 12 }}>
+              <Link to="/settings/finance/control-accounts">
+                Go to Settings → Finance → Control Accounts
+              </Link>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div style={{ marginTop: 16 }}>
         <div style={{ fontWeight: 600 }}>Lines</div>

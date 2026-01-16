@@ -12,6 +12,7 @@ import { PERMISSIONS } from '../rbac/permission-catalog';
 import type { StorageProvider } from '../storage/storage.provider';
 import { STORAGE_PROVIDER } from '../storage/storage.provider';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
+import { UpdateApControlAccountDto } from './dto/update-ap-control-account.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
 import { randomUUID } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
@@ -117,6 +118,52 @@ export class SettingsService {
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
+
+  async getFinanceApControlAccount(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    const row = await this.prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: { apControlAccountId: true },
+    });
+
+    return {
+      apControlAccountId: row?.apControlAccountId ?? null,
+    };
+  }
+
+  async updateFinanceApControlAccount(req: Request, dto: UpdateApControlAccountDto) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    const id = dto.apControlAccountId;
+    if (!id) {
+      throw new BadRequestException('apControlAccountId is required');
+    }
+
+    const apAccount = await this.prisma.account.findFirst({
+      where: {
+        tenantId: tenant.id,
+        id,
+        isActive: true,
+        type: 'LIABILITY',
+      },
+      select: { id: true },
+    });
+
+    if (!apAccount) {
+      throw new BadRequestException('AP control account not found or invalid');
+    }
+
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { apControlAccountId: apAccount.id },
+      select: { apControlAccountId: true },
+    });
+
+    return { apControlAccountId: updated.apControlAccountId };
+  }
 
   private async ensureFinanceOfficerRole(tenantId: string) {
     const role = await this.prisma.role.upsert({
@@ -1075,6 +1122,7 @@ export class SettingsService {
         requiresProjectOnInvoices: true,
         requiresFundOnInvoices: true,
         arControlAccountId: true,
+        apControlAccountId: true,
         defaultBankClearingAccountId: true,
         cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1105,6 +1153,7 @@ export class SettingsService {
       'requiresProjectOnInvoices',
       'requiresFundOnInvoices',
       'arControlAccountId',
+      'apControlAccountId',
       'defaultBankClearingAccountId',
       'arRefundClearingAccountId',
       'cashClearingAccountId',
@@ -1192,6 +1241,7 @@ export class SettingsService {
         requiresProjectOnInvoices: true,
         requiresFundOnInvoices: true,
         arControlAccountId: true,
+        apControlAccountId: true,
         defaultBankClearingAccountId: true,
         cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
@@ -1385,6 +1435,13 @@ export class SettingsService {
               ? null
               : String((dto as any).arControlAccountId).trim() || null,
 
+        apControlAccountId:
+          (dto as any).apControlAccountId === undefined
+            ? undefined
+            : (dto as any).apControlAccountId === null
+              ? null
+              : String((dto as any).apControlAccountId).trim() || null,
+
         defaultBankClearingAccountId:
           (dto as any).arRefundClearingAccountId !== undefined
             ? (dto as any).arRefundClearingAccountId === null
@@ -1483,6 +1540,7 @@ export class SettingsService {
       requiresProjectOnInvoices: (updated as any).requiresProjectOnInvoices,
       requiresFundOnInvoices: (updated as any).requiresFundOnInvoices,
       arControlAccountId: (updated as any).arControlAccountId ?? null,
+      apControlAccountId: (updated as any).apControlAccountId ?? null,
       defaultBankClearingAccountId:
         (updated as any).defaultBankClearingAccountId ?? null,
       cashClearingAccountId: (updated as any).cashClearingAccountId ?? null,

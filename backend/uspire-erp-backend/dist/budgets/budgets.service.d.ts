@@ -80,12 +80,12 @@ export declare class BudgetsService {
     createBudget(req: Request, dto: CreateBudgetDto): Promise<{
         budget: {
             id: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.BudgetStatus;
             createdById: string;
-            approvedAt: Date | null;
             approvedById: string | null;
+            approvedAt: Date | null;
             fiscalYear: number;
         };
         revision: {
@@ -97,46 +97,46 @@ export declare class BudgetsService {
     }>;
     approveBudget(req: Request, id: string): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.BudgetStatus;
         createdById: string;
-        approvedAt: Date | null;
         approvedById: string | null;
+        approvedAt: Date | null;
         fiscalYear: number;
     }>;
     listBudgets(req: Request, query?: {
         fiscalYear?: number;
     }): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         status: import("@prisma/client").$Enums.BudgetStatus;
         createdBy: {
-            id: string;
             email: string;
+            id: string;
         };
         approvedAt: Date | null;
         approvedBy: {
-            id: string;
             email: string;
+            id: string;
         } | null;
         fiscalYear: number;
     }[]>;
     getBudget(req: Request, id: string): Promise<{
         budget: {
             id: string;
-            createdAt: Date;
             tenantId: string;
+            createdAt: Date;
             status: import("@prisma/client").$Enums.BudgetStatus;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             approvedAt: Date | null;
             approvedBy: {
-                id: string;
                 email: string;
+                id: string;
             } | null;
             fiscalYear: number;
         };
@@ -144,8 +144,8 @@ export declare class BudgetsService {
             id: string;
             createdAt: Date;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             revisionNo: number;
         }[];
@@ -153,24 +153,24 @@ export declare class BudgetsService {
             id: string;
             createdAt: Date;
             createdBy: {
-                id: string;
                 email: string;
+                id: string;
             };
             revisionNo: number;
         };
         lines: {
             id: string;
             account: {
-                id: string;
                 name: string;
+                id: string;
                 code: string;
             };
-            amount: Prisma.Decimal;
             accountId: string;
+            amount: Prisma.Decimal;
             periodId: string;
             period: {
-                id: string;
                 name: string;
+                id: string;
                 startDate: Date;
                 endDate: Date;
             };
@@ -187,8 +187,8 @@ export declare class BudgetsService {
             createdAt: Date;
         };
         periods: {
-            id: string;
             name: string;
+            id: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
@@ -210,8 +210,8 @@ export declare class BudgetsService {
         from: string;
         to: string;
         periods: {
-            id: string;
             name: string;
+            id: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;

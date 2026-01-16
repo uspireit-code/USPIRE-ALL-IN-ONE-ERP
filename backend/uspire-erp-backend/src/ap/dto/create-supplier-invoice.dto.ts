@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -23,15 +24,18 @@ export class CreateSupplierInvoiceLineDto {
 }
 
 export class CreateSupplierInvoiceDto {
+  @IsNotEmpty({ message: 'Supplier is required.' })
   @IsUUID()
   supplierId!: string;
 
   @IsString()
   invoiceNumber!: string;
 
+  @IsNotEmpty({ message: 'Bill date is required.' })
   @IsDateString()
   invoiceDate!: string;
 
+  @IsNotEmpty({ message: 'Due date is required.' })
   @IsDateString()
   dueDate!: string;
 

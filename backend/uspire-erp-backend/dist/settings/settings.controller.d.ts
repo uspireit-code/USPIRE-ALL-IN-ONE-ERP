@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { SettingsService } from './settings.service';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
+import { UpdateApControlAccountDto } from './dto/update-ap-control-account.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
@@ -33,6 +34,12 @@ export declare class SettingsController {
     downloadLogo(req: Request, res: Response): Promise<void>;
     getSystemConfig(req: Request): Promise<any>;
     updateSystemConfig(req: Request, dto: UpdateSystemConfigDto): Promise<any>;
+    getFinanceApControlAccount(req: Request): Promise<{
+        apControlAccountId: string | null;
+    }>;
+    updateFinanceApControlAccount(req: Request, dto: UpdateApControlAccountDto): Promise<{
+        apControlAccountId: string | null;
+    }>;
     uploadFavicon(req: Request, file: any): Promise<{
         faviconUrl: string;
     }>;
@@ -49,8 +56,8 @@ export declare class SettingsController {
         createdAt: Date;
     }[]>;
     listRoles(req: Request): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         description: string | null;
     }[]>;

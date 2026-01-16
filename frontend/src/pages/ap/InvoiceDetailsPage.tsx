@@ -5,8 +5,10 @@ import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { SupplierInvoice } from '../../services/ap';
 import { approveInvoice, listInvoices, postInvoice, submitInvoice } from '../../services/ap';
 
-function formatMoney(n: number) {
-  return n.toFixed(2);
+function formatMoney(n: unknown) {
+  const value = typeof n === 'number' ? n : typeof n === 'string' ? Number(n) : NaN;
+  if (!Number.isFinite(value)) return '-';
+  return value.toFixed(2);
 }
 
 export function InvoiceDetailsPage() {

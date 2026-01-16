@@ -5,8 +5,8 @@ export declare class PeriodCloseController {
     constructor(periodClose: PeriodCloseService);
     getChecklist(req: Request, periodId: string): Promise<{
         period: {
-            id: string;
             name: string;
+            id: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         };
         checklist: {
@@ -14,29 +14,29 @@ export declare class PeriodCloseController {
             createdAt: Date;
             periodId: string;
             items: {
-                id: string;
                 name: string;
+                id: string;
                 createdAt: Date;
                 status: import("@prisma/client").$Enums.PeriodCloseChecklistItemStatus;
                 code: string;
                 completedAt: Date | null;
                 completedBy: {
-                    id: string;
                     email: string;
+                    id: string;
                 } | null;
             }[];
         };
     }>;
     completeItem(req: Request, periodId: string, itemId: string): Promise<{
-        id: string;
         name: string;
+        id: string;
         createdAt: Date;
         status: import("@prisma/client").$Enums.PeriodCloseChecklistItemStatus;
         code: string;
         completedAt: Date | null;
         completedBy: {
-            id: string;
             email: string;
+            id: string;
         } | null;
     }>;
 }

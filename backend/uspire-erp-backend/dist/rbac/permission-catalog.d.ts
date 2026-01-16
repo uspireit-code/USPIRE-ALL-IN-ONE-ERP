@@ -82,11 +82,6 @@ export declare const PERMISSIONS: {
         readonly INVOICE_APPROVE: "AP_INVOICE_APPROVE";
         readonly INVOICE_POST: "AP_INVOICE_POST";
         readonly INVOICE_VIEW: "AP_INVOICE_VIEW";
-        readonly BILL_CREATE: "AP_BILL_CREATE";
-        readonly BILL_SUBMIT: "AP_BILL_SUBMIT";
-        readonly BILL_APPROVE: "AP_BILL_APPROVE";
-        readonly BILL_POST: "AP_BILL_POST";
-        readonly BILL_VIEW: "AP_BILL_VIEW";
     };
     readonly BANK: {
         readonly ACCOUNT_CREATE: "BANK_ACCOUNT_CREATE";
@@ -162,6 +157,7 @@ export declare const PERMISSIONS: {
     readonly SYSTEM: {
         readonly VIEW_ALL: "SYSTEM_VIEW_ALL";
         readonly SETTINGS_VIEW: "SETTINGS_VIEW";
+        readonly SYS_SETTINGS_VIEW: "SYS_SETTINGS_VIEW";
         readonly CONFIG_VIEW: "SYSTEM_CONFIG_VIEW";
         readonly CONFIG_UPDATE: "SYSTEM_CONFIG_UPDATE";
         readonly CONFIG_CHANGE: "SYSTEM_CONFIG_CHANGE";

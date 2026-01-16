@@ -7,11 +7,11 @@ export declare class TaxController {
     createTaxRate(req: Request, dto: CreateTaxRateDto): Promise<any>;
     listTaxRates(req: Request): Promise<({
         glAccount: {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -35,11 +35,11 @@ export declare class TaxController {
             requiresDepartment: boolean;
         } | null;
     } & {
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         code: string;
         type: import("@prisma/client").$Enums.TaxRateType;
         rate: import("@prisma/client/runtime/library").Decimal;

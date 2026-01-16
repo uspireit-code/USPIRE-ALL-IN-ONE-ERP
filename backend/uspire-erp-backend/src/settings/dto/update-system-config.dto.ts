@@ -154,6 +154,11 @@ export class UpdateSystemConfigDto {
   @IsOptional()
   @ValidateIf(isNotNull)
   @IsString()
+  apControlAccountId?: string | null;
+
+  @IsOptional()
+  @ValidateIf(isNotNull)
+  @IsString()
   defaultBankClearingAccountId?: string | null;
 
   @IsOptional()

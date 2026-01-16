@@ -11,11 +11,11 @@ export declare class BankController {
     constructor(bank: BankService);
     createBankAccount(req: Request, dto: CreateBankAccountDto): Promise<{
         glAccount: {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -39,11 +39,11 @@ export declare class BankController {
             requiresDepartment: boolean;
         };
     } & {
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         bankName: string;
         accountNumber: string;
         currency: string;
@@ -51,11 +51,11 @@ export declare class BankController {
     }>;
     listBankAccounts(req: Request): Promise<({
         glAccount: {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -79,11 +79,11 @@ export declare class BankController {
             requiresDepartment: boolean;
         };
     } & {
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         bankName: string;
         accountNumber: string;
         currency: string;

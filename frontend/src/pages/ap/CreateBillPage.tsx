@@ -29,6 +29,8 @@ export function CreateBillPage() {
   const [accounts, setAccounts] = useState<AccountLookup[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const [supplierId, setSupplierId] = useState('');
@@ -41,6 +43,8 @@ export function CreateBillPage() {
     let mounted = true;
     setLoadingLookups(true);
     setError(null);
+    setFieldErrors({});
+    setFormErrors([]);
 
     Promise.all([listSuppliers(), listEligibleAccounts()])
       .then(([sups, accs]) => {
@@ -87,12 +91,30 @@ export function CreateBillPage() {
 
     setError(null);
 
+    const nextFieldErrors: Record<string, string> = {};
+    const nextFormErrors: string[] = [];
+
     if (!supplierId) {
-      setError('Supplier is required');
+      nextFieldErrors.supplierId = 'Supplier is required.';
+    }
+    if (!billDate) {
+      nextFieldErrors.billDate = 'Bill date is required.';
+    }
+    if (!dueDate) {
+      nextFieldErrors.dueDate = 'Due date is required.';
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setFormErrors(nextFormErrors);
       return;
     }
+
+    setFieldErrors({});
+    setFormErrors([]);
+
     if (!billNumber.trim()) {
-      setError('Bill number is required');
+      setFieldErrors({ billNumber: 'Bill number is required.' });
       return;
     }
 
@@ -105,7 +127,7 @@ export function CreateBillPage() {
       .filter((l) => l.accountId && l.description?.trim() && Number.isFinite(l.amount) && l.amount !== 0);
 
     if (mappedLines.length === 0) {
-      setError('At least one line is required');
+      setFormErrors(['At least one line is required.']);
       return;
     }
 
@@ -121,8 +143,38 @@ export function CreateBillPage() {
       });
       navigate('/ap/bills');
     } catch (err: any) {
-      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to create bill';
-      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const status = typeof err?.status === 'number' ? err.status : undefined;
+      const body = err?.body;
+
+      if (status === 400 && body && typeof body === 'object') {
+        const nextFe: Record<string, string> = {};
+        const nextForm: string[] = [];
+
+        const backendFieldErrors = Array.isArray((body as any).fieldErrors) ? (body as any).fieldErrors : [];
+        for (const fe of backendFieldErrors) {
+          const field = String(fe?.field ?? '').trim();
+          const message = String(fe?.message ?? '').trim();
+          if (!field || !message) continue;
+
+          if (field === 'supplierId') nextFe.supplierId = message;
+          else if (field === 'invoiceDate') nextFe.billDate = message;
+          else if (field === 'dueDate') nextFe.dueDate = message;
+          else if (field === 'invoiceNumber') nextFe.billNumber = message;
+          else nextForm.push(message);
+        }
+
+        const generalMessage = typeof (body as any).message === 'string' ? (body as any).message : '';
+        if (generalMessage && nextForm.length === 0 && Object.keys(nextFe).length === 0) {
+          nextForm.push(generalMessage);
+        }
+
+        setFieldErrors(nextFe);
+        setFormErrors(nextForm);
+        return;
+      }
+
+      const msg = body?.message ?? body?.error ?? 'Failed to create bill';
+      setFormErrors([typeof msg === 'string' ? msg : JSON.stringify(msg)]);
     } finally {
       setSaving(false);
     }
@@ -130,13 +182,21 @@ export function CreateBillPage() {
 
   if (!canCreate) return <div>You do not have permission to access this page.</div>;
   if (loadingLookups) return <div>Loading...</div>;
-  if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
 
   return (
     <div style={{ maxWidth: 760 }}>
       <h2>Create Bill</h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center' }}>
+      {error ? <div style={{ color: 'crimson', marginBottom: 10 }}>{error}</div> : null}
+      {formErrors.length > 0 ? (
+        <div style={{ color: 'crimson', marginBottom: 10 }}>
+          {formErrors.map((e, idx) => (
+            <div key={idx}>{e}</div>
+          ))}
+        </div>
+      ) : null}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 260px', gap: 10, alignItems: 'center' }}>
         <div>Supplier</div>
         <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
           <option value="">Select supplier…</option>
@@ -146,15 +206,19 @@ export function CreateBillPage() {
             </option>
           ))}
         </select>
+        {fieldErrors.supplierId ? <div style={{ color: 'crimson' }}>{fieldErrors.supplierId}</div> : <div />}
 
         <div>Bill #</div>
         <input value={billNumber} onChange={(e) => setBillNumber(e.target.value)} />
+        {fieldErrors.billNumber ? <div style={{ color: 'crimson' }}>{fieldErrors.billNumber}</div> : <div />}
 
         <div>Bill Date</div>
         <input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />
+        {fieldErrors.billDate ? <div style={{ color: 'crimson' }}>{fieldErrors.billDate}</div> : <div />}
 
         <div>Due Date</div>
         <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        {fieldErrors.dueDate ? <div style={{ color: 'crimson' }}>{fieldErrors.dueDate}</div> : <div />}
       </div>
 
       <div style={{ marginTop: 18, fontWeight: 600 }}>Lines</div>

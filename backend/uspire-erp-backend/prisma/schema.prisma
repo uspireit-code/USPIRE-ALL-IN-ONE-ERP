@@ -832,26 +832,26 @@ model CustomerReceiptLine {
 }
 
 model Supplier {
-  id          String            @id @default(uuid())
-  tenantId    String
-  name        String
-  taxNumber   String?
-  registrationNumber String?
-  vatRegistered Boolean          @default(false)
+  id                  String                @id @default(uuid())
+  tenantId            String
+  name                String
+  taxNumber           String?
+  registrationNumber  String?
+  vatRegistered       Boolean               @default(false)
   defaultPaymentTerms String?
-  defaultCurrency String         @default("ZMW")
-  withholdingProfile WithholdingProfile @default(NONE)
-  email       String?
-  phone       String?
-  address     String?
-  isActive    Boolean           @default(true)
-  createdAt   DateTime          @default(now())
-  fixedAssets FixedAsset[]
-  tenant      Tenant            @relation(fields: [tenantId], references: [id])
-  invoices    SupplierInvoice[]
-  documents   SupplierDocument[]
-  bankAccounts SupplierBankAccount[]
-  changeLogs  SupplierChangeLog[]
+  defaultCurrency     String                @default("ZMW")
+  withholdingProfile  WithholdingProfile    @default(NONE)
+  email               String?
+  phone               String?
+  address             String?
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  fixedAssets         FixedAsset[]
+  tenant              Tenant                @relation(fields: [tenantId], references: [id])
+  invoices            SupplierInvoice[]
+  documents           SupplierDocument[]
+  bankAccounts        SupplierBankAccount[]
+  changeLogs          SupplierChangeLog[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -899,31 +899,31 @@ model SupplierInvoiceLine {
 }
 
 model SupplierDocument {
-  id          String   @id @default(uuid())
-  tenantId    String
-  supplierId  String
+  id         String @id @default(uuid())
+  tenantId   String
+  supplierId String
 
-  docType     String
-  filename    String
-  mimeType    String
-  storageKey  String
-  fileSize    Int?
-  notes       String?
+  docType    String
+  filename   String
+  mimeType   String
+  storageKey String
+  fileSize   Int?
+  notes      String?
 
   createdById String
   createdAt   DateTime @default(now())
   isActive    Boolean  @default(true)
 
-  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, supplierId])
   @@index([tenantId, supplierId, createdAt])
 }
 
 model SupplierBankAccount {
-  id            String   @id @default(uuid())
-  tenantId      String
-  supplierId    String
+  id         String @id @default(uuid())
+  tenantId   String
+  supplierId String
 
   bankName      String
   branchName    String?
@@ -933,35 +933,35 @@ model SupplierBankAccount {
   swiftCode     String?
   notes         String?
 
-  isPrimary     Boolean  @default(false)
-  isActive      Boolean  @default(true)
+  isPrimary Boolean @default(false)
+  isActive  Boolean @default(true)
 
-  createdById   String
-  createdAt     DateTime @default(now())
-  updatedById   String?
-  updatedAt     DateTime @default(now()) @updatedAt
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedById String?
+  updatedAt   DateTime @default(now()) @updatedAt
 
-  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, supplierId])
   @@index([tenantId, supplierId, isActive])
 }
 
 model SupplierChangeLog {
-  id          String   @id @default(uuid())
-  tenantId    String
-  supplierId  String
+  id         String @id @default(uuid())
+  tenantId   String
+  supplierId String
 
-  changeType  String
-  field       String?
-  oldValue    String?
-  newValue    String?
-  refId       String?
+  changeType String
+  field      String?
+  oldValue   String?
+  newValue   String?
+  refId      String?
 
   actorUserId String
   createdAt   DateTime @default(now())
 
-  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, supplierId, createdAt])
   @@index([tenantId, supplierId, changeType])
@@ -996,6 +996,7 @@ model Tenant {
   coaFrozen                      Boolean                         @default(false)
   coaLockedAt                    DateTime?
   arControlAccountId             String?
+  apControlAccountId             String?
   defaultBankClearingAccountId   String?
   unappliedReceiptsAccountId     String?
   allowSelfPosting               Boolean                         @default(false)
@@ -1060,6 +1061,7 @@ model Tenant {
   supplierInvoices               SupplierInvoice[]
   taxRates                       TaxRate[]
   arControlAccount               Account?                        @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
+  apControlAccount               Account?                        @relation("TenantApControlAccount", fields: [apControlAccountId], references: [id], onDelete: Restrict)
   cashClearingAccount            Account?                        @relation("TenantCashClearingAccount", fields: [cashClearingAccountId], references: [id], onDelete: Restrict)
   defaultBankClearingAccount     Account?                        @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
   unappliedReceiptsAccount       Account?                        @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
@@ -1390,6 +1392,7 @@ model Account {
   supplierInvoiceLines                    SupplierInvoiceLine[]
   taxRates                                TaxRate[]
   tenantsAsArControlAccount               Tenant[]                       @relation("TenantArControlAccount")
+  tenantsAsApControlAccount               Tenant[]                       @relation("TenantApControlAccount")
   tenantsAsCashClearingAccount            Tenant[]                       @relation("TenantCashClearingAccount")
   tenantsAsDefaultBankClearingAccount     Tenant[]                       @relation("TenantDefaultBankClearingAccount")
   tenantsAsUnappliedReceiptsAccount       Tenant[]                       @relation("TenantUnappliedReceiptsAccount")

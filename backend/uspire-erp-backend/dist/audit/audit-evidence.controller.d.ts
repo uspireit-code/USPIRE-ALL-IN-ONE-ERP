@@ -8,19 +8,19 @@ export declare class AuditEvidenceController {
     upload(req: Request, file: any, dto: AuditEvidenceUploadDto, res: Response): Promise<void>;
     list(req: Request, dto: AuditEvidenceQueryDto): Promise<{
         id: string;
-        createdAt: Date;
         tenantId: string;
+        createdAt: Date;
         mimeType: string;
+        sha256Hash: string;
         entityType: import("@prisma/client").$Enums.AuditEntityType;
         entityId: string;
-        uploadedById: string;
         fileName: string;
-        uploadedBy: {
-            id: string;
-            email: string;
-        };
         size: number;
-        sha256Hash: string;
+        uploadedBy: {
+            email: string;
+            id: string;
+        };
+        uploadedById: string;
     }[]>;
     download(req: Request, id: string, res: Response): Promise<void>;
 }

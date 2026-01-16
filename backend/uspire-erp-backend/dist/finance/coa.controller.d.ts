@@ -9,11 +9,11 @@ export declare class CoaController {
         coaFrozen: boolean;
         coaLockedAt: Date | null;
         accounts: {
-            id: string;
             name: string;
+            id: string;
+            tenantId: string;
             isActive: boolean;
             createdAt: Date;
-            tenantId: string;
             updatedAt: Date;
             createdById: string | null;
             code: string;
@@ -36,11 +36,11 @@ export declare class CoaController {
         tree: any[];
     }>;
     create(req: Request, dto: CreateCoaAccountDto): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;
@@ -69,11 +69,11 @@ export declare class CoaController {
     }>;
     importTemplate(req: Request, format: string | undefined, res: Response): Promise<void>;
     get(req: Request, id: string): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;
@@ -137,11 +137,11 @@ export declare class CoaController {
         createdAccountIds: string[];
     }>;
     update(req: Request, id: string, dto: UpdateCoaAccountDto): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;
@@ -161,11 +161,11 @@ export declare class CoaController {
         subCategory: string | null;
     }>;
     put(req: Request, id: string, dto: UpdateCoaAccountDto): Promise<{
-        id: string;
         name: string;
+        id: string;
+        tenantId: string;
         isActive: boolean;
         createdAt: Date;
-        tenantId: string;
         updatedAt: Date;
         createdById: string | null;
         code: string;
