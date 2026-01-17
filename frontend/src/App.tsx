@@ -20,6 +20,7 @@ import { InvoiceDetailsPage } from './pages/ap/InvoiceDetailsPage';
 import { InvoicesListPage } from './pages/ap/InvoicesListPage';
 import { SupplierDetailsPage } from './pages/ap/SupplierDetailsPage';
 import { SuppliersListPage } from './pages/ap/SuppliersListPage';
+import { SupplierStatementsPage } from './pages/ap/SupplierStatementsPage';
 import { ArHomePage } from './pages/ar/ArHomePage';
 import { CreateCustomerPage } from './pages/ar/CreateCustomerPage';
 import { CustomerDetailsPage } from './pages/ar/CustomerDetailsPage';
@@ -789,6 +790,20 @@ export default function App() {
                     permissions={[PERMISSIONS.AR.REFUND_VIEW, PERMISSIONS.AR.REFUND_POST]}
                   >
                     <RefundDetailsPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/ap/supplier-statements"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
+                    <SupplierStatementsPage />
                   </PermissionAnyRoute>
                 }
               />

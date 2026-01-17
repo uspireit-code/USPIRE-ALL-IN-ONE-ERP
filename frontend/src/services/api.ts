@@ -76,7 +76,7 @@ export async function apiFetch<T>(
   if (!hasExplicitContentType && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
   }
-  if (!accessToken && tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
+  if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   if (debugApi) {

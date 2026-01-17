@@ -715,6 +715,14 @@ async function main() {
   await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AR_STATEMENT.VIEW]);
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AR_STATEMENT.VIEW]);
 
+  // AP Supplier Statements (AP-5) RBAC backfill (idempotent):
+  // Read-only, audited. No posting or mutation.
+  // Do NOT auto-grant to ADMIN or SUPERADMIN; they rely on FINANCE_VIEW_ALL / SYSTEM_VIEW_ALL visibility only.
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+  await assignPermissionsByCode(systemAdminRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+
   // AR Reminders (AR-REMINDERS) RBAC backfill (idempotent):
   // Permission-based governance only.
   await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.AR_REMINDER.VIEW, PERMISSIONS.AR_REMINDER.TRIGGER]);
@@ -781,6 +789,7 @@ async function main() {
   const glApprovePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.APPROVE }, select: { id: true } });
   const glRecurringManagePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.GL.RECURRING_MANAGE }, select: { id: true } });
   const periodViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.VIEW }, select: { id: true } });
+  const periodCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.CREATE }, select: { id: true } });
 
   // Governance: FINANCE_OFFICER must not have FINANCE_GL_APPROVE. This is additive-only cleanup for past seeds.
   if (glApprovePerm?.id) {
@@ -831,6 +840,7 @@ async function main() {
   });
   const periodCloseApprovePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.CLOSE_APPROVE }, select: { id: true } });
   const periodReopenPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.REOPEN }, select: { id: true } });
+  const periodCorrectPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.PERIOD.CORRECT }, select: { id: true } });
   const disclosureGeneratePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.DISCLOSURE_GENERATE }, select: { id: true } });
   const disclosureViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.DISCLOSURE_VIEW }, select: { id: true } });
   const budgetSetupPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.BUDGET.SETUP }, select: { id: true } });
@@ -1128,6 +1138,7 @@ async function main() {
     await prisma.rolePermission.createMany({
       data: [
         periodViewPerm?.id,
+        periodCreatePerm?.id,
       ]
         .filter(Boolean)
         .map((permissionId) => ({
@@ -1216,6 +1227,8 @@ async function main() {
       PERMISSIONS.AR_REMINDER.VIEW,
       PERMISSIONS.AR_REMINDER.TRIGGER,
       PERMISSIONS.PERIOD.VIEW,
+      PERMISSIONS.PERIOD.CREATE,
+      PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     ] as const;
 
@@ -1336,6 +1349,7 @@ async function main() {
         glRecurringManagePerm?.id,
         glRecurringGeneratePerm?.id,
         periodViewPerm?.id,
+        periodCreatePerm?.id,
         periodChecklistViewPerm?.id,
         periodChecklistCompletePerm?.id,
         periodReopenPerm?.id,
@@ -1360,9 +1374,8 @@ async function main() {
       PERMISSIONS.GL.APPROVE,
       PERMISSIONS.GL.RECURRING_MANAGE,
       PERMISSIONS.GL.RECURRING_GENERATE,
-      PERMISSIONS.PERIOD.CHECKLIST_VIEW,
-      PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
-      PERMISSIONS.PERIOD.CLOSE,
+      PERMISSIONS.PERIOD.VIEW,
+      PERMISSIONS.PERIOD.CREATE,
 
       PERMISSIONS.AR.RECEIPT_VIEW,
       PERMISSIONS.AR.RECEIPT_POST,
@@ -1372,6 +1385,17 @@ async function main() {
 
       PERMISSIONS.AR.REFUND_VIEW,
       PERMISSIONS.AR.REFUND_APPROVE,
+    ]);
+
+    // Governance: Finance Manager may create periods but must not operate them.
+    await removePermissionsByCode([financeManagerRole.id], [
+      PERMISSIONS.PERIOD.CLOSE,
+      PERMISSIONS.PERIOD.CLOSE_APPROVE,
+      PERMISSIONS.PERIOD.REOPEN,
+      PERMISSIONS.PERIOD.CORRECT,
+      PERMISSIONS.PERIOD.CHECKLIST_VIEW,
+      PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      PERMISSIONS.PERIOD.REVIEW,
     ]);
 
     if (periodCloseApprovePerm?.id) {
@@ -1391,23 +1415,29 @@ async function main() {
     }
   }
 
-  // Backfill: ensure ADMIN can close periods (still checklist-gated by backend).
-  // Additive-only and safe to re-run.
-  if (periodClosePerm?.id) {
-    const adminRoles = await prisma.role.findMany({
-      where: { name: 'ADMIN' },
+  // Governance: Admins are VIEW-ONLY for finance operations.
+  // They must NEVER operate accounting periods unless explicitly assigned a Finance role.
+  {
+    const adminLikeRoles = await prisma.role.findMany({
+      where: { name: { in: ['ADMIN', 'SYSTEM_ADMIN', 'SUPERADMIN'] } },
       select: { id: true },
     });
+    const adminLikeRoleIds = adminLikeRoles.map((r) => r.id);
 
-    if (adminRoles.length > 0) {
-      await prisma.rolePermission.createMany({
-        data: adminRoles.map((r) => ({
-          roleId: r.id,
-          permissionId: periodClosePerm.id,
-        })),
-        skipDuplicates: true,
-      });
-    }
+    await removePermissionsByCode(adminLikeRoleIds, [
+      PERMISSIONS.PERIOD.CREATE,
+      PERMISSIONS.PERIOD.CLOSE,
+      PERMISSIONS.PERIOD.CLOSE_APPROVE,
+      PERMISSIONS.PERIOD.REOPEN,
+      PERMISSIONS.PERIOD.CORRECT,
+      PERMISSIONS.PERIOD.CHECKLIST_VIEW,
+      PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      PERMISSIONS.PERIOD.REVIEW,
+    ]);
+
+    await assignPermissionsByCode(adminRole.id, [PERMISSIONS.PERIOD.VIEW]);
+    await assignPermissionsByCode(systemAdminRole.id, [PERMISSIONS.PERIOD.VIEW]);
+    await assignPermissionsByCode(superAdminRole.id, [PERMISSIONS.PERIOD.VIEW]);
   }
 
   if (financeControllerRole?.id) {
@@ -1416,9 +1446,12 @@ async function main() {
         glViewPerm?.id,
         glFinalPostPerm?.id,
         periodViewPerm?.id,
+        periodCreatePerm?.id,
         periodChecklistViewPerm?.id,
         periodChecklistCompletePerm?.id,
         periodClosePerm?.id,
+        periodReopenPerm?.id,
+        periodCorrectPerm?.id,
 
         mdDepartmentViewPerm?.id,
         mdDepartmentCreatePerm?.id,
@@ -1466,6 +1499,10 @@ async function main() {
       PERMISSIONS.AR.REFUND_VIEW,
       PERMISSIONS.AR.REFUND_POST,
       PERMISSIONS.AR.INVOICE_VIEW,
+      PERMISSIONS.PERIOD.VIEW,
+      PERMISSIONS.PERIOD.CREATE,
+      PERMISSIONS.PERIOD.CLOSE,
+      PERMISSIONS.PERIOD.REOPEN,
       PERMISSIONS.PERIOD.CLOSE_APPROVE,
       PERMISSIONS.PERIOD.CORRECT,
 

@@ -321,6 +321,10 @@ export function Layout() {
     hasPermission(PERMISSIONS.AR_AGING.VIEW) || hasFinanceViewAll || hasSystemViewAll;
   const showArStatements =
     hasPermission(PERMISSIONS.AR_STATEMENT.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showSupplierStatements =
+    hasPermission(PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW) ||
+    hasFinanceViewAll ||
+    hasSystemViewAll;
   const showArReminders =
     hasPermission(PERMISSIONS.AR_REMINDER.VIEW) || hasFinanceViewAll || hasSystemViewAll;
   const showGlCreate = hasPermission(PERMISSIONS.GL.CREATE);
@@ -701,6 +705,14 @@ export function Layout() {
                     <SidebarLink to="/finance/ap/suppliers" label="Suppliers" icon={<UsersIcon />} level={3} />
                     {showApBills ? (
                       <SidebarLink to="/finance/ap/bills" label="Bills / Invoices" icon={<ReceiptIcon />} level={3} />
+                    ) : null}
+                    {showSupplierStatements ? (
+                      <SidebarLink
+                        to="/finance/ap/supplier-statements"
+                        label="Supplier Statements"
+                        icon={<FileTextIcon />}
+                        level={3}
+                      />
                     ) : null}
                     <SidebarLink to="/finance/ap/aging" label="AP Aging" icon={<BarChartIcon />} level={3} />
                     <SidebarLink to="/finance/ap/payments/proposals" label="Payment Proposals" icon={<ClipboardIcon />} level={3} />
