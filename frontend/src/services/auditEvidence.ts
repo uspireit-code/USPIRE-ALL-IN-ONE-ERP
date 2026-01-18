@@ -9,6 +9,7 @@ export type AuditEvidenceEntityType =
   | 'FIXED_ASSET'
   | 'FIXED_ASSET_DEPRECIATION_RUN'
   | 'BANK_RECONCILIATION_MATCH'
+  | 'IMPREST_CASE'
   | 'USER';
 
 export type AuditEvidenceRow = {

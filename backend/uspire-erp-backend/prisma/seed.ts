@@ -282,6 +282,25 @@ async function main() {
     { code: PERMISSIONS.BANK.ACCOUNT_VIEW, description: 'View bank & cash accounts' },
     { code: PERMISSIONS.BANK.ACCOUNT_EDIT, description: 'Edit bank & cash accounts' },
     { code: PERMISSIONS.BANK.ACCOUNT_DEACTIVATE, description: 'Deactivate bank & cash accounts' },
+    { code: PERMISSIONS.IMPREST.TYPE_POLICY_VIEW, description: 'View imprest type policies' },
+    { code: PERMISSIONS.IMPREST.TYPE_POLICY_CREATE, description: 'Create imprest type policies' },
+    { code: PERMISSIONS.IMPREST.TYPE_POLICY_EDIT, description: 'Edit imprest type policies' },
+    { code: PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE, description: 'Deactivate imprest type policies' },
+    { code: PERMISSIONS.IMPREST.FACILITY_VIEW, description: 'View imprest facilities' },
+    { code: PERMISSIONS.IMPREST.FACILITY_CREATE, description: 'Create imprest facilities' },
+    { code: PERMISSIONS.IMPREST.FACILITY_EDIT, description: 'Edit imprest facilities' },
+    { code: PERMISSIONS.IMPREST.FACILITY_SUSPEND, description: 'Suspend imprest facilities' },
+    { code: PERMISSIONS.IMPREST.FACILITY_CLOSE, description: 'Close imprest facilities' },
+    { code: PERMISSIONS.IMPREST.CASE_VIEW, description: 'View imprest cases' },
+    { code: PERMISSIONS.IMPREST.CASE_CREATE, description: 'Create imprest cases (requests)' },
+    { code: PERMISSIONS.IMPREST.CASE_SUBMIT, description: 'Submit imprest cases (maker action)' },
+    { code: PERMISSIONS.IMPREST.CASE_REVIEW, description: 'Review imprest cases (checker)' },
+    { code: PERMISSIONS.IMPREST.CASE_APPROVE, description: 'Approve imprest cases' },
+    { code: PERMISSIONS.IMPREST.CASE_REJECT, description: 'Reject imprest cases' },
+    { code: PERMISSIONS.IMPREST.CASE_ISSUE, description: 'Issue/fund imprest cases (controlled release)' },
+    { code: PERMISSIONS.IMPREST.CASE_RETIRE, description: 'Submit imprest retirement packs' },
+    { code: PERMISSIONS.IMPREST.CASE_SETTLE, description: 'Settle imprest cases (finalize retirement)' },
+    { code: PERMISSIONS.IMPREST.ADMIN_OVERRIDE, description: 'Imprest administrative override (governed, audited)' },
     { code: PERMISSIONS.PAYMENT.CREATE, description: 'Create payments' },
     { code: PERMISSIONS.PAYMENT.APPROVE, description: 'Approve payments' },
     { code: PERMISSIONS.PAYMENT.RELEASE, description: 'Release payments' },
@@ -716,6 +735,18 @@ async function main() {
     PERMISSIONS.ROLE.ASSIGN,
   ]);
 
+  // USER (view-only) RBAC backfill (idempotent):
+  // Required for dropdowns (e.g. Imprest facility custodian selection).
+  // Finance roles must be view-only: do NOT grant create/edit/assign-role.
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.USER.VIEW]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.USER.VIEW]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.USER.VIEW]);
+
+  await removePermissionsByCode(
+    [financeOfficerRole.id, financeManagerRole.id, financeControllerRole.id],
+    [PERMISSIONS.USER.CREATE, PERMISSIONS.USER.EDIT, PERMISSIONS.USER.ASSIGN_ROLE],
+  );
+
   // AR Aging (AR-1) RBAC backfill (idempotent):
   // Allow view-only AR aging report access for governed roles.
   await assignPermissionsByCode(superAdminRole.id, [PERMISSIONS.AR_AGING.VIEW]);
@@ -820,6 +851,149 @@ async function main() {
     [superAdminRole.id, systemAdminRole.id, adminRole.id, financeOfficerRole.id, financeManagerRole.id],
     [PERMISSIONS.BANK.ACCOUNT_EDIT, PERMISSIONS.BANK.ACCOUNT_DEACTIVATE],
   );
+
+  // Imprest management (PHASE 1) RBAC backfill (idempotent):
+  // Governance:
+  // - Finance Officer: facility view + case view/create/submit
+  // - Finance Manager: policy view + facility view + case view + review/approve/reject (no issue, no config)
+  // - Finance Controller: all IMPREST_* (governance + operations)
+  // - Admin / System Admin / Superadmin: view-only
+  await assignPermissionsByCode(financeOfficerRole.id, [
+    PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+    PERMISSIONS.IMPREST.FACILITY_VIEW,
+    PERMISSIONS.IMPREST.CASE_VIEW,
+    PERMISSIONS.IMPREST.CASE_CREATE,
+    PERMISSIONS.IMPREST.CASE_SUBMIT,
+    // UI dependencies (lookups)
+    PERMISSIONS.GL.VIEW,
+    PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+    PERMISSIONS.USER.VIEW,
+  ]);
+
+  await assignPermissionsByCode(financeManagerRole.id, [
+    PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+    PERMISSIONS.IMPREST.FACILITY_VIEW,
+    PERMISSIONS.IMPREST.CASE_VIEW,
+    PERMISSIONS.IMPREST.CASE_REVIEW,
+    PERMISSIONS.IMPREST.CASE_APPROVE,
+    PERMISSIONS.IMPREST.CASE_REJECT,
+    // UI dependencies (lookups)
+    PERMISSIONS.GL.VIEW,
+    PERMISSIONS.USER.VIEW,
+  ]);
+
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+    PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
+    PERMISSIONS.IMPREST.TYPE_POLICY_EDIT,
+    PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE,
+    PERMISSIONS.IMPREST.FACILITY_VIEW,
+    PERMISSIONS.IMPREST.FACILITY_CREATE,
+    PERMISSIONS.IMPREST.FACILITY_EDIT,
+    PERMISSIONS.IMPREST.FACILITY_SUSPEND,
+    PERMISSIONS.IMPREST.FACILITY_CLOSE,
+    PERMISSIONS.IMPREST.CASE_VIEW,
+    PERMISSIONS.IMPREST.CASE_CREATE,
+    PERMISSIONS.IMPREST.CASE_SUBMIT,
+    PERMISSIONS.IMPREST.CASE_REVIEW,
+    PERMISSIONS.IMPREST.CASE_APPROVE,
+    PERMISSIONS.IMPREST.CASE_REJECT,
+    PERMISSIONS.IMPREST.CASE_ISSUE,
+    PERMISSIONS.IMPREST.CASE_SETTLE,
+    PERMISSIONS.IMPREST.ADMIN_OVERRIDE,
+  ]);
+
+  await assignPermissionsByCode(adminRole.id, [
+    PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+    PERMISSIONS.IMPREST.FACILITY_VIEW,
+    PERMISSIONS.IMPREST.CASE_VIEW,
+    PERMISSIONS.GL.VIEW,
+    PERMISSIONS.USER.VIEW,
+  ]);
+  await assignPermissionsByCode(systemAdminRole.id, [
+    PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+    PERMISSIONS.IMPREST.FACILITY_VIEW,
+    PERMISSIONS.IMPREST.CASE_VIEW,
+    PERMISSIONS.GL.VIEW,
+    PERMISSIONS.USER.VIEW,
+  ]);
+  await assignPermissionsByCode(superAdminRole.id, [
+    PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+    PERMISSIONS.IMPREST.FACILITY_VIEW,
+    PERMISSIONS.IMPREST.CASE_VIEW,
+    PERMISSIONS.GL.VIEW,
+    PERMISSIONS.USER.VIEW,
+  ]);
+
+  // Explicit removals to preserve strict governance:
+  // - Admins: no submit/review/approve/reject/issue/override, and no mutation of config
+  await removePermissionsByCode(
+    [superAdminRole.id, systemAdminRole.id, adminRole.id],
+    [
+      PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
+      PERMISSIONS.IMPREST.TYPE_POLICY_EDIT,
+      PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE,
+      PERMISSIONS.IMPREST.FACILITY_CREATE,
+      PERMISSIONS.IMPREST.FACILITY_EDIT,
+      PERMISSIONS.IMPREST.FACILITY_SUSPEND,
+      PERMISSIONS.IMPREST.FACILITY_CLOSE,
+      PERMISSIONS.IMPREST.CASE_CREATE,
+      PERMISSIONS.IMPREST.CASE_SUBMIT,
+      PERMISSIONS.IMPREST.CASE_REVIEW,
+      PERMISSIONS.IMPREST.CASE_APPROVE,
+      PERMISSIONS.IMPREST.CASE_REJECT,
+      PERMISSIONS.IMPREST.CASE_ISSUE,
+      PERMISSIONS.IMPREST.CASE_RETIRE,
+      PERMISSIONS.IMPREST.CASE_SETTLE,
+      PERMISSIONS.IMPREST.ADMIN_OVERRIDE,
+      PERMISSIONS.USER.CREATE,
+      PERMISSIONS.USER.EDIT,
+      PERMISSIONS.USER.ASSIGN_ROLE,
+    ],
+  );
+
+  // - Finance Officer (Maker): explicitly remove non-maker powers
+  await removePermissionsByCode(
+    [financeOfficerRole.id],
+    [
+      PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
+      PERMISSIONS.IMPREST.TYPE_POLICY_EDIT,
+      PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE,
+      PERMISSIONS.IMPREST.FACILITY_CREATE,
+      PERMISSIONS.IMPREST.FACILITY_EDIT,
+      PERMISSIONS.IMPREST.FACILITY_SUSPEND,
+      PERMISSIONS.IMPREST.FACILITY_CLOSE,
+      PERMISSIONS.IMPREST.CASE_REVIEW,
+      PERMISSIONS.IMPREST.CASE_APPROVE,
+      PERMISSIONS.IMPREST.CASE_REJECT,
+      PERMISSIONS.IMPREST.CASE_ISSUE,
+      PERMISSIONS.IMPREST.CASE_RETIRE,
+      PERMISSIONS.IMPREST.CASE_SETTLE,
+      PERMISSIONS.IMPREST.ADMIN_OVERRIDE,
+    ],
+  );
+
+  // - Finance Manager (Reviewer): explicitly remove maker + issuer + config powers
+  await removePermissionsByCode(
+    [financeManagerRole.id],
+    [
+      PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
+      PERMISSIONS.IMPREST.TYPE_POLICY_EDIT,
+      PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE,
+      PERMISSIONS.IMPREST.FACILITY_CREATE,
+      PERMISSIONS.IMPREST.FACILITY_EDIT,
+      PERMISSIONS.IMPREST.FACILITY_SUSPEND,
+      PERMISSIONS.IMPREST.FACILITY_CLOSE,
+      PERMISSIONS.IMPREST.CASE_CREATE,
+      PERMISSIONS.IMPREST.CASE_SUBMIT,
+      PERMISSIONS.IMPREST.CASE_ISSUE,
+      PERMISSIONS.IMPREST.CASE_RETIRE,
+      PERMISSIONS.IMPREST.CASE_SETTLE,
+      PERMISSIONS.IMPREST.ADMIN_OVERRIDE,
+    ],
+  );
+
+  // Finance Controller: no additional removals; role owns full governance + operational control.
 
   // AP Payment Runs (AP-PAYMENT-RUNS) RBAC backfill (idempotent):
   // Governance:
@@ -1352,6 +1526,17 @@ async function main() {
       PERMISSIONS.REPORT.AP_AGING_VIEW,
       PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+      PERMISSIONS.BANK.ACCOUNT_VIEW,
+
+      // Imprest Phase 1 (governance-first): officer can request + submit only.
+      PERMISSIONS.USER.VIEW,
+      PERMISSIONS.GL.VIEW,
+      PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
+      PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+      PERMISSIONS.IMPREST.FACILITY_VIEW,
+      PERMISSIONS.IMPREST.CASE_VIEW,
+      PERMISSIONS.IMPREST.CASE_CREATE,
+      PERMISSIONS.IMPREST.CASE_SUBMIT,
     ] as const;
 
     await prisma.rolePermission.deleteMany({

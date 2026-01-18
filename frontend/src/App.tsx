@@ -86,6 +86,10 @@ import { RecurringTemplateEditorPage } from './pages/finance/gl/RecurringTemplat
 import { RecurringTemplatesPage } from './pages/finance/gl/RecurringTemplatesPage';
 import { ReviewQueuePage } from './pages/finance/gl/ReviewQueuePage';
 import { PostQueuePage } from './pages/finance/gl/PostQueuePage';
+import { ImprestPoliciesPage } from './pages/finance/imprest/ImprestPoliciesPage';
+import { ImprestFacilitiesPage } from './pages/finance/imprest/ImprestFacilitiesPage';
+import { ImprestCasesPage } from './pages/finance/imprest/ImprestCasesPage';
+import { ImprestCaseDetailsPage } from './pages/finance/imprest/ImprestCaseDetailsPage';
 import { ForecastCreatePage } from './pages/forecasts/ForecastCreatePage';
 import { ForecastDetailsPage } from './pages/forecasts/ForecastDetailsPage';
 import { ForecastEditPage } from './pages/forecasts/ForecastEditPage';
@@ -680,6 +684,73 @@ export default function App() {
                   </PermissionOnlyRoute>
                 }
               />
+              <Route
+                path="finance/imprest/policies"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+                      PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
+                      PERMISSIONS.IMPREST.TYPE_POLICY_EDIT,
+                      PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE,
+                    ]}
+                  >
+                    <ImprestPoliciesPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/imprest/facilities"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.IMPREST.FACILITY_VIEW,
+                      PERMISSIONS.IMPREST.FACILITY_CREATE,
+                      PERMISSIONS.IMPREST.FACILITY_EDIT,
+                      PERMISSIONS.IMPREST.FACILITY_SUSPEND,
+                      PERMISSIONS.IMPREST.FACILITY_CLOSE,
+                    ]}
+                  >
+                    <ImprestFacilitiesPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/imprest/cases"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.IMPREST.CASE_VIEW,
+                      PERMISSIONS.IMPREST.CASE_CREATE,
+                      PERMISSIONS.IMPREST.CASE_SUBMIT,
+                      PERMISSIONS.IMPREST.CASE_REVIEW,
+                      PERMISSIONS.IMPREST.CASE_APPROVE,
+                      PERMISSIONS.IMPREST.CASE_REJECT,
+                      PERMISSIONS.IMPREST.CASE_ISSUE,
+                    ]}
+                  >
+                    <ImprestCasesPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/imprest/cases/:id"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.IMPREST.CASE_VIEW,
+                      PERMISSIONS.IMPREST.CASE_SUBMIT,
+                      PERMISSIONS.IMPREST.CASE_REVIEW,
+                      PERMISSIONS.IMPREST.CASE_APPROVE,
+                      PERMISSIONS.IMPREST.CASE_REJECT,
+                      PERMISSIONS.IMPREST.CASE_ISSUE,
+                    ]}
+                  >
+                    <ImprestCaseDetailsPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
               <Route path="finance/ar/customers" element={<CustomersListPage />} />
               <Route path="finance/ar/customers/new" element={<CreateCustomerPage />} />
               <Route path="finance/ar/customers/:id" element={<CustomerDetailsPage />} />

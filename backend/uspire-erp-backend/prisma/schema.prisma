@@ -332,6 +332,7 @@ model BankAccount {
   customerRefunds CustomerRefund[]
   payments        Payment[]
   paymentRuns     PaymentRun[]
+  imprestFacilities ImprestFacility[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -376,6 +377,203 @@ model PaymentAllocation {
 
   @@index([paymentId])
   @@index([sourceType, sourceId])
+}
+
+enum ImprestRiskRating {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ImprestFundingSourceType {
+  BANK
+  CASH
+  MOBILE_MONEY
+}
+
+enum ImprestFacilityStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum ImprestEvidenceType {
+  REQUEST_SUPPORTING_DOC
+  FUNDING_PROOF
+  RECEIPT_BUNDLE
+  CASH_RETURN_PROOF
+  OTHER
+}
+
+enum ImprestCaseState {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ISSUANCE_PENDING_EVIDENCE
+  ISSUED
+  RETIREMENT_SUBMITTED
+  RETIREMENT_REVIEW
+  SETTLED
+  CLOSED
+}
+
+model ImprestTypePolicy {
+  id                      String            @id @default(uuid())
+  tenantId                String
+  name                    String
+  defaultFloatLimit       Decimal           @db.Decimal(18, 2)
+  settlementDays          Int
+  receiptRule             String
+  receiptThresholdAmount  Decimal?          @db.Decimal(18, 2)
+  approvalStrength        String
+  defaultRiskRating       ImprestRiskRating @default(MEDIUM)
+  effectiveFrom           DateTime
+  effectiveTo             DateTime?
+  isActive                Boolean           @default(true)
+  createdById             String
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @default(now()) @updatedAt
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id])
+  createdBy               User              @relation("ImprestTypePolicyCreatedBy", fields: [createdById], references: [id])
+  facilities              ImprestFacility[]
+
+  @@unique([tenantId, name, effectiveFrom])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([createdById])
+}
+
+model ImprestFacility {
+  id                 String                  @id @default(uuid())
+  tenantId           String
+  typePolicyId       String
+  custodianUserId    String
+  entityId           String
+  departmentId       String
+  projectId          String?
+  fundId             String?
+  currency           String
+  approvedFloatLimit Decimal                 @db.Decimal(18, 2)
+  settlementDays     Int
+  fundingSourceType  ImprestFundingSourceType
+  bankAccountId      String?
+  riskRating         ImprestRiskRating
+  controlGlAccountId String
+  validFrom          DateTime
+  validTo            DateTime
+  status             ImprestFacilityStatus   @default(ACTIVE)
+  createdById        String
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @default(now()) @updatedAt
+  typePolicy         ImprestTypePolicy       @relation(fields: [typePolicyId], references: [id])
+  custodian          User                    @relation("ImprestFacilityCustodian", fields: [custodianUserId], references: [id])
+  entity             Entity                  @relation(fields: [entityId], references: [id])
+  department         Department              @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  project            Project?                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  fund               Fund?                   @relation(fields: [fundId], references: [id], onDelete: Restrict)
+  bankAccount        BankAccount?            @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  controlGlAccount   Account                 @relation(fields: [controlGlAccountId], references: [id], onDelete: Restrict)
+  createdBy          User                    @relation("ImprestFacilityCreatedBy", fields: [createdById], references: [id])
+  tenant             Tenant                  @relation(fields: [tenantId], references: [id])
+  cases              ImprestCase[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([typePolicyId])
+  @@index([custodianUserId])
+  @@index([entityId])
+  @@index([departmentId])
+  @@index([projectId])
+  @@index([fundId])
+  @@index([bankAccountId])
+  @@index([controlGlAccountId])
+}
+
+model ImprestCase {
+  id                     String           @id @default(uuid())
+  tenantId               String
+  facilityId             String
+  reference              String
+  purpose                String
+  justification          String
+  periodFrom             DateTime
+  periodTo               DateTime
+  expectedSettlementDate DateTime
+  requestedAmount        Decimal          @db.Decimal(18, 2)
+  currency               String
+  state                  ImprestCaseState @default(DRAFT)
+  createdById            String
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @default(now()) @updatedAt
+  submittedAt            DateTime?
+  reviewedAt             DateTime?
+  reviewedById           String?
+  approvedAt             DateTime?
+  approvedById           String?
+  rejectedAt             DateTime?
+  rejectedById           String?
+  rejectionReason        String?
+  issuedAt               DateTime?
+  issuedById             String?
+  issuedJournalId        String?
+  facility               ImprestFacility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  createdBy              User             @relation("ImprestCaseCreatedBy", fields: [createdById], references: [id])
+  reviewedBy             User?            @relation("ImprestCaseReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  approvedBy             User?            @relation("ImprestCaseApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy             User?            @relation("ImprestCaseRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  issuedBy               User?            @relation("ImprestCaseIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
+  issuedJournal          JournalEntry?    @relation("ImprestCaseIssuedJournal", fields: [issuedJournalId], references: [id], onDelete: Restrict)
+  tenant                 Tenant           @relation(fields: [tenantId], references: [id])
+  transitions            ImprestCaseTransitionLog[]
+  evidence               ImprestCaseEvidence[]
+
+  @@unique([tenantId, reference])
+  @@unique([tenantId, issuedJournalId])
+  @@index([tenantId])
+  @@index([tenantId, state])
+  @@index([facilityId])
+  @@index([createdById])
+  @@index([reviewedById])
+  @@index([approvedById])
+}
+
+model ImprestCaseTransitionLog {
+  id          String           @id @default(uuid())
+  tenantId    String
+  caseId      String
+  fromState   ImprestCaseState
+  toState     ImprestCaseState
+  actorUserId String
+  notes       String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  imprestCase ImprestCase      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actor       User             @relation("ImprestCaseTransitionActor", fields: [actorUserId], references: [id])
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([caseId])
+  @@index([actorUserId])
+  @@index([tenantId, createdAt])
+}
+
+model ImprestCaseEvidence {
+  id          String             @id @default(uuid())
+  tenantId    String
+  caseId      String
+  evidenceId  String
+  type        ImprestEvidenceType
+  createdAt   DateTime           @default(now())
+  imprestCase ImprestCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  evidence    AuditEvidence      @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+
+  @@unique([caseId, evidenceId])
+  @@index([tenantId])
+  @@index([caseId])
+  @@index([evidenceId])
 }
 
 model Customer {
@@ -718,6 +916,7 @@ model AuditEvidence {
   createdAt    DateTime        @default(now())
   tenant       Tenant          @relation(fields: [tenantId], references: [id])
   uploadedBy   User            @relation("AuditEvidenceUploadedBy", fields: [uploadedById], references: [id])
+  imprestCaseEvidence ImprestCaseEvidence[]
 
   @@unique([tenantId, storageKey])
   @@index([tenantId])
@@ -1201,6 +1400,11 @@ model Tenant {
   paymentProposals               PaymentProposal[]
   paymentProposalLines           PaymentProposalLine[]
   taxRates                       TaxRate[]
+  imprestTypePolicies             ImprestTypePolicy[]
+  imprestFacilities               ImprestFacility[]
+  imprestCases                    ImprestCase[]
+  imprestCaseTransitionLogs       ImprestCaseTransitionLog[]
+  imprestCaseEvidence             ImprestCaseEvidence[]
   arControlAccount               Account?                        @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
   apControlAccount               Account?                        @relation("TenantApControlAccount", fields: [apControlAccountId], references: [id], onDelete: Restrict)
   cashClearingAccount            Account?                        @relation("TenantCashClearingAccount", fields: [cashClearingAccountId], references: [id], onDelete: Restrict)
@@ -1222,6 +1426,7 @@ model Entity {
   fiscalYearStart Int
   createdAt       DateTime @default(now())
   tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  imprestFacilities ImprestFacility[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1270,6 +1475,7 @@ model Project {
   invoiceLines            CustomerInvoiceLine[]
   funds                   Fund[]
   journalLines            JournalLine[]
+  imprestFacilities       ImprestFacility[]
   createdBy               User?                    @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
 
@@ -1304,6 +1510,7 @@ model Fund {
   project                 Project                  @relation(fields: [projectId], references: [id])
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
   journalLines            JournalLine[]
+  imprestFacilities       ImprestFacility[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1334,6 +1541,7 @@ model Department {
   createdBy               User?                    @relation("DepartmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
   journalLines            JournalLine[]
+  imprestFacilities       ImprestFacility[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1417,6 +1625,15 @@ model User {
   paymentRunsExecuted                     PaymentRun[]                    @relation("PaymentRunExecutedBy")
   tenant                                  Tenant                          @relation(fields: [tenantId], references: [id])
   userRoles                               UserRole[]
+  imprestTypePoliciesCreated              ImprestTypePolicy[]              @relation("ImprestTypePolicyCreatedBy")
+  imprestFacilitiesCreated                ImprestFacility[]                @relation("ImprestFacilityCreatedBy")
+  imprestFacilitiesAsCustodian            ImprestFacility[]                @relation("ImprestFacilityCustodian")
+  imprestCasesCreated                     ImprestCase[]                    @relation("ImprestCaseCreatedBy")
+  imprestCasesReviewed                    ImprestCase[]                    @relation("ImprestCaseReviewedBy")
+  imprestCasesApproved                    ImprestCase[]                    @relation("ImprestCaseApprovedBy")
+  imprestCasesRejected                    ImprestCase[]                    @relation("ImprestCaseRejectedBy")
+  imprestCasesIssued                      ImprestCase[]                    @relation("ImprestCaseIssuedBy")
+  imprestCaseTransitionsActed             ImprestCaseTransitionLog[]        @relation("ImprestCaseTransitionActor")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1522,6 +1739,7 @@ model Account {
   childAccounts                           Account[]                      @relation("AccountHierarchy")
   tenant                                  Tenant                         @relation(fields: [tenantId], references: [id])
   bankAccounts                            BankAccount[]
+  imprestFacilitiesControl                ImprestFacility[]
   budgetLines                             BudgetLine[]
   customerCreditNoteLinesAsRevenueAccount CustomerCreditNoteLine[]
   customerInvoiceLines                    CustomerInvoiceLine[]
@@ -1632,6 +1850,7 @@ model JournalEntry {
   tenant                      Tenant                       @relation(fields: [tenantId], references: [id])
   lines                       JournalLine[]
   recurringGenerations        RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
+  imprestCasesIssued          ImprestCase[]                @relation("ImprestCaseIssuedJournal")
 
   @@unique([tenantId, journalNumber])
   @@index([tenantId])
@@ -2221,6 +2440,22 @@ enum AuditEventType {
   PAYMENT_RUN_EXECUTED
 
   BILL_REJECTED
+
+  IMPREST_TYPE_POLICY_CREATED
+  IMPREST_TYPE_POLICY_UPDATED
+  IMPREST_TYPE_POLICY_STATUS_CHANGE
+
+  IMPREST_FACILITY_CREATED
+  IMPREST_FACILITY_UPDATED
+  IMPREST_FACILITY_STATUS_CHANGE
+
+  IMPREST_CASE_CREATED
+  IMPREST_CASE_SUBMITTED
+  IMPREST_CASE_REVIEWED
+  IMPREST_CASE_APPROVED
+  IMPREST_CASE_REJECTED
+  IMPREST_CASE_EVIDENCE_LINKED
+  IMPREST_CASE_ISSUED
 }
 
 enum BudgetStatus {
@@ -2268,6 +2503,9 @@ enum AuditEntityType {
   DEPARTMENT
   PROJECT
   FUND
+  IMPREST_TYPE_POLICY
+  IMPREST_FACILITY
+  IMPREST_CASE
 }
 
 enum DisclosureNoteType {

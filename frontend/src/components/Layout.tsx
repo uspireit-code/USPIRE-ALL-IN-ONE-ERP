@@ -80,11 +80,12 @@ export function Layout() {
   type L1Key = 'finance' | 'settings' | null;
   const [openL1, setOpenL1] = useState<L1Key | null>(null);
 
-  const [openFinanceL2, setOpenFinanceL2] = useState<{ gl: boolean; ar: boolean; ap: boolean; cash: boolean; budgets: boolean; reports: boolean }>({
+  const [openFinanceL2, setOpenFinanceL2] = useState<{ gl: boolean; ar: boolean; ap: boolean; cash: boolean; imprest: boolean; budgets: boolean; reports: boolean }>({
     gl: false,
     ar: false,
     ap: false,
     cash: false,
+    imprest: false,
     budgets: false,
     reports: false,
   });
@@ -110,6 +111,7 @@ export function Layout() {
       ar: path.startsWith('/finance/ar'),
       ap: path.startsWith('/finance/ap'),
       cash: path.startsWith('/finance/cash') || path.startsWith('/finance/cash-bank') || path.startsWith('/bank-reconciliation'),
+      imprest: path.startsWith('/finance/imprest'),
       budgets: path.startsWith('/finance/budgets'),
       reports: path.startsWith('/reports'),
     };
@@ -409,6 +411,26 @@ export function Layout() {
     hasFinanceViewAll ||
     hasSystemViewAll;
 
+  const showImprest =
+    hasFinanceViewAll ||
+    hasSystemViewAll ||
+    canAny(state.me, [
+      PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
+      PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
+      PERMISSIONS.IMPREST.TYPE_POLICY_EDIT,
+      PERMISSIONS.IMPREST.TYPE_POLICY_DEACTIVATE,
+      PERMISSIONS.IMPREST.FACILITY_VIEW,
+      PERMISSIONS.IMPREST.FACILITY_CREATE,
+      PERMISSIONS.IMPREST.FACILITY_EDIT,
+      PERMISSIONS.IMPREST.FACILITY_SUSPEND,
+      PERMISSIONS.IMPREST.FACILITY_CLOSE,
+      PERMISSIONS.IMPREST.CASE_VIEW,
+      PERMISSIONS.IMPREST.CASE_CREATE,
+      PERMISSIONS.IMPREST.CASE_REVIEW,
+      PERMISSIONS.IMPREST.CASE_APPROVE,
+      PERMISSIONS.IMPREST.CASE_ISSUE,
+    ]);
+
   const showSettings =
     hasSystemViewAll ||
     hasSystemConfigView ||
@@ -435,7 +457,8 @@ export function Layout() {
     showArInvoices ||
     showArReceipts ||
     showArCreditNotes ||
-    showArRefunds;
+    showArRefunds ||
+    showImprest;
 
   const linkBaseStyle: React.CSSProperties = {
     display: 'flex',
@@ -552,23 +575,23 @@ export function Layout() {
         {({ isActive }) => {
           const derivedActive = props.activeMatch ? props.activeMatch({ pathname: location.pathname, search: location.search }) : isActive;
           return (
-          <>
-            <span data-sidebar-icon style={{ display: 'inline-flex', opacity: derivedActive ? 1 : 0.72 }} aria-hidden="true">
-              <Icon>{props.icon}</Icon>
-            </span>
-            <span
-              style={{
-                color: 'inherit',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                minWidth: 0,
-                flex: '1 1 auto',
-              }}
-            >
-              {props.label}
-            </span>
-          </>
+            <>
+              <span data-sidebar-icon style={{ display: 'inline-flex', opacity: derivedActive ? 1 : 0.72 }} aria-hidden="true">
+                <Icon>{props.icon}</Icon>
+              </span>
+              <span
+                style={{
+                  color: 'inherit',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  minWidth: 0,
+                  flex: '1 1 auto',
+                }}
+              >
+                {props.label}
+              </span>
+            </>
           );
         }}
       </NavLink>
@@ -761,6 +784,41 @@ export function Layout() {
                   </Indent>
                 ) : null}
 
+                {showImprest ? (
+                  <>
+                    <SidebarToggle
+                      label="Imprest"
+                      icon={<FolderIcon />}
+                      open={openFinanceL2.imprest}
+                      active={financeActiveL2.imprest}
+                      level={2}
+                      onToggle={() => setOpenFinanceL2((s) => ({ ...s, imprest: !s.imprest }))}
+                    />
+                    {openFinanceL2.imprest ? (
+                      <Indent level={3}>
+                        <SidebarLink
+                          to="/finance/imprest/policies"
+                          label="Imprest Types"
+                          icon={<FileTextIcon />}
+                          level={3}
+                        />
+                        <SidebarLink
+                          to="/finance/imprest/facilities"
+                          label="Imprest Facilities"
+                          icon={<FileTextIcon />}
+                          level={3}
+                        />
+                        <SidebarLink
+                          to="/finance/imprest/cases"
+                          label="Imprest Cases"
+                          icon={<FileTextIcon />}
+                          level={3}
+                        />
+                      </Indent>
+                    ) : null}
+                  </>
+                ) : null}
+
                 {showPeriods ? <SidebarLink to="/periods" label="Periods" icon={<FolderIcon />} level={2} /> : null}
 
                 {showFinanceBudgets ? (
@@ -825,8 +883,8 @@ export function Layout() {
 
                 <SidebarLink to="/reports/disclosure-notes" label="Disclosure Notes" icon={<FileTextIcon />} level={2} />
                 {showAudit ? <SidebarLink to="/audit" label="Audit" icon={<ShieldIcon />} level={2} /> : null}
-                  </Indent>
-                ) : null}
+              </Indent>
+            ) : null}
               </>
             ) : null}
 
