@@ -51,7 +51,7 @@ export function BankAccountsListPage() {
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{b.bankName}</td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{b.accountNumber}</td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{b.currency}</td>
-              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{b.isActive ? 'ACTIVE' : 'INACTIVE'}</td>
+              <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{b.status}</td>
             </tr>
           ))}
         </tbody>

@@ -107,7 +107,7 @@ export function PaymentRunExecutePage() {
   const navigate = useNavigate();
   const { state } = useAuth();
 
-  const canExecute = useMemo(() => {
+  const canExecutePermission = useMemo(() => {
     return (state.me?.permissions ?? []).includes(PERMISSIONS.AP.PAYMENT_RUN_EXECUTE);
   }, [state.me]);
 
@@ -119,15 +119,15 @@ export function PaymentRunExecutePage() {
 
   const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [eligible, setEligible] = useState<EligiblePaymentProposal[]>([]);
+  const [eligibleProposals, setEligibleProposals] = useState<EligiblePaymentProposal[]>([]);
 
   const [executionDate, setExecutionDate] = useState(todayIsoDate());
   const [periodId, setPeriodId] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
   const [reference, setReference] = useState('');
 
-  const [search, setSearch] = useState('');
-  const [selectedProposalIds, setSelectedProposalIds] = useState<Record<string, boolean>>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProposalIds, setSelectedProposalIds] = useState<string[]>([]);
 
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [confirmText, setConfirmText] = useState('');
@@ -136,13 +136,13 @@ export function PaymentRunExecutePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!canExecute) return;
+    if (!canExecutePermission) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canExecute]);
+  }, [canExecutePermission]);
 
   async function load() {
-    if (!canExecute) return;
+    if (!canExecutePermission) return;
     setLoading(true);
     setError('');
     setPeriodsLoaded(false);
@@ -157,7 +157,7 @@ export function PaymentRunExecutePage() {
       const openPeriods = (Array.isArray(p) ? p : []).filter((x) => x.status === 'OPEN');
       setPeriods(openPeriods);
       setBankAccounts(Array.isArray(b) ? b : []);
-      setEligible(Array.isArray(e) ? e : []);
+      setEligibleProposals(Array.isArray(e) ? e : []);
 
       setPeriodsLoaded(true);
       setBanksLoaded(true);
@@ -178,32 +178,30 @@ export function PaymentRunExecutePage() {
   const openPeriodBlocked = !loading && !error && periodsLoaded && periods.length === 0;
   const bankBlocked = !loading && !error && banksLoaded && bankAccounts.length === 0;
 
-  const filteredEligible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return eligible;
-    return eligible
-      .map((p) => {
-        const lines = (p.lines ?? []).filter((l) => {
-          const sup = String(l.supplierName ?? '').toLowerCase();
-          const inv = String(l.invoiceNumber ?? '').toLowerCase();
-          return sup.includes(q) || inv.includes(q);
-        });
-        if (lines.length === 0) return null;
-        return { ...p, lines };
-      })
-      .filter(Boolean) as EligiblePaymentProposal[];
-  }, [eligible, search]);
+  const filteredProposals = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return eligibleProposals;
+    return eligibleProposals.filter((p) => {
+      const proposalNumber = String(p.proposalNumber ?? '').toLowerCase();
+      if (proposalNumber.includes(q)) return true;
+      return (p.lines ?? []).some((l) => {
+        const sup = String(l.supplierName ?? '').toLowerCase();
+        const inv = String(l.invoiceNumber ?? '').toLowerCase();
+        return sup.includes(q) || inv.includes(q);
+      });
+    });
+  }, [eligibleProposals, searchTerm]);
 
-  const selectedIds = useMemo(() => {
-    return Object.entries(selectedProposalIds)
-      .filter(([, v]) => v)
-      .map(([k]) => k);
-  }, [selectedProposalIds]);
+  const toggleProposal = (proposalId: string) => {
+    setSelectedProposalIds((prev) =>
+      prev.includes(proposalId) ? prev.filter((id) => id !== proposalId) : [...prev, proposalId],
+    );
+  };
 
   const selectedProposals = useMemo(() => {
-    const set = new Set(selectedIds);
-    return eligible.filter((p) => set.has(p.id));
-  }, [eligible, selectedIds]);
+    const set = new Set(selectedProposalIds);
+    return eligibleProposals.filter((p) => set.has(p.id));
+  }, [eligibleProposals, selectedProposalIds]);
 
   const preview = useMemo(() => {
     const lines = selectedProposals.flatMap((p) => p.lines ?? []);
@@ -216,18 +214,14 @@ export function PaymentRunExecutePage() {
     };
   }, [selectedProposals]);
 
-  const canSubmit =
-    canExecute &&
-    !submitting &&
-    !loading &&
-    !openPeriodBlocked &&
-    !bankBlocked &&
+  const canExecute =
     Boolean(executionDate) &&
     Boolean(periodId) &&
     Boolean(bankAccountId) &&
-    selectedIds.length > 0 &&
+    selectedProposalIds.length > 0 &&
     confirmChecked &&
-    confirmText === 'EXECUTE';
+    confirmText === 'EXECUTE' &&
+    !submitting;
 
   const selectedBank = useMemo(() => {
     return bankAccounts.find((b) => b.id === bankAccountId) ?? null;
@@ -238,7 +232,7 @@ export function PaymentRunExecutePage() {
   }, [periods, periodId]);
 
   async function doExecute() {
-    if (!canSubmit) return;
+    if (!canExecute) return;
     setSubmitting(true);
     setError('');
     try {
@@ -246,7 +240,7 @@ export function PaymentRunExecutePage() {
         executionDate,
         periodId: periodId || undefined,
         bankAccountId,
-        paymentProposalIds: selectedIds,
+        paymentProposalIds: selectedProposalIds,
         reference: reference.trim() || undefined,
       });
 
@@ -265,7 +259,7 @@ export function PaymentRunExecutePage() {
     }
   }
 
-  if (!canExecute) {
+  if (!canExecutePermission) {
     return (
       <div style={{ padding: 18 }}>
         <h2 style={{ margin: 0 }}>Execute Payment Run</h2>
@@ -366,7 +360,12 @@ export function PaymentRunExecutePage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <h3 style={{ margin: 0 }}>Select Approved Proposals</h3>
             <div style={{ width: 320, maxWidth: '100%' }}>
-              <Input placeholder="Search supplier or invoice #" value={search} onChange={(e) => setSearch(e.target.value)} disabled={submitting} />
+              <Input
+                placeholder="Search supplier, invoice #, or proposal #"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={submitting}
+              />
             </div>
           </div>
 
@@ -374,7 +373,7 @@ export function PaymentRunExecutePage() {
             The backend executes whole proposals. Selecting a proposal includes all its lines.
           </div>
 
-          {(!loading && filteredEligible.length === 0) ? (
+          {!loading && filteredProposals.length === 0 ? (
             <div style={{ marginTop: 10 }}>
               <Alert tone="info" title="No eligible proposals">
                 No APPROVED payment proposals are currently eligible for execution.
@@ -382,8 +381,8 @@ export function PaymentRunExecutePage() {
             </div>
           ) : null}
 
-          {filteredEligible.map((p) => {
-            const checked = Boolean(selectedProposalIds[p.id]);
+          {filteredProposals.map((p) => {
+            const checked = selectedProposalIds.includes(p.id);
             const proposalTotal = round2((p.lines ?? []).reduce((s, l) => s + Number(l.proposedPayAmount ?? 0), 0));
             return (
               <div key={p.id} style={{ marginTop: 12, border: '1px solid rgba(11,12,30,0.10)', borderRadius: 12 }}>
@@ -406,9 +405,7 @@ export function PaymentRunExecutePage() {
                       type="checkbox"
                       checked={checked}
                       disabled={submitting}
-                      onChange={(e) =>
-                        setSelectedProposalIds((s) => ({ ...s, [p.id]: e.target.checked }))
-                      }
+                      onChange={() => toggleProposal(p.id)}
                     />
                     <div>
                       <div style={{ fontWeight: 800 }}>{p.proposalNumber}</div>
@@ -496,7 +493,7 @@ export function PaymentRunExecutePage() {
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               onClick={() => setConfirmModalOpen(true)}
-              disabled={!canSubmit}
+              disabled={!canExecute}
               variant="primary"
             >
               {submitting ? 'Executing…' : 'Execute Payment Run'}
@@ -521,7 +518,7 @@ export function PaymentRunExecutePage() {
                 >
                   Cancel
                 </Button>
-                <Button variant="primary" onClick={() => void doExecute()} disabled={!canSubmit}>
+                <Button variant="primary" onClick={() => void doExecute()} disabled={!canExecute}>
                   {submitting ? 'Executing…' : 'Confirm & Execute'}
                 </Button>
               </div>
@@ -546,7 +543,7 @@ export function PaymentRunExecutePage() {
               </div>
               <div>
                 <div style={{ fontSize: 12, opacity: 0.7 }}>Proposals</div>
-                <div style={{ fontWeight: 700 }}>{selectedIds.length}</div>
+                <div style={{ fontWeight: 700 }}>{selectedProposalIds.length}</div>
               </div>
               <div>
                 <div style={{ fontSize: 12, opacity: 0.7 }}>Lines</div>

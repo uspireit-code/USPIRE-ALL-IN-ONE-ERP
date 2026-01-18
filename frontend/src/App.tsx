@@ -74,6 +74,8 @@ import { PaymentProposalDetailsPage } from './pages/finance/ap/PaymentProposalDe
 import { PaymentRunsListPage } from './pages/finance/ap/PaymentRunsListPage';
 import { PaymentRunDetailsPage } from './pages/finance/ap/PaymentRunDetailsPage';
 import { PaymentRunExecutePage } from './pages/finance/ap/PaymentRunExecutePage';
+import { BankCashAccountsListPage } from './pages/finance/cashBank/BankCashAccountsListPage';
+import { BankCashAccountFormPage } from './pages/finance/cashBank/BankCashAccountFormPage';
 import { ChartOfAccountsPage } from './pages/finance/ChartOfAccountsPage';
 import { JournalEntryPage } from './pages/finance/gl/JournalEntryPage';
 import { JournalUploadPage } from './pages/finance/gl/JournalUploadPage';
@@ -870,6 +872,38 @@ export default function App() {
                 element={
                   <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_RUN_VIEW}>
                     <PaymentRunDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/cash-bank/bank-accounts"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.BANK.ACCOUNT_VIEW}>
+                    <BankCashAccountsListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/cash-bank/bank-accounts/new"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.BANK.ACCOUNT_CREATE}>
+                    <BankCashAccountFormPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/cash-bank/bank-accounts/:id"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.BANK.ACCOUNT_VIEW}>
+                    <BankCashAccountFormPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/cash-bank/bank-accounts/:id/edit"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.BANK.ACCOUNT_EDIT}>
+                    <BankCashAccountFormPage />
                   </PermissionOnlyRoute>
                 }
               />

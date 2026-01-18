@@ -109,7 +109,7 @@ export function Layout() {
       gl: path.startsWith('/finance/gl'),
       ar: path.startsWith('/finance/ar'),
       ap: path.startsWith('/finance/ap'),
-      cash: path.startsWith('/finance/cash') || path.startsWith('/bank-reconciliation'),
+      cash: path.startsWith('/finance/cash') || path.startsWith('/finance/cash-bank') || path.startsWith('/bank-reconciliation'),
       budgets: path.startsWith('/finance/budgets'),
       reports: path.startsWith('/reports'),
     };
@@ -755,7 +755,7 @@ export function Layout() {
                 />
                 {openFinanceL2.cash ? (
                   <Indent level={3}>
-                    <SidebarLink to="/finance/cash/banks" label="Bank Accounts" icon={<BanknoteIcon />} level={3} />
+                    <SidebarLink to="/finance/cash-bank/bank-accounts" label="Bank Accounts" icon={<BanknoteIcon />} level={3} />
                     <SidebarLink to="/finance/cash/reconciliation" label="Bank Reconciliation" icon={<CalculatorIcon />} level={3} />
                     {showBankReconciliation ? <SidebarLink to="/bank-reconciliation" label="Bank Reconciliation" icon={<CalculatorIcon />} level={3} /> : null}
                   </Indent>

@@ -4,9 +4,10 @@ export type BankAccount = {
   id: string;
   name: string;
   bankName: string;
-  accountNumber: string;
+  accountNumber: string | null;
+  type?: 'BANK' | 'CASH';
   currency: string;
-  isActive: boolean;
+  status: 'ACTIVE' | 'INACTIVE';
 };
 
 export type PaymentAllocation = {

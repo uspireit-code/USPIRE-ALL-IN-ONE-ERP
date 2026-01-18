@@ -279,6 +279,9 @@ async function main() {
     { code: PERMISSIONS.CUSTOMERS.EDIT, description: 'Edit customers (master)' },
     { code: PERMISSIONS.CUSTOMERS.IMPORT, description: 'Import customers in bulk' },
     { code: PERMISSIONS.BANK.ACCOUNT_CREATE, description: 'Create bank accounts' },
+    { code: PERMISSIONS.BANK.ACCOUNT_VIEW, description: 'View bank & cash accounts' },
+    { code: PERMISSIONS.BANK.ACCOUNT_EDIT, description: 'Edit bank & cash accounts' },
+    { code: PERMISSIONS.BANK.ACCOUNT_DEACTIVATE, description: 'Deactivate bank & cash accounts' },
     { code: PERMISSIONS.PAYMENT.CREATE, description: 'Create payments' },
     { code: PERMISSIONS.PAYMENT.APPROVE, description: 'Approve payments' },
     { code: PERMISSIONS.PAYMENT.RELEASE, description: 'Release payments' },
@@ -796,6 +799,27 @@ async function main() {
 
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
   await assignPermissionsByCode(systemAdminRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+
+  // Bank / Cash accounts foundation RBAC (idempotent):
+  // - Finance Controller: view + create + edit + deactivate
+  // - Finance Officer / Finance Manager: view only
+  // - Admin / System Admin / Superadmin: view only
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.BANK.ACCOUNT_VIEW,
+    PERMISSIONS.BANK.ACCOUNT_CREATE,
+    PERMISSIONS.BANK.ACCOUNT_EDIT,
+    PERMISSIONS.BANK.ACCOUNT_DEACTIVATE,
+  ]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.BANK.ACCOUNT_VIEW]);
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.BANK.ACCOUNT_VIEW]);
+  await assignPermissionsByCode(adminRole.id, [PERMISSIONS.BANK.ACCOUNT_VIEW]);
+  await assignPermissionsByCode(systemAdminRole.id, [PERMISSIONS.BANK.ACCOUNT_VIEW]);
+  await assignPermissionsByCode(superAdminRole.id, [PERMISSIONS.BANK.ACCOUNT_VIEW]);
+
+  await removePermissionsByCode(
+    [superAdminRole.id, systemAdminRole.id, adminRole.id, financeOfficerRole.id, financeManagerRole.id],
+    [PERMISSIONS.BANK.ACCOUNT_EDIT, PERMISSIONS.BANK.ACCOUNT_DEACTIVATE],
+  );
 
   // AP Payment Runs (AP-PAYMENT-RUNS) RBAC backfill (idempotent):
   // Governance:

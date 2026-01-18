@@ -357,7 +357,7 @@ export function RefundCreatePage() {
               </option>
             ))}
           </select>
-          {requireBankAccount && selectedBank && !selectedBank.isActive ? (
+          {requireBankAccount && selectedBank && selectedBank.status !== 'ACTIVE' ? (
             <div style={{ color: 'crimson', fontSize: 12, marginTop: 4 }}>Selected bank account is inactive.</div>
           ) : null}
         </div>

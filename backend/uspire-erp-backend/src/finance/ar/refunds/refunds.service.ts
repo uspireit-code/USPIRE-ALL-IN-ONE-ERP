@@ -490,7 +490,7 @@ export class FinanceArRefundsService {
           where: {
             tenantId: params.tenantId,
             id: params.bankAccountId,
-            isActive: true,
+            status: 'ACTIVE',
           },
           select: { glAccountId: true },
         });
