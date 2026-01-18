@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
-import { Permissions } from '../rbac/permissions.decorator';
+import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { BankService } from './bank.service';
@@ -36,7 +36,13 @@ export class BankController {
   }
 
   @Get('accounts')
-  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
+  @PermissionsAny(
+    PERMISSIONS.AP.PAYMENT_RUN_EXECUTE,
+    PERMISSIONS.PAYMENT.CREATE,
+    PERMISSIONS.PAYMENT.VIEW,
+    PERMISSIONS.BANK.ACCOUNT_CREATE,
+    PERMISSIONS.BANK.RECONCILIATION_VIEW,
+  )
   async listBankAccounts(@Req() req: Request) {
     return this.bank.listBankAccounts(req);
   }

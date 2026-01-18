@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
 import type { SupplierInvoice } from '../../services/ap';
 import { listBills } from '../../services/ap';
+import { Alert } from '../../components/Alert';
 
 function formatMoney(n: unknown) {
   const value = typeof n === 'number' ? n : typeof n === 'string' ? Number(n) : NaN;
@@ -13,8 +14,11 @@ function formatMoney(n: unknown) {
 
 export function BillsListPage() {
   const { hasPermission } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canViewBills = hasPermission(PERMISSIONS.AP.INVOICE_VIEW);
   const canCreateBill = hasPermission(PERMISSIONS.AP.INVOICE_CREATE);
+
+  const flash = searchParams.get('flash');
 
   const [rows, setRows] = useState<SupplierInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +61,27 @@ export function BillsListPage() {
         <h2>Bills</h2>
         {canCreateBill ? <Link to="/ap/bills/new">Create Bill</Link> : null}
       </div>
+
+      {flash === 'reject-success' ? (
+        <div style={{ marginTop: 12 }}>
+          <Alert
+            tone="success"
+            title="Rejected successfully and returned to previous stage."
+            actions={
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.delete('flash');
+                  setSearchParams(next);
+                }}
+              >
+                Dismiss
+              </button>
+            }
+          />
+        </div>
+      ) : null}
 
       <table style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead>

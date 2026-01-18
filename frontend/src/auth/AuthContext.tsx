@@ -50,7 +50,11 @@ export function AuthProvider(props: { children: React.ReactNode }) {
         .sort();
 
       const apPerms = perms
-        .filter((p) => /^(AP_)?(SUPPLIER|INVOICE)_(VIEW|CREATE|IMPORT|SUBMIT|APPROVE|POST)/i.test(p ?? ''))
+        .filter((p) =>
+          /^(AP_)?(SUPPLIER|INVOICE|PAYMENT_PROPOSAL)_(VIEW|CREATE|IMPORT|SUBMIT|APPROVE|POST)/i.test(
+            p ?? '',
+          ),
+        )
         .sort();
 
       // TEMP DEBUG: prove what the UI received from /auth/me.

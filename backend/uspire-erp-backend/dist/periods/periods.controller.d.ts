@@ -7,15 +7,15 @@ export declare class PeriodsController {
     private readonly periods;
     constructor(periods: PeriodsService);
     list(req: Request): Promise<{
-        name: string;
         id: string;
-        tenantId: string;
+        name: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
-        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
+        createdById: string | null;
         startDate: Date;
         endDate: Date;
         closedById: string | null;
@@ -24,15 +24,15 @@ export declare class PeriodsController {
     create(req: Request, dto: CreateAccountingPeriodDto): Promise<any>;
     getChecklist(req: Request, id: string): Promise<{
         period: {
-            name: string;
             id: string;
+            name: string;
             status: import("@prisma/client").$Enums.AccountingPeriodStatus;
             startDate: Date;
             endDate: Date;
             closedAt: Date | null;
             closedBy: {
-                email: string;
                 id: string;
+                email: string;
             } | null;
         };
         items: any;
@@ -54,30 +54,30 @@ export declare class PeriodsController {
         createdAt: any;
     }>;
     close(req: Request, id: string): Promise<{
-        name: string;
         id: string;
-        tenantId: string;
+        name: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
-        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
+        createdById: string | null;
         startDate: Date;
         endDate: Date;
         closedById: string | null;
         closedAt: Date | null;
     }>;
     reopen(req: Request, id: string, dto: ReopenPeriodDto): Promise<{
-        name: string;
         id: string;
-        tenantId: string;
+        name: string;
         createdAt: Date;
+        tenantId: string;
         status: import("@prisma/client").$Enums.AccountingPeriodStatus;
         updatedAt: Date;
-        createdById: string | null;
         code: string | null;
         type: import("@prisma/client").$Enums.AccountingPeriodType;
+        createdById: string | null;
         startDate: Date;
         endDate: Date;
         closedById: string | null;

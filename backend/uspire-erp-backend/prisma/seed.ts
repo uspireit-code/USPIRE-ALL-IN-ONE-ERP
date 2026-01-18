@@ -217,6 +217,9 @@ async function main() {
     { code: PERMISSIONS.REPORT.AR_AGING_VIEW, description: 'View Accounts Receivable aging report' },
     { code: PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW, description: 'View supplier statement' },
     { code: PERMISSIONS.REPORT.CUSTOMER_STATEMENT_VIEW, description: 'View customer statement' },
+
+    { code: PERMISSIONS.AP.STATEMENT_EXPORT, description: 'Export supplier statements (AP)' },
+    { code: PERMISSIONS.AP.INVOICE_EXPORT, description: 'Export supplier invoices/bills (AP)' },
     { code: PERMISSIONS.REPORT.PRESENTATION_PL_VIEW, description: 'View Profit & Loss (presentation)' },
     { code: PERMISSIONS.REPORT.PRESENTATION_BS_VIEW, description: 'View Balance Sheet (presentation)' },
     { code: PERMISSIONS.REPORT.PRESENTATION_SOCE_VIEW, description: 'View Statement of Changes in Equity (presentation)' },
@@ -237,8 +240,16 @@ async function main() {
     { code: PERMISSIONS.AP.INVOICE_CREATE, description: 'Create supplier invoices' },
     { code: PERMISSIONS.AP.INVOICE_SUBMIT, description: 'Submit supplier invoices' },
     { code: PERMISSIONS.AP.INVOICE_APPROVE, description: 'Approve supplier invoices' },
+    { code: PERMISSIONS.AP.BILL_REJECT, description: 'Reject supplier bills (AP)' },
     { code: PERMISSIONS.AP.INVOICE_POST, description: 'Post supplier invoices to GL' },
     { code: PERMISSIONS.AP.INVOICE_VIEW, description: 'View supplier invoices' },
+    { code: PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW, description: 'View AP payment proposals' },
+    { code: PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE, description: 'Create AP payment proposals' },
+    { code: PERMISSIONS.AP.PAYMENT_PROPOSAL_SUBMIT, description: 'Submit AP payment proposals for approval' },
+    { code: PERMISSIONS.AP.PAYMENT_PROPOSAL_APPROVE, description: 'Approve AP payment proposals' },
+    { code: PERMISSIONS.AP.PAYMENT_PROPOSAL_REJECT, description: 'Reject AP payment proposals' },
+    { code: PERMISSIONS.AP.PAYMENT_RUN_VIEW, description: 'View AP payment runs (execution history)' },
+    { code: PERMISSIONS.AP.PAYMENT_RUN_EXECUTE, description: 'Execute AP payment runs (controller only)' },
     { code: PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW, description: 'View system settings' },
     { code: PERMISSIONS.AR.CUSTOMER_CREATE, description: 'Create customers' },
     { code: PERMISSIONS.AR.INVOICE_CREATE_RBAC, description: 'Create customer invoices' },
@@ -708,6 +719,34 @@ async function main() {
   await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AR_AGING.VIEW]);
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AR_AGING.VIEW]);
 
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.REPORT.AP_AGING_VIEW]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.REPORT.AP_AGING_VIEW]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.REPORT.AP_AGING_VIEW]);
+
+  // AP Payment Proposals (AP-PROPOSALS) RBAC backfill (idempotent):
+  // Governance:
+  // - Finance Officer: view/create/submit only
+  // - Finance Manager + Finance Controller: view/approve only
+  // - No admin bypass is granted here
+  await assignPermissionsByCode(financeOfficerRole.id, [
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW,
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE,
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_SUBMIT,
+  ]);
+  await assignPermissionsByCode(financeManagerRole.id, [
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW,
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_APPROVE,
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_REJECT,
+  ]);
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW,
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_APPROVE,
+    PERMISSIONS.AP.PAYMENT_PROPOSAL_REJECT,
+  ]);
+
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AP.BILL_REJECT]);
+  await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AP.BILL_REJECT]);
+
   // AR Statements (AR-STATEMENTS) RBAC backfill (idempotent):
   // Allow view-only customer statement access for governed finance roles.
   // Do NOT auto-grant to ADMIN; admins rely on FINANCE_VIEW_ALL / SYSTEM_VIEW_ALL visibility only.
@@ -720,8 +759,63 @@ async function main() {
   // Do NOT auto-grant to ADMIN or SUPERADMIN; they rely on FINANCE_VIEW_ALL / SYSTEM_VIEW_ALL visibility only.
   await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
   await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+  await assignPermissionsByCode(financeOfficerRole.id, [
+    PERMISSIONS.AP.STATEMENT_EXPORT,
+    PERMISSIONS.AP.INVOICE_EXPORT,
+  ]);
+  await assignPermissionsByCode(financeManagerRole.id, [
+    PERMISSIONS.AP.STATEMENT_EXPORT,
+    PERMISSIONS.AP.INVOICE_EXPORT,
+  ]);
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.AP.STATEMENT_EXPORT,
+    PERMISSIONS.AP.INVOICE_EXPORT,
+  ]);
+
+  const apExportPerms = await prisma.permission.findMany({
+    where: {
+      code: { in: [PERMISSIONS.AP.STATEMENT_EXPORT, PERMISSIONS.AP.INVOICE_EXPORT] },
+    },
+    select: { id: true },
+  });
+  const apExportPermIds = apExportPerms.map((p) => p.id);
+  if (apExportPermIds.length > 0) {
+    const adminRoles = await prisma.role.findMany({
+      where: { name: 'ADMIN' },
+      select: { id: true },
+    });
+    if (adminRoles.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: {
+          roleId: { in: adminRoles.map((r) => r.id) },
+          permissionId: { in: apExportPermIds },
+        },
+      });
+    }
+  }
+
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
   await assignPermissionsByCode(systemAdminRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
+
+  // AP Payment Runs (AP-PAYMENT-RUNS) RBAC backfill (idempotent):
+  // Governance:
+  // - Finance Controller: view + execute
+  // - Finance Officer / Finance Manager: view only
+  // - Admin / System Admin / Superadmin: view only (no execution / no override)
+  await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.AP.PAYMENT_RUN_VIEW]);
+  await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.AP.PAYMENT_RUN_VIEW]);
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.AP.PAYMENT_RUN_VIEW,
+    PERMISSIONS.AP.PAYMENT_RUN_EXECUTE,
+  ]);
+  await assignPermissionsByCode(adminRole.id, [PERMISSIONS.AP.PAYMENT_RUN_VIEW]);
+  await assignPermissionsByCode(systemAdminRole.id, [PERMISSIONS.AP.PAYMENT_RUN_VIEW]);
+  await assignPermissionsByCode(superAdminRole.id, [PERMISSIONS.AP.PAYMENT_RUN_VIEW]);
+
+  await removePermissionsByCode(
+    [superAdminRole.id, systemAdminRole.id, adminRole.id, financeOfficerRole.id, financeManagerRole.id],
+    [PERMISSIONS.AP.PAYMENT_RUN_EXECUTE],
+  );
 
   // AR Reminders (AR-REMINDERS) RBAC backfill (idempotent):
   // Permission-based governance only.
@@ -1148,7 +1242,7 @@ async function main() {
       skipDuplicates: true,
     });
 
-    await assignPermissionsByCode(financeOfficerRole.id, [
+    await assignPermissionsByCode(financeOfficerRoleFound.id, [
       PERMISSIONS.AR.INVOICE_CREATE_RBAC,
       PERMISSIONS.AR.INVOICE_CREATE,
       PERMISSIONS.AR.INVOICE_EDIT_DRAFT,
@@ -1228,6 +1322,10 @@ async function main() {
       PERMISSIONS.AR_REMINDER.TRIGGER,
       PERMISSIONS.PERIOD.VIEW,
       PERMISSIONS.PERIOD.CREATE,
+      PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW,
+      PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE,
+      PERMISSIONS.AP.PAYMENT_PROPOSAL_SUBMIT,
+      PERMISSIONS.REPORT.AP_AGING_VIEW,
       PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     ] as const;

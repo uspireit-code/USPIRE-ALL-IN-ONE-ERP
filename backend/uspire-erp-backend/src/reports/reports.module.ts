@@ -34,6 +34,7 @@ import { ReportsService } from './reports.service';
     FinancialStatementsService,
     ReportPresentationService,
     ReportExportService,
+    ReportsService,
   ],
 })
 export class ReportsModule {}

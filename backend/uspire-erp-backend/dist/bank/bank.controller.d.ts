@@ -11,16 +11,16 @@ export declare class BankController {
     constructor(bank: BankService);
     createBankAccount(req: Request, dto: CreateBankAccountDto): Promise<{
         glAccount: {
-            name: string;
             id: string;
-            tenantId: string;
+            name: string;
             isActive: boolean;
             createdAt: Date;
+            tenantId: string;
             updatedAt: Date;
-            createdById: string | null;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             isCashEquivalent: boolean;
+            createdById: string | null;
             ifrsMappingCode: string | null;
             isFrozen: boolean;
             isPosting: boolean;
@@ -39,28 +39,28 @@ export declare class BankController {
             requiresDepartment: boolean;
         };
     } & {
-        name: string;
         id: string;
-        tenantId: string;
-        isActive: boolean;
-        createdAt: Date;
+        name: string;
         bankName: string;
         accountNumber: string;
         currency: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         glAccountId: string;
     }>;
     listBankAccounts(req: Request): Promise<({
         glAccount: {
-            name: string;
             id: string;
-            tenantId: string;
+            name: string;
             isActive: boolean;
             createdAt: Date;
+            tenantId: string;
             updatedAt: Date;
-            createdById: string | null;
             code: string;
             type: import("@prisma/client").$Enums.AccountType;
             isCashEquivalent: boolean;
+            createdById: string | null;
             ifrsMappingCode: string | null;
             isFrozen: boolean;
             isPosting: boolean;
@@ -79,14 +79,14 @@ export declare class BankController {
             requiresDepartment: boolean;
         };
     } & {
-        name: string;
         id: string;
-        tenantId: string;
-        isActive: boolean;
-        createdAt: Date;
+        name: string;
         bankName: string;
         accountNumber: string;
         currency: string;
+        isActive: boolean;
+        createdAt: Date;
+        tenantId: string;
         glAccountId: string;
     })[]>;
     createStatement(req: Request, dto: CreateBankStatementDto): Promise<any>;

@@ -19,6 +19,7 @@ export class PeriodsController {
     PERMISSIONS.PERIOD.VIEW,
     PERMISSIONS.PERIOD.REVIEW,
     PERMISSIONS.GL.VIEW,
+    PERMISSIONS.AP.PAYMENT_RUN_EXECUTE,
   )
   async list(@Req() req: Request) {
     return this.periods.listPeriods(req);

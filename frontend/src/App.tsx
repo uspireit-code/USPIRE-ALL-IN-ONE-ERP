@@ -20,6 +20,7 @@ import { InvoiceDetailsPage } from './pages/ap/InvoiceDetailsPage';
 import { InvoicesListPage } from './pages/ap/InvoicesListPage';
 import { SupplierDetailsPage } from './pages/ap/SupplierDetailsPage';
 import { SuppliersListPage } from './pages/ap/SuppliersListPage';
+import { ApAgingPage as ApAgingFinancePage } from './pages/ap/ApAgingPage';
 import { SupplierStatementsPage } from './pages/ap/SupplierStatementsPage';
 import { ArHomePage } from './pages/ar/ArHomePage';
 import { CreateCustomerPage } from './pages/ar/CreateCustomerPage';
@@ -64,10 +65,15 @@ import { BudgetSetupPage } from './pages/BudgetSetupPage';
 import { BudgetVsActualPage } from './pages/BudgetVsActualPage';
 import {
   CashPositionPage,
-  FinanceApPaymentProposalsPage,
   FinanceTaxCompliancePage,
   PettyCashPage,
 } from './pages/finance/FinancePlaceholders';
+import { PaymentProposalsListPage } from './pages/finance/ap/PaymentProposalsListPage';
+import { PaymentProposalCreatePage } from './pages/finance/ap/PaymentProposalCreatePage';
+import { PaymentProposalDetailsPage } from './pages/finance/ap/PaymentProposalDetailsPage';
+import { PaymentRunsListPage } from './pages/finance/ap/PaymentRunsListPage';
+import { PaymentRunDetailsPage } from './pages/finance/ap/PaymentRunDetailsPage';
+import { PaymentRunExecutePage } from './pages/finance/ap/PaymentRunExecutePage';
 import { ChartOfAccountsPage } from './pages/finance/ChartOfAccountsPage';
 import { JournalEntryPage } from './pages/finance/gl/JournalEntryPage';
 import { JournalUploadPage } from './pages/finance/gl/JournalUploadPage';
@@ -818,8 +824,55 @@ export default function App() {
                   </PermissionAnyRoute>
                 }
               />
-              <Route path="finance/ap/aging" element={<ApAgingPage />} />
-              <Route path="finance/ap/payments/proposals" element={<FinanceApPaymentProposalsPage />} />
+              <Route path="finance/ap/aging" element={<ApAgingFinancePage />} />
+              <Route
+                path="finance/ap/payment-proposals"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW}>
+                    <PaymentProposalsListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ap/payment-proposals/new"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE}>
+                    <PaymentProposalCreatePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ap/payment-proposals/:id"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW}>
+                    <PaymentProposalDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ap/payment-runs"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_RUN_VIEW}>
+                    <PaymentRunsListPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ap/payment-runs/execute"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_RUN_EXECUTE}>
+                    <PaymentRunExecutePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/ap/payment-runs/:id"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.AP.PAYMENT_RUN_VIEW}>
+                    <PaymentRunDetailsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
               <Route path="finance/cash/position" element={<CashPositionPage />} />
               <Route path="finance/cash/banks" element={<BankAccountsListPage />} />
               <Route path="finance/cash/reconciliation" element={<BankReconciliationHomePage />} />

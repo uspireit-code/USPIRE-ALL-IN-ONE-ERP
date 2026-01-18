@@ -34,7 +34,6 @@ export function CreateBillPage() {
   const [saving, setSaving] = useState(false);
 
   const [supplierId, setSupplierId] = useState('');
-  const [billNumber, setBillNumber] = useState('');
   const [billDate, setBillDate] = useState(todayIsoDate());
   const [dueDate, setDueDate] = useState(todayIsoDate());
   const [lines, setLines] = useState<Line[]>([{ accountId: '', description: '', amount: '' }]);
@@ -113,11 +112,6 @@ export function CreateBillPage() {
     setFieldErrors({});
     setFormErrors([]);
 
-    if (!billNumber.trim()) {
-      setFieldErrors({ billNumber: 'Bill number is required.' });
-      return;
-    }
-
     const mappedLines = lines
       .map((l) => ({
         accountId: l.accountId,
@@ -135,7 +129,6 @@ export function CreateBillPage() {
     try {
       await createBill({
         supplierId,
-        invoiceNumber: billNumber,
         invoiceDate: billDate,
         dueDate,
         totalAmount,
@@ -159,7 +152,6 @@ export function CreateBillPage() {
           if (field === 'supplierId') nextFe.supplierId = message;
           else if (field === 'invoiceDate') nextFe.billDate = message;
           else if (field === 'dueDate') nextFe.dueDate = message;
-          else if (field === 'invoiceNumber') nextFe.billNumber = message;
           else nextForm.push(message);
         }
 
@@ -187,6 +179,10 @@ export function CreateBillPage() {
     <div style={{ maxWidth: 760 }}>
       <h2>Create Bill</h2>
 
+      <div style={{ marginBottom: 10, fontSize: 12, opacity: 0.8 }}>
+        Number will be assigned on save.
+      </div>
+
       {error ? <div style={{ color: 'crimson', marginBottom: 10 }}>{error}</div> : null}
       {formErrors.length > 0 ? (
         <div style={{ color: 'crimson', marginBottom: 10 }}>
@@ -207,10 +203,6 @@ export function CreateBillPage() {
           ))}
         </select>
         {fieldErrors.supplierId ? <div style={{ color: 'crimson' }}>{fieldErrors.supplierId}</div> : <div />}
-
-        <div>Bill #</div>
-        <input value={billNumber} onChange={(e) => setBillNumber(e.target.value)} />
-        {fieldErrors.billNumber ? <div style={{ color: 'crimson' }}>{fieldErrors.billNumber}</div> : <div />}
 
         <div>Bill Date</div>
         <input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />

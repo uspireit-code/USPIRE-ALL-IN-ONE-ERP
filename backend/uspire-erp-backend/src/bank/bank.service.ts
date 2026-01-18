@@ -55,7 +55,7 @@ export class BankService {
         accountNumber: dto.accountNumber,
         currency: dto.currency,
         glAccountId: dto.glAccountId,
-        isActive: true,
+        status: 'ACTIVE',
       },
       include: { glAccount: true },
     });
@@ -68,7 +68,7 @@ export class BankService {
     }
 
     return this.prisma.bankAccount.findMany({
-      where: { tenantId: tenant.id, isActive: true },
+      where: { tenantId: tenant.id, status: 'ACTIVE' },
       orderBy: { name: 'asc' },
       include: { glAccount: true },
     });
@@ -83,7 +83,7 @@ export class BankService {
     const prisma = this.prismaAny();
 
     const bankAccount = await prisma.bankAccount.findFirst({
-      where: { id: dto.bankAccountId, tenantId: tenant.id, isActive: true },
+      where: { id: dto.bankAccountId, tenantId: tenant.id, status: 'ACTIVE' },
       select: { id: true },
     });
 
@@ -112,7 +112,7 @@ export class BankService {
     const prisma = this.prismaAny();
 
     const bankAccount = await prisma.bankAccount.findFirst({
-      where: { id: dto.bankAccountId, tenantId: tenant.id, isActive: true },
+      where: { id: dto.bankAccountId, tenantId: tenant.id, status: 'ACTIVE' },
       select: { id: true },
     });
 

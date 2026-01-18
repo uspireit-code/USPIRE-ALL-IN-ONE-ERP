@@ -16,18 +16,179 @@ import { translatePrismaError } from '../common/prisma-error.util';
 import { assertCanPost } from '../periods/period-guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
-import type { StorageProvider } from '../storage/storage.provider';
-import { STORAGE_PROVIDER } from '../storage/storage.provider';
+import { PostInvoiceDto } from './dto/post-invoice.dto';
+import type { RejectSupplierInvoiceDto } from './dto/reject-supplier-invoice.dto';
 import { UploadSupplierDocumentDto } from './dto/upload-supplier-document.dto';
 import { CreateSupplierBankAccountDto } from './dto/create-supplier-bank-account.dto';
 import { UpdateSupplierBankAccountDto } from './dto/update-supplier-bank-account.dto';
+import { ApAgingQueryDto } from './dto/ap-aging-query.dto';
+import { ApSupplierStatementExportDto } from './dto/ap-supplier-statement-export.dto';
+import { ApBillExportDto } from './dto/ap-bill-export.dto';
+import { ReportsService } from '../reports/reports.service';
+import {
+  STORAGE_PROVIDER,
+  type StorageProvider,
+} from '../storage/storage.provider';
 
 @Injectable()
 export class ApService {
+  private readonly BILL_NUMBER_SEQUENCE_NAME = 'AP_BILL_NUMBER';
   constructor(
     private readonly prisma: PrismaService,
+    private readonly reports: ReportsService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
+
+  private ensurePdfKit() {
+    let PDFDocument: any;
+    try {
+      PDFDocument = require('pdfkit');
+    } catch {
+      throw new BadRequestException(
+        'PDF export not available (missing dependency pdfkit)',
+      );
+    }
+
+    return PDFDocument;
+  }
+
+  private async nextBillNumber(tx: any, tenantId: string) {
+    const counter = await tx.tenantSequenceCounter.upsert({
+      where: {
+        tenantId_name: {
+          tenantId,
+          name: this.BILL_NUMBER_SEQUENCE_NAME,
+        },
+      },
+      create: {
+        tenantId,
+        name: this.BILL_NUMBER_SEQUENCE_NAME,
+        value: 0,
+      },
+      update: {},
+      select: { id: true },
+    });
+
+    const bumped = await tx.tenantSequenceCounter.update({
+      where: { id: counter.id },
+      data: { value: { increment: 1 } },
+      select: { value: true },
+    });
+
+    return `BILL-${String(bumped.value).padStart(6, '0')}`;
+  }
+
+  private async ensureExcelJs() {
+    try {
+      return require('exceljs');
+    } catch {
+      throw new BadRequestException(
+        'XLSX export not available (missing dependency exceljs)',
+      );
+    }
+  }
+
+  private getTenantPdfMetaOrThrow(req: Request) {
+    const tenant: any = (req as any).tenant;
+    const entityLegalName = String(tenant?.legalName ?? '').trim();
+    if (!entityLegalName) {
+      throw new BadRequestException(
+        'Missing Entity Legal Name in Tenant settings. Configure Settings → Tenant → Legal Name before exporting.',
+      );
+    }
+    const currencyIsoCode = String(tenant?.defaultCurrency ?? '').trim();
+    if (!currencyIsoCode) {
+      throw new BadRequestException(
+        'Missing default currency in Tenant settings. Configure Settings → Tenant → Default Currency before exporting.',
+      );
+    }
+    return { entityLegalName, currencyIsoCode };
+  }
+
+  private daysBetween(a: Date, b: Date) {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Math.floor((a.getTime() - b.getTime()) / msPerDay);
+  }
+
+  private parseDateOnly(dateStr: string): Date {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException('Invalid date');
+    }
+    return d;
+  }
+
+  private todayIsoDate() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private async getUserPermissionCodes(req: Request): Promise<Set<string>> {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new ForbiddenException('Missing tenant or user context');
+    }
+
+    const userRoles = await this.prisma.userRole.findMany({
+      where: {
+        userId: user.id,
+        role: { tenantId: tenant.id },
+      },
+      select: {
+        role: {
+          select: {
+            name: true,
+            rolePermissions: {
+              select: {
+                permission: { select: { code: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const codes = new Set<string>();
+    for (const ur of userRoles) {
+      for (const rp of ur.role.rolePermissions) {
+        codes.add(rp.permission.code);
+      }
+    }
+
+    return codes;
+  }
+
+  private async enforceApAgingViewAccess(req: Request) {
+    const user = req.user;
+    if (!user) throw new ForbiddenException('Missing user context');
+
+    const codes = await this.getUserPermissionCodes(req);
+
+    const allowed =
+      codes.has(PERMISSIONS.REPORT.AP_AGING_VIEW) ||
+      codes.has(PERMISSIONS.FINANCE.VIEW_ALL) ||
+      codes.has(PERMISSIONS.SYSTEM.VIEW_ALL);
+
+    if (!allowed) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const roles = new Set((user as any)?.roles ?? []);
+    const isAdmin = roles.has('ADMIN');
+
+    // Finance control: if user is an ADMIN and is relying only on SYSTEM_VIEW_ALL,
+    // do not allow bypassing finance visibility controls.
+    if (
+      isAdmin &&
+      codes.has(PERMISSIONS.SYSTEM.VIEW_ALL) &&
+      !codes.has(PERMISSIONS.FINANCE.VIEW_ALL) &&
+      !codes.has(PERMISSIONS.REPORT.AP_AGING_VIEW)
+    ) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    return codes;
+  }
 
   private round2(n: number) {
     return Math.round(n * 100) / 100;
@@ -109,6 +270,408 @@ export class ApService {
     }
 
     return rows;
+  }
+
+  async exportSupplierStatement(req: Request, dto: ApSupplierStatementExportDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const supplierId = String(dto.supplierId ?? '').trim();
+    const fromDate = String(dto.fromDate ?? '').trim();
+    const toDate = String(dto.toDate ?? '').trim();
+    const format = (dto.format ?? 'pdf') as 'pdf' | 'excel';
+    if (!supplierId) throw new BadRequestException('supplierId is required');
+    if (!fromDate || !toDate)
+      throw new BadRequestException('fromDate and toDate are required');
+    if (fromDate > toDate) {
+      throw new BadRequestException('fromDate must be less than or equal to toDate');
+    }
+
+    const statement = await this.reports.supplierStatement(req, supplierId, {
+      from: fromDate,
+      to: toDate,
+    });
+
+    const safeSupplierName = String(statement.supplierName ?? supplierId)
+      .trim()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_\-]/g, '');
+
+    const entityId = `AP_SUPPLIER_STATEMENT:${tenant.id}:${supplierId}:${fromDate}:${toDate}`;
+
+    if (format === 'excel') {
+      const ExcelJS = await this.ensureExcelJs();
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Supplier Statement');
+
+      ws.addRow([String((req as any)?.tenant?.legalName ?? 'Supplier Statement')]);
+      ws.addRow([`Supplier: ${statement.supplierName}`]);
+      ws.addRow([`Period: ${fromDate} to ${toDate}`]);
+      ws.addRow([`Generated: ${new Date().toISOString()}`]);
+      ws.addRow([]);
+      ws.addRow(['Opening balance', Number(statement.openingBalance ?? 0)]);
+      ws.addRow([]);
+      ws.addRow(['Date', 'Type', 'Reference', 'Debit', 'Credit', 'Running balance']);
+
+      for (const l of statement.lines ?? []) {
+        ws.addRow([
+          l.date,
+          l.type,
+          l.reference,
+          Number(l.debit ?? 0),
+          Number(l.credit ?? 0),
+          Number(l.runningBalance ?? 0),
+        ]);
+      }
+
+      ws.addRow([]);
+      ws.addRow(['Closing balance', Number(statement.closingBalance ?? 0)]);
+      ws.addRow([]);
+      ws.addRow(['System-generated supplier statement']);
+
+      ws.getRow(8).font = { bold: true };
+      ws.getRow(10).font = { bold: true };
+      for (const idx of [4, 5, 6]) {
+        ws.getColumn(idx).numFmt = '#,##0.00;(#,##0.00)';
+      }
+
+      const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+      const body = Buffer.from(buf);
+
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.REPORT_EXPORT,
+          entityType: AuditEntityType.REPORT,
+          entityId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'EXPORT_XLSX',
+          permissionUsed: PERMISSIONS.AP.STATEMENT_EXPORT,
+          metadata: { supplierId, fromDate, toDate, format: 'XLSX' },
+        },
+        this.prisma,
+      ).catch(() => undefined);
+
+      return {
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileName: `Supplier_Statement_${safeSupplierName}_${fromDate}_to_${toDate}.xlsx`,
+        body,
+      };
+    }
+
+    const { entityLegalName } = this.getTenantPdfMetaOrThrow(req);
+    const PDFDocument = this.ensurePdfKit();
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const x0 = doc.page.margins.left;
+    const now = new Date().toISOString();
+
+    doc.font('Helvetica-Bold').fontSize(14);
+    doc.text(entityLegalName, x0, doc.y, { width, align: 'center' });
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(12);
+    doc.text('Supplier Statement', x0, doc.y, { width, align: 'center' });
+    doc.moveDown(0.25);
+    doc.font('Helvetica').fontSize(10);
+    doc.text(`Supplier: ${statement.supplierName}`, x0, doc.y, {
+      width,
+      align: 'center',
+    });
+    doc.moveDown(0.15);
+    doc.font('Helvetica').fontSize(9);
+    doc.text(`Period: ${fromDate} to ${toDate}`, x0, doc.y, {
+      width,
+      align: 'center',
+    });
+    doc.moveDown(0.15);
+    doc.font('Helvetica').fontSize(8).fillColor('#444');
+    doc.text(`Generated: ${now}`, x0, doc.y, { width, align: 'center' });
+    doc.fillColor('#000');
+    doc.moveDown(0.8);
+    doc
+      .moveTo(x0, doc.y)
+      .lineTo(x0 + width, doc.y)
+      .strokeColor('#ddd')
+      .stroke();
+    doc.strokeColor('#000');
+    doc.moveDown(0.8);
+
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text(`Opening balance: ${Number(statement.openingBalance ?? 0).toFixed(2)}`);
+    doc.moveDown(0.6);
+
+    const colDate = 70;
+    const colType = 60;
+    const colRef = Math.max(120, width - colDate - colType - 80 - 80 - 90);
+    const colDebit = 80;
+    const colCredit = 80;
+    const colBal = 90;
+
+    const renderHeaderRow = () => {
+      doc.font('Helvetica-Bold').fontSize(8);
+      const y = doc.y;
+      doc.text('Date', x0, y, { width: colDate });
+      doc.text('Type', x0 + colDate, y, { width: colType });
+      doc.text('Reference', x0 + colDate + colType, y, { width: colRef });
+      doc.text('Debit', x0 + colDate + colType + colRef, y, {
+        width: colDebit,
+        align: 'right',
+      });
+      doc.text('Credit', x0 + colDate + colType + colRef + colDebit, y, {
+        width: colCredit,
+        align: 'right',
+      });
+      doc.text(
+        'Balance',
+        x0 + colDate + colType + colRef + colDebit + colCredit,
+        y,
+        { width: colBal, align: 'right' },
+      );
+      doc.moveDown(0.5);
+      doc
+        .moveTo(x0, doc.y)
+        .lineTo(x0 + width, doc.y)
+        .strokeColor('#ddd')
+        .stroke();
+      doc.strokeColor('#000');
+      doc.moveDown(0.3);
+      doc.font('Helvetica').fontSize(8);
+    };
+
+    renderHeaderRow();
+    for (const l of statement.lines ?? []) {
+      const minHeight = 12;
+      if (doc.y + minHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        renderHeaderRow();
+      }
+      const y = doc.y;
+      doc.text(String(l.date ?? ''), x0, y, { width: colDate });
+      doc.text(String(l.type ?? ''), x0 + colDate, y, { width: colType });
+      doc.text(String(l.reference ?? ''), x0 + colDate + colType, y, {
+        width: colRef,
+      });
+      doc.text(Number(l.debit ?? 0) ? Number(l.debit ?? 0).toFixed(2) : '', x0 + colDate + colType + colRef, y, {
+        width: colDebit,
+        align: 'right',
+      });
+      doc.text(Number(l.credit ?? 0) ? Number(l.credit ?? 0).toFixed(2) : '', x0 + colDate + colType + colRef + colDebit, y, {
+        width: colCredit,
+        align: 'right',
+      });
+      doc.text(Number(l.runningBalance ?? 0).toFixed(2), x0 + colDate + colType + colRef + colDebit + colCredit, y, {
+        width: colBal,
+        align: 'right',
+      });
+      doc.moveDown(0.9);
+    }
+
+    doc.moveDown(0.6);
+    doc
+      .moveTo(x0, doc.y)
+      .lineTo(x0 + width, doc.y)
+      .strokeColor('#000')
+      .stroke();
+    doc.moveDown(0.35);
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text(
+      `Closing balance: ${Number(statement.closingBalance ?? 0).toFixed(2)}`,
+      x0,
+      doc.y,
+      { width },
+    );
+    doc.moveDown(1);
+    doc.font('Helvetica').fontSize(8).fillColor('#444');
+    doc.text('System-generated supplier statement', x0, doc.y, {
+      width,
+      align: 'center',
+    });
+    doc.fillColor('#000');
+
+    const body = await new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.end();
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.REPORT_EXPORT,
+        entityType: AuditEntityType.REPORT,
+        entityId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'EXPORT_PDF',
+        permissionUsed: PERMISSIONS.AP.STATEMENT_EXPORT,
+        metadata: { supplierId, fromDate, toDate, format: 'PDF' },
+      },
+      this.prisma,
+    ).catch(() => undefined);
+
+    return {
+      mimeType: 'application/pdf',
+      fileName: `Supplier_Statement_${safeSupplierName}_${fromDate}_to_${toDate}.pdf`,
+      body,
+    };
+  }
+
+  async exportBill(req: Request, id: string, _dto: ApBillExportDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const bill = await this.prisma.supplierInvoice.findFirst({
+      where: { id, tenantId: tenant.id },
+      include: { supplier: true, lines: true },
+    });
+    if (!bill) throw new NotFoundException('Bill not found');
+
+    if (bill.status !== 'APPROVED' && bill.status !== 'POSTED') {
+      throw new BadRequestException(
+        'Bill export is only allowed for APPROVED or POSTED bills',
+      );
+    }
+
+    const { entityLegalName, currencyIsoCode } = this.getTenantPdfMetaOrThrow(req);
+    const PDFDocument = this.ensurePdfKit();
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const x0 = doc.page.margins.left;
+    const now = new Date().toISOString();
+
+    doc.font('Helvetica-Bold').fontSize(14);
+    doc.text(entityLegalName, x0, doc.y, { width, align: 'center' });
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(12);
+    doc.text('Supplier Bill', x0, doc.y, { width, align: 'center' });
+    doc.moveDown(0.25);
+    doc.font('Helvetica').fontSize(9);
+    doc.text(`Generated: ${now}`, x0, doc.y, { width, align: 'center' });
+    doc.moveDown(0.8);
+
+    const row = (label: string, value: string) => {
+      doc.font('Helvetica-Bold').fontSize(9);
+      doc.text(label, x0, doc.y, { width: 160 });
+      doc.font('Helvetica').fontSize(9);
+      doc.text(value, x0 + 160, doc.y - 12, { width: width - 160 });
+      doc.moveDown(0.4);
+    };
+
+    row('Supplier', String(bill.supplier?.name ?? bill.supplierId ?? '-'));
+    row('Invoice number', String(bill.invoiceNumber ?? bill.id));
+    row('Invoice date', new Date(bill.invoiceDate).toISOString().slice(0, 10));
+    row('Due date', new Date(bill.dueDate).toISOString().slice(0, 10));
+    row('Status', String(bill.status));
+    row('Currency', String(currencyIsoCode));
+    row('Total', Number(bill.totalAmount ?? 0).toFixed(2));
+
+    doc.moveDown(0.6);
+    doc
+      .moveTo(x0, doc.y)
+      .lineTo(x0 + width, doc.y)
+      .strokeColor('#ddd')
+      .stroke();
+    doc.strokeColor('#000');
+    doc.moveDown(0.6);
+
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text('Lines', x0, doc.y, { width });
+    doc.moveDown(0.4);
+
+    const colDesc = Math.max(220, width - 120);
+    const colAmt = width - colDesc;
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    const yHdr = doc.y;
+    doc.text('Description', x0, yHdr, { width: colDesc });
+    doc.text('Amount', x0 + colDesc, yHdr, { width: colAmt, align: 'right' });
+    doc.moveDown(0.5);
+    doc
+      .moveTo(x0, doc.y)
+      .lineTo(x0 + width, doc.y)
+      .strokeColor('#ddd')
+      .stroke();
+    doc.strokeColor('#000');
+    doc.moveDown(0.35);
+    doc.font('Helvetica').fontSize(9);
+
+    for (const l of bill.lines ?? []) {
+      const desc = String(l.description ?? '').trim();
+      const amt = Number(l.amount ?? 0);
+      const minHeight = 14;
+      if (doc.y + minHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+      }
+      const y = doc.y;
+      doc.text(desc, x0, y, { width: colDesc });
+      doc.text(amt.toFixed(2), x0 + colDesc, y, { width: colAmt, align: 'right' });
+      doc.moveDown(0.8);
+    }
+
+    doc.moveDown(0.6);
+    doc
+      .moveTo(x0, doc.y)
+      .lineTo(x0 + width, doc.y)
+      .strokeColor('#000')
+      .stroke();
+    doc.moveDown(0.35);
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text(`Total: ${Number(bill.totalAmount ?? 0).toFixed(2)}`, x0, doc.y, {
+      width,
+      align: 'right',
+    });
+    doc.moveDown(1);
+    doc.font('Helvetica').fontSize(8).fillColor('#444');
+    doc.text('System-generated supplier invoice / bill', x0, doc.y, {
+      width,
+      align: 'center',
+    });
+    doc.fillColor('#000');
+
+    const body = await new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      doc.end();
+    });
+
+    const entityId = `AP_BILL:${tenant.id}:${bill.id}`;
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.REPORT_EXPORT,
+        entityType: AuditEntityType.REPORT,
+        entityId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'EXPORT_PDF',
+        permissionUsed: PERMISSIONS.AP.INVOICE_EXPORT,
+        metadata: { billId: bill.id, status: bill.status, format: 'PDF' },
+      },
+      this.prisma,
+    ).catch(() => undefined);
+
+    return {
+      mimeType: 'application/pdf',
+      fileName: `Bill_${String(bill.invoiceNumber ?? bill.id).trim()}_${String(bill.status).trim()}.pdf`,
+      body,
+    };
   }
 
   private mapWithholdingProfileStrict(raw: any) {
@@ -976,6 +1539,148 @@ export class ApService {
     });
   }
 
+  async listSupplierLookup(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) {
+      throw new BadRequestException('Missing tenant context');
+    }
+
+    return this.prisma.supplier.findMany({
+      where: { tenantId: tenant.id, isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+  }
+
+  async apAging(req: Request, dto: ApAgingQueryDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    await this.enforceApAgingViewAccess(req);
+
+    const asOfDateStr = String(dto.asOfDate ?? this.todayIsoDate()).trim();
+    const asOf = this.parseDateOnly(asOfDateStr);
+    const supplierId = String(dto.supplierId ?? '').trim() || undefined;
+
+    const invoices = await this.prisma.supplierInvoice.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: 'POSTED',
+        invoiceDate: { lte: asOf },
+        ...(supplierId ? { supplierId } : {}),
+      },
+      select: {
+        id: true,
+        supplierId: true,
+        dueDate: true,
+        totalAmount: true,
+        supplier: { select: { id: true, name: true } },
+      },
+      orderBy: [{ supplier: { name: 'asc' } }, { dueDate: 'asc' }, { id: 'asc' }],
+    });
+
+    const invoiceIds = invoices.map((i) => i.id);
+    const allocations = invoiceIds.length
+      ? await this.prisma.paymentAllocation.findMany({
+          where: {
+            sourceType: 'SUPPLIER_INVOICE',
+            sourceId: { in: invoiceIds },
+            payment: {
+              tenantId: tenant.id,
+              status: 'POSTED',
+              type: 'SUPPLIER_PAYMENT',
+              paymentDate: { lte: asOf },
+            },
+          },
+          select: {
+            sourceId: true,
+            amount: true,
+          },
+        })
+      : [];
+
+    const paidByInvoiceId = new Map<string, number>();
+    for (const a of allocations) {
+      const prev = paidByInvoiceId.get(a.sourceId) ?? 0;
+      paidByInvoiceId.set(a.sourceId, prev + Number(a.amount));
+    }
+
+    const bucketForDaysOverdue = (daysOverdue: number) => {
+      if (daysOverdue <= 0) return 'current' as const;
+      if (daysOverdue <= 30) return 'days_1_30' as const;
+      if (daysOverdue <= 60) return 'days_31_60' as const;
+      if (daysOverdue <= 90) return 'days_61_90' as const;
+      return 'days_91_plus' as const;
+    };
+
+    type SupplierAgg = {
+      supplierId: string;
+      supplierName: string;
+      current: number;
+      days_1_30: number;
+      days_31_60: number;
+      days_61_90: number;
+      days_91_plus: number;
+      totalOutstanding: number;
+    };
+
+    const supplierMap = new Map<string, SupplierAgg>();
+
+    for (const inv of invoices) {
+      const paid = this.round2(paidByInvoiceId.get(inv.id) ?? 0);
+      const total = Number(inv.totalAmount);
+      const outstanding = this.round2(total - paid);
+      if (outstanding <= 0) continue;
+
+      const daysOverdue = this.daysBetween(asOf, inv.dueDate);
+      const bucket = bucketForDaysOverdue(daysOverdue);
+
+      let s = supplierMap.get(inv.supplierId);
+      if (!s) {
+        s = {
+          supplierId: inv.supplierId,
+          supplierName: inv.supplier.name,
+          current: 0,
+          days_1_30: 0,
+          days_31_60: 0,
+          days_61_90: 0,
+          days_91_plus: 0,
+          totalOutstanding: 0,
+        };
+        supplierMap.set(inv.supplierId, s);
+      }
+
+      (s as any)[bucket] = this.round2(Number((s as any)[bucket] ?? 0) + outstanding);
+      s.totalOutstanding = this.round2(s.totalOutstanding + outstanding);
+    }
+
+    const rows = [...supplierMap.values()].sort((a, b) =>
+      a.supplierName.localeCompare(b.supplierName),
+    );
+
+    const entityId = `AP_AGING:${tenant.id}:${asOfDateStr}:${supplierId ?? 'ALL'}`;
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: AuditEventType.REPORT_VIEW,
+        entityType: AuditEntityType.REPORT,
+        entityId,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'VIEW_AP_AGING',
+        permissionUsed: PERMISSIONS.REPORT.AP_AGING_VIEW,
+        metadata: { asOfDate: asOfDateStr, supplierId: supplierId ?? null },
+      },
+      this.prisma,
+    ).catch(() => undefined);
+
+    return rows;
+  }
+
   async listEligibleAccounts(req: Request) {
     const tenant = req.tenant;
     if (!tenant) {
@@ -1062,24 +1767,27 @@ export class ApService {
 
     let invoice: any;
     try {
-      invoice = await this.prisma.supplierInvoice.create({
-        data: {
-          tenantId: tenant.id,
-          supplierId: dto.supplierId,
-          invoiceNumber: dto.invoiceNumber,
-          invoiceDate: new Date(dto.invoiceDate),
-          dueDate: new Date(dto.dueDate),
-          totalAmount: dto.totalAmount,
-          createdById: user.id,
-          lines: {
-            create: dto.lines.map((l) => ({
-              accountId: l.accountId,
-              description: l.description,
-              amount: l.amount,
-            })),
+      invoice = await this.prisma.$transaction(async (tx: any) => {
+        const invoiceNumber = await this.nextBillNumber(tx, tenant.id);
+        return tx.supplierInvoice.create({
+          data: {
+            tenantId: tenant.id,
+            supplierId: dto.supplierId,
+            invoiceNumber,
+            invoiceDate: new Date(dto.invoiceDate),
+            dueDate: new Date(dto.dueDate),
+            totalAmount: dto.totalAmount,
+            createdById: user.id,
+            lines: {
+              create: dto.lines.map((l) => ({
+                accountId: l.accountId,
+                description: l.description,
+                amount: l.amount,
+              })),
+            },
           },
-        },
-        include: { lines: true, supplier: true },
+          include: { lines: true, supplier: true },
+        });
       });
     } catch (e: any) {
       throw new BadRequestException({
@@ -1146,9 +1854,132 @@ export class ApService {
 
     return this.prisma.supplierInvoice.update({
       where: { id: inv.id },
-      data: { status: 'SUBMITTED' },
+      data: {
+        status: 'SUBMITTED',
+        rejectedAt: null,
+        rejectedByUserId: null,
+        rejectionReason: null,
+      } as any,
       include: { lines: true, supplier: true },
     });
+  }
+
+  async updateDraftInvoice(req: Request, id: string, dto: CreateSupplierInvoiceDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const inv = await this.prisma.supplierInvoice.findFirst({
+      where: { id, tenantId: tenant.id },
+      select: { id: true, status: true, createdById: true },
+    });
+
+    if (!inv) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (inv.status !== 'DRAFT') {
+      throw new BadRequestException('Only DRAFT invoices can be edited');
+    }
+
+    if (inv.createdById !== user.id) {
+      throw new ForbiddenException('Only the creator can edit this invoice');
+    }
+
+    await this.assertActiveSupplier({ tenantId: tenant.id, supplierId: dto.supplierId });
+
+    const netAmount = this.round2(dto.lines.reduce((s, l) => s + (l.amount ?? 0), 0));
+    this.assertInvoiceLines(dto.lines, netAmount);
+
+    const taxLines = dto.taxLines ?? [];
+    const validatedTax = await this.validateTaxLines({
+      tenantId: tenant.id,
+      sourceType: 'SUPPLIER_INVOICE',
+      expectedRateType: 'INPUT',
+      netAmount,
+      taxLines,
+    });
+
+    const expectedGross = this.round2(netAmount + validatedTax.totalTax);
+    if (this.round2(dto.totalAmount) !== expectedGross) {
+      throw new BadRequestException({
+        error: 'Invoice totalAmount must equal net + VAT',
+        netAmount,
+        totalTax: validatedTax.totalTax,
+        expectedGross,
+        totalAmount: this.round2(dto.totalAmount),
+      });
+    }
+
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        tenantId: tenant.id,
+        id: { in: dto.lines.map((l) => l.accountId) },
+        isActive: true,
+      },
+      select: { id: true, type: true },
+    });
+
+    const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
+    for (const line of dto.lines) {
+      const a = accountMap.get(line.accountId);
+      if (!a) {
+        throw new BadRequestException(`Account not found or inactive: ${line.accountId}`);
+      }
+      if (a.type !== 'EXPENSE' && a.type !== 'ASSET') {
+        throw new BadRequestException(`Invoice line account must be EXPENSE or ASSET: ${line.accountId}`);
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx: any) => {
+      await tx.supplierInvoiceLine.deleteMany({ where: { supplierInvoiceId: inv.id } });
+      await tx.invoiceTaxLine.deleteMany({
+        where: { tenantId: tenant.id, sourceType: 'SUPPLIER_INVOICE', sourceId: inv.id },
+      });
+
+      const invoice = await tx.supplierInvoice.update({
+        where: { id: inv.id },
+        data: {
+          supplierId: dto.supplierId,
+          invoiceDate: new Date(dto.invoiceDate),
+          dueDate: new Date(dto.dueDate),
+          totalAmount: dto.totalAmount,
+          lines: {
+            create: dto.lines.map((l) => ({
+              accountId: l.accountId,
+              description: l.description,
+              amount: l.amount,
+            })),
+          },
+        },
+        include: { lines: true, supplier: true },
+      });
+
+      if (validatedTax.rows.length > 0) {
+        await tx.invoiceTaxLine.createMany({
+          data: validatedTax.rows.map((t) => ({
+            tenantId: tenant.id,
+            sourceType: 'SUPPLIER_INVOICE',
+            sourceId: invoice.id,
+            taxRateId: t.taxRateId,
+            taxableAmount: t.taxableAmount,
+            taxAmount: t.taxAmount,
+          })),
+        });
+      }
+
+      return invoice;
+    });
+
+    const createdTaxLines = await this.prisma.invoiceTaxLine.findMany({
+      where: { tenantId: tenant.id, sourceType: 'SUPPLIER_INVOICE', sourceId: updated.id },
+      include: { taxRate: { include: { glAccount: true } } },
+    });
+
+    return { ...(updated as any), taxLines: createdTaxLines };
   }
 
   async approveInvoice(req: Request, id: string) {
@@ -1178,8 +2009,85 @@ export class ApService {
         status: 'APPROVED',
         approvedById: user.id,
         approvedAt: new Date(),
-      },
+        rejectedAt: null,
+        rejectedByUserId: null,
+        rejectionReason: null,
+      } as any,
       include: { lines: true, supplier: true },
+    });
+  }
+
+  async rejectBill(req: Request, id: string, dto: RejectSupplierInvoiceDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const reason = String((dto as any)?.reason ?? '').trim();
+    if (!reason) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+
+    return this.prisma.$transaction(async (tx: any) => {
+      const bill = await tx.supplierInvoice.findFirst({
+        where: { id, tenantId: tenant.id },
+        select: {
+          id: true,
+          status: true,
+          createdById: true,
+          approvedById: true,
+        },
+      });
+
+      if (!bill) {
+        throw new NotFoundException('Bill not found');
+      }
+
+      if (bill.createdById === user.id) {
+        throw new ForbiddenException('Creator cannot reject their own bill');
+      }
+
+      const prevStatus = String(bill.status);
+
+      if (bill.status !== 'SUBMITTED') {
+        throw new BadRequestException('Only SUBMITTED bills can be rejected');
+      }
+
+      const updated = await tx.supplierInvoice.update({
+        where: { id: bill.id },
+        data: {
+          status: 'DRAFT',
+          rejectedAt: new Date(),
+          rejectedByUserId: user.id,
+          rejectionReason: reason,
+          approvedById: null,
+          approvedAt: null,
+        } as any,
+        include: { lines: true, supplier: true },
+      });
+
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: (AuditEventType as any).BILL_REJECTED,
+          entityType: AuditEntityType.SUPPLIER_INVOICE,
+          entityId: updated.id,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'BILL_REJECTED',
+          permissionUsed: PERMISSIONS.AP.BILL_REJECT,
+          metadata: {
+            previousStatus: prevStatus,
+            newStatus: 'DRAFT',
+            rejectionReason: reason,
+          },
+        },
+        this.prisma,
+      ).catch(() => undefined);
+
+      return updated;
     });
   }
 

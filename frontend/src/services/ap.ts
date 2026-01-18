@@ -118,14 +118,24 @@ export type SupplierInvoice = {
   createdById: string;
   approvedById?: string | null;
   approvedAt?: string | null;
-  postedById?: string | null;
-  postedAt?: string | null;
-  supplier: Supplier;
+  rejectedByUserId?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  supplier?: Supplier;
   lines: SupplierInvoiceLine[];
+};
+
+export type SupplierLookup = {
+  id: string;
+  name: string;
 };
 
 export async function listSuppliers() {
   return apiFetch<Supplier[]>('/ap/suppliers', { method: 'GET' });
+}
+
+export async function listSupplierLookup() {
+  return apiFetch<SupplierLookup[]>('/ap/suppliers/lookup', { method: 'GET' });
 }
 
 export async function createSupplier(params: {
@@ -159,17 +169,15 @@ export async function createSupplier(params: {
 
 export async function createBill(params: {
   supplierId: string;
-  invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
   totalAmount: number;
   lines: Array<{ accountId: string; description: string; amount: number }>;
 }) {
-  return apiFetch<SupplierInvoice>('/ap/invoices', {
+  return apiFetch<SupplierInvoice>('/ap/bills', {
     method: 'POST',
     body: JSON.stringify({
       supplierId: params.supplierId,
-      invoiceNumber: params.invoiceNumber,
       invoiceDate: params.invoiceDate,
       dueDate: params.dueDate,
       totalAmount: params.totalAmount,
@@ -313,12 +321,11 @@ export async function listInvoices() {
 }
 
 export async function listBills() {
-  return apiFetch<SupplierInvoice[]>('/ap/invoices', { method: 'GET' });
+  return apiFetch<SupplierInvoice[]>('/ap/bills', { method: 'GET' });
 }
 
 export async function createInvoice(params: {
   supplierId: string;
-  invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
   totalAmount: number;
@@ -328,7 +335,28 @@ export async function createInvoice(params: {
     method: 'POST',
     body: JSON.stringify({
       supplierId: params.supplierId,
-      invoiceNumber: params.invoiceNumber,
+      invoiceDate: params.invoiceDate,
+      dueDate: params.dueDate,
+      totalAmount: params.totalAmount,
+      lines: params.lines,
+    }),
+  });
+}
+
+export async function updateDraftBill(
+  id: string,
+  params: {
+    supplierId: string;
+    invoiceDate: string;
+    dueDate: string;
+    totalAmount: number;
+    lines: Array<{ accountId: string; description: string; amount: number }>;
+  },
+) {
+  return apiFetch<SupplierInvoice>(`/ap/bills/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      supplierId: params.supplierId,
       invoiceDate: params.invoiceDate,
       dueDate: params.dueDate,
       totalAmount: params.totalAmount,
@@ -342,7 +370,7 @@ export async function submitInvoice(id: string) {
 }
 
 export async function submitBill(id: string) {
-  return apiFetch<SupplierInvoice>(`/ap/invoices/${id}/submit`, { method: 'POST' });
+  return apiFetch<SupplierInvoice>(`/ap/bills/${id}/submit`, { method: 'POST' });
 }
 
 export async function approveInvoice(id: string) {
@@ -350,7 +378,14 @@ export async function approveInvoice(id: string) {
 }
 
 export async function approveBill(id: string) {
-  return apiFetch<SupplierInvoice>(`/ap/invoices/${id}/approve`, { method: 'POST' });
+  return apiFetch<SupplierInvoice>(`/ap/bills/${id}/approve`, { method: 'POST' });
+}
+
+export async function rejectBill(id: string, payload: { reason: string }) {
+  return apiFetch<SupplierInvoice>(`/ap/bills/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function postInvoice(id: string, params?: { apControlAccountCode?: string }) {
@@ -361,7 +396,7 @@ export async function postInvoice(id: string, params?: { apControlAccountCode?: 
 }
 
 export async function postBill(id: string, params?: { apControlAccountCode?: string }) {
-  return apiFetch<any>(`/ap/invoices/${id}/post`, {
+  return apiFetch<any>(`/ap/bills/${id}/post`, {
     method: 'POST',
     body: JSON.stringify({ apControlAccountCode: params?.apControlAccountCode || undefined }),
   });

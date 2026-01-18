@@ -302,22 +302,36 @@ model InvoiceTaxLine {
   @@index([taxRateId])
 }
 
+enum BankAccountType {
+  BANK
+  CASH
+}
+
+enum BankAccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model BankAccount {
   id              String               @id @default(uuid())
   tenantId        String
   name            String
   bankName        String
-  accountNumber   String
+  accountNumber   String?
+  type            BankAccountType      @default(BANK)
   currency        String
   glAccountId     String
-  isActive        Boolean              @default(true)
+  status          BankAccountStatus    @default(ACTIVE)
+  openingBalance  Decimal              @default(0) @db.Decimal(18, 2)
   createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @default(now()) @updatedAt
   glAccount       Account              @relation(fields: [glAccountId], references: [id])
   tenant          Tenant               @relation(fields: [tenantId], references: [id])
   reconciliations BankReconciliation[]
   statements      BankStatement[]
   customerRefunds CustomerRefund[]
   payments        Payment[]
+  paymentRuns     PaymentRun[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -832,55 +846,63 @@ model CustomerReceiptLine {
 }
 
 model Supplier {
-  id                  String                @id @default(uuid())
-  tenantId            String
-  name                String
-  taxNumber           String?
-  registrationNumber  String?
-  vatRegistered       Boolean               @default(false)
-  defaultPaymentTerms String?
-  defaultCurrency     String                @default("ZMW")
-  withholdingProfile  WithholdingProfile    @default(NONE)
-  email               String?
-  phone               String?
-  address             String?
-  isActive            Boolean               @default(true)
-  createdAt           DateTime              @default(now())
-  fixedAssets         FixedAsset[]
-  tenant              Tenant                @relation(fields: [tenantId], references: [id])
-  invoices            SupplierInvoice[]
-  documents           SupplierDocument[]
-  bankAccounts        SupplierBankAccount[]
-  changeLogs          SupplierChangeLog[]
+  id                   String                @id @default(uuid())
+  tenantId             String
+  name                 String
+  taxNumber            String?
+  registrationNumber   String?
+  vatRegistered        Boolean               @default(false)
+  defaultPaymentTerms  String?
+  defaultCurrency      String                @default("ZMW")
+  withholdingProfile   WithholdingProfile    @default(NONE)
+  email                String?
+  phone                String?
+  address              String?
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  fixedAssets          FixedAsset[]
+  tenant               Tenant                @relation(fields: [tenantId], references: [id])
+  invoices             SupplierInvoice[]
+  paymentProposalLines PaymentProposalLine[]
+  paymentRunLines      PaymentRunLine[]
+  documents            SupplierDocument[]
+  bankAccounts         SupplierBankAccount[]
+  changeLogs           SupplierChangeLog[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
 }
 
 model SupplierInvoice {
-  id            String                @id @default(uuid())
-  tenantId      String
-  supplierId    String
-  invoiceNumber String
-  invoiceDate   DateTime
-  dueDate       DateTime
-  totalAmount   Decimal               @db.Decimal(18, 2)
-  status        SupplierInvoiceStatus @default(DRAFT)
-  createdById   String
-  approvedById  String?
-  postedById    String?
-  createdAt     DateTime              @default(now())
-  approvedAt    DateTime?
-  postedAt      DateTime?
-  fixedAssets   FixedAsset[]
-  approvedBy    User?                 @relation("SupplierInvoiceApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  createdBy     User                  @relation("SupplierInvoiceCreatedBy", fields: [createdById], references: [id])
-  postedBy      User?                 @relation("SupplierInvoicePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
-  supplier      Supplier              @relation(fields: [supplierId], references: [id])
-  tenant        Tenant                @relation(fields: [tenantId], references: [id])
-  lines         SupplierInvoiceLine[]
+  id                   String                @id @default(uuid())
+  tenantId             String
+  supplierId           String
+  invoiceNumber        String
+  invoiceDate          DateTime
+  dueDate              DateTime
+  totalAmount          Decimal               @db.Decimal(18, 2)
+  status               SupplierInvoiceStatus @default(DRAFT)
+  createdById          String
+  approvedById         String?
+  rejectedByUserId     String?
+  postedById           String?
+  createdAt            DateTime              @default(now())
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  postedAt             DateTime?
+  fixedAssets          FixedAsset[]
+  approvedBy           User?                 @relation("SupplierInvoiceApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  createdBy            User                  @relation("SupplierInvoiceCreatedBy", fields: [createdById], references: [id])
+  rejectedBy           User?                 @relation("SupplierInvoiceRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
+  postedBy             User?                 @relation("SupplierInvoicePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  supplier             Supplier              @relation(fields: [supplierId], references: [id])
+  tenant               Tenant                @relation(fields: [tenantId], references: [id])
+  lines                SupplierInvoiceLine[]
+  paymentProposalLines PaymentProposalLine[]
+  paymentRunLines      PaymentRunLine[]
 
-  @@unique([tenantId, supplierId, invoiceNumber])
+  @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
   @@index([tenantId, status])
 }
@@ -896,6 +918,121 @@ model SupplierInvoiceLine {
 
   @@index([supplierInvoiceId])
   @@index([accountId])
+}
+
+enum PaymentProposalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
+
+model PaymentProposal {
+  id             String                @id @default(uuid())
+  tenantId       String
+  proposalNumber String
+  proposalDate   DateTime
+  status         PaymentProposalStatus @default(DRAFT)
+  totalAmount    Decimal               @db.Decimal(18, 2)
+  createdById    String
+  approvedById   String?
+  rejectedByUserId String?
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  rejectionReason String?
+  notes          String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @default(now()) @updatedAt
+
+  tenant     Tenant                @relation(fields: [tenantId], references: [id])
+  createdBy  User                  @relation("PaymentProposalCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?                 @relation("PaymentProposalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy User?                 @relation("PaymentProposalRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
+  lines      PaymentProposalLine[]
+
+  @@unique([tenantId, proposalNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, proposalDate])
+}
+
+model PaymentProposalLine {
+  id                String   @id @default(uuid())
+  tenantId          String
+  proposalId        String
+  supplierId        String
+  supplierName      String
+  invoiceId         String
+  invoiceNumber     String
+  invoiceDate       DateTime
+  dueDate           DateTime
+  originalAmount    Decimal  @db.Decimal(18, 2)
+  outstandingAmount Decimal  @db.Decimal(18, 2)
+  proposedPayAmount Decimal  @db.Decimal(18, 2)
+  createdAt         DateTime @default(now())
+
+  proposal PaymentProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  supplier Supplier        @relation(fields: [supplierId], references: [id])
+  invoice  SupplierInvoice @relation(fields: [invoiceId], references: [id])
+  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+  paymentRunLine PaymentRunLine?
+
+  @@unique([proposalId, invoiceId])
+  @@index([tenantId])
+  @@index([proposalId])
+  @@index([supplierId])
+  @@index([invoiceId])
+}
+
+enum PaymentRunStatus {
+  EXECUTED
+}
+
+model PaymentRun {
+  id              String           @id @default(uuid())
+  tenantId        String
+  runNumber       String
+  executionDate   DateTime
+  periodId        String
+  bankAccountId   String
+  totalAmount     Decimal          @db.Decimal(18, 2)
+  status          PaymentRunStatus @default(EXECUTED)
+  executedByUserId String
+  executedAt      DateTime
+  createdAt       DateTime         @default(now())
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id])
+  period     AccountingPeriod @relation(fields: [periodId], references: [id])
+  bankAccount BankAccount     @relation(fields: [bankAccountId], references: [id])
+  executedBy User             @relation("PaymentRunExecutedBy", fields: [executedByUserId], references: [id])
+  lines      PaymentRunLine[]
+
+  @@unique([tenantId, runNumber])
+  @@index([tenantId])
+  @@index([tenantId, executionDate])
+  @@index([periodId])
+  @@index([bankAccountId])
+}
+
+model PaymentRunLine {
+  id                   String @id @default(uuid())
+  tenantId             String
+  paymentRunId         String
+  paymentProposalLineId String
+  supplierId           String
+  invoiceId            String
+  amountPaid           Decimal @db.Decimal(18, 2)
+
+  paymentRun          PaymentRun          @relation(fields: [paymentRunId], references: [id], onDelete: Cascade)
+  paymentProposalLine PaymentProposalLine @relation(fields: [paymentProposalLineId], references: [id], onDelete: Restrict)
+  supplier            Supplier            @relation(fields: [supplierId], references: [id])
+  invoice             SupplierInvoice     @relation(fields: [invoiceId], references: [id])
+  tenant              Tenant              @relation(fields: [tenantId], references: [id])
+
+  @@unique([paymentProposalLineId])
+  @@index([tenantId])
+  @@index([paymentRunId])
+  @@index([supplierId])
+  @@index([invoiceId])
 }
 
 model SupplierDocument {
@@ -1048,6 +1185,8 @@ model Tenant {
   journals                       JournalEntry[]
   legalEntities                  LegalEntity[]
   payments                       Payment[]
+  paymentRuns                    PaymentRun[]
+  paymentRunLines                PaymentRunLine[]
   periodCloseChecklists          PeriodCloseChecklist[]
   periodCloseChecklistItems      PeriodCloseChecklistItem[]
   projects                       Project[]
@@ -1059,6 +1198,8 @@ model Tenant {
   sodLogs                        SoDViolationLog[]
   suppliers                      Supplier[]
   supplierInvoices               SupplierInvoice[]
+  paymentProposals               PaymentProposal[]
+  paymentProposalLines           PaymentProposalLine[]
   taxRates                       TaxRate[]
   arControlAccount               Account?                        @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
   apControlAccount               Account?                        @relation("TenantApControlAccount", fields: [apControlAccountId], references: [id], onDelete: Restrict)
@@ -1268,7 +1409,12 @@ model User {
   sodLogs                                 SoDViolationLog[]
   supplierInvoicesApproved                SupplierInvoice[]               @relation("SupplierInvoiceApprovedBy")
   supplierInvoicesCreated                 SupplierInvoice[]               @relation("SupplierInvoiceCreatedBy")
+  supplierInvoicesRejected                SupplierInvoice[]               @relation("SupplierInvoiceRejectedBy")
   supplierInvoicesPosted                  SupplierInvoice[]               @relation("SupplierInvoicePostedBy")
+  paymentProposalsCreated                 PaymentProposal[]               @relation("PaymentProposalCreatedBy")
+  paymentProposalsApproved                PaymentProposal[]               @relation("PaymentProposalApprovedBy")
+  paymentProposalsRejected                PaymentProposal[]               @relation("PaymentProposalRejectedBy")
+  paymentRunsExecuted                     PaymentRun[]                    @relation("PaymentRunExecutedBy")
   tenant                                  Tenant                          @relation(fields: [tenantId], references: [id])
   userRoles                               UserRole[]
 
@@ -1583,6 +1729,7 @@ model AccountingPeriod {
   disclosureNotes            DisclosureNote[]                @relation("DisclosureNotePeriod")
   fixedAssetDepreciationRuns FixedAssetDepreciationRun[]
   journals                   JournalEntry[]
+  paymentRuns                PaymentRun[]
   periodCloseChecklist       PeriodCloseChecklist?
   reviewPacks                ReviewPack[]
 
@@ -2064,6 +2211,16 @@ enum AuditEventType {
   PERIOD_CORRECTED
   AR_REMINDER_SENT
   AR_REMINDER_CONFIG_CHANGED
+
+  PAYMENT_PROPOSAL_CREATED
+  PAYMENT_PROPOSAL_SUBMITTED
+  PAYMENT_PROPOSAL_APPROVED
+  PAYMENT_PROPOSAL_REJECTED
+
+  PAYMENT_RUN_CREATED
+  PAYMENT_RUN_EXECUTED
+
+  BILL_REJECTED
 }
 
 enum BudgetStatus {
@@ -2088,17 +2245,21 @@ enum AuditEntityType {
   ACCOUNTING_PERIOD_CHECKLIST_ITEM
   SUPPLIER_INVOICE
   CUSTOMER_INVOICE
+  PAYMENT_PROPOSAL
+  PAYMENT
+  PAYMENT_RUN
+  REVIEW_PACK
+  REPORT
+  DISCLOSURE_NOTE
   FIXED_ASSET
   FIXED_ASSET_DEPRECIATION_RUN
   BANK_RECONCILIATION_MATCH
   USER
   BUDGET
-  REPORT
   FORECAST
   TENANT
   ACCOUNT
   RECURRING_JOURNAL_TEMPLATE
-  DISCLOSURE_NOTE
   CHART_OF_ACCOUNTS
   CUSTOMER_RECEIPT
   INVOICE_CATEGORY

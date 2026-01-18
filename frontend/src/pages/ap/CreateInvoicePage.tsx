@@ -32,7 +32,6 @@ export function CreateInvoicePage() {
   const [saving, setSaving] = useState(false);
 
   const [supplierId, setSupplierId] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayIsoDate());
   const [dueDate, setDueDate] = useState(todayIsoDate());
   const [lines, setLines] = useState<Line[]>([{ accountId: '', description: '', amount: '' }]);
@@ -88,7 +87,7 @@ export function CreateInvoicePage() {
 
     setError(null);
 
-    if (!supplierId || !invoiceNumber || !invoiceDate || !dueDate) {
+    if (!supplierId || !invoiceDate || !dueDate) {
       setError('Missing required fields');
       return;
     }
@@ -109,7 +108,6 @@ export function CreateInvoicePage() {
     try {
       const created = await createInvoice({
         supplierId,
-        invoiceNumber,
         invoiceDate,
         dueDate,
         totalAmount,
@@ -135,6 +133,7 @@ export function CreateInvoicePage() {
       {error ? <div style={{ color: 'crimson', marginTop: 8 }}>{error}</div> : null}
 
       <form onSubmit={onSubmit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 900 }}>
+        <div style={{ fontSize: 12, opacity: 0.8 }}>Number will be assigned on save.</div>
         <label>
           Supplier
           <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} required style={{ width: '100%' }}>
@@ -145,11 +144,6 @@ export function CreateInvoicePage() {
               </option>
             ))}
           </select>
-        </label>
-
-        <label>
-          Invoice Number
-          <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} required style={{ width: '100%' }} />
         </label>
 
         <div style={{ display: 'flex', gap: 12 }}>

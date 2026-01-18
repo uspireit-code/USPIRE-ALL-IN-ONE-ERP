@@ -325,6 +325,15 @@ export function Layout() {
     hasPermission(PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW) ||
     hasFinanceViewAll ||
     hasSystemViewAll;
+  const showApAging =
+    hasPermission(PERMISSIONS.REPORT.AP_AGING_VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showPaymentProposals =
+    hasPermission(PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW) ||
+    hasPermission(PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE) ||
+    hasPermission(PERMISSIONS.AP.PAYMENT_PROPOSAL_APPROVE) ||
+    hasFinanceViewAll;
+  const showPaymentRuns =
+    hasPermission(PERMISSIONS.AP.PAYMENT_RUN_VIEW) || hasFinanceViewAll;
   const showArReminders =
     hasPermission(PERMISSIONS.AR_REMINDER.VIEW) || hasFinanceViewAll || hasSystemViewAll;
   const showGlCreate = hasPermission(PERMISSIONS.GL.CREATE);
@@ -714,8 +723,25 @@ export function Layout() {
                         level={3}
                       />
                     ) : null}
-                    <SidebarLink to="/finance/ap/aging" label="AP Aging" icon={<BarChartIcon />} level={3} />
-                    <SidebarLink to="/finance/ap/payments/proposals" label="Payment Proposals" icon={<ClipboardIcon />} level={3} />
+                    {showApAging ? (
+                      <SidebarLink to="/finance/ap/aging" label="AP Aging" icon={<BarChartIcon />} level={3} />
+                    ) : null}
+                    {showPaymentProposals ? (
+                      <SidebarLink
+                        to="/finance/ap/payment-proposals"
+                        label="Payment Proposals"
+                        icon={<ClipboardIcon />}
+                        level={3}
+                      />
+                    ) : null}
+                    {showPaymentRuns ? (
+                      <SidebarLink
+                        to="/finance/ap/payment-runs"
+                        label="Payment Runs"
+                        icon={<ClipboardIcon />}
+                        level={3}
+                      />
+                    ) : null}
                   </Indent>
                 ) : null}
 

@@ -6,9 +6,11 @@ import type { ApiError } from '../../services/api';
 import { listSuppliers, type Supplier } from '../../services/ap';
 import {
   getSupplierStatement,
+  exportSupplierStatement,
   type SupplierStatementLine,
   type SupplierStatementResponse,
 } from '../../services/apSupplierStatements';
+import { triggerBrowserDownload } from '../../services/apExports';
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -22,13 +24,15 @@ export function SupplierStatementsPage() {
   const { hasPermission } = useAuth();
 
   const canView =
-    hasPermission(PERMISSIONS.REPORT.VIEW.SUPPLIER_STATEMENT) ||
-    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.AP.SUPPLIER.VIEW) ||
+    hasPermission(PERMISSIONS.REPORT.VIEW.SUPPLIER_STATEMENT);
+
+  const canExport = hasPermission(PERMISSIONS.AP.STATEMENT_EXPORT);
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
   const [suppliersLoadError, setSuppliersLoadError] = useState<string | null>(null);
+  const [suppliersLoaded, setSuppliersLoaded] = useState(false);
 
   const [supplierId, setSupplierId] = useState('');
 
@@ -38,6 +42,7 @@ export function SupplierStatementsPage() {
   const [data, setData] = useState<SupplierStatementResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);
+  const [attempted, setAttempted] = useState(false);
 
   const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase() === 'true';
 
@@ -56,6 +61,34 @@ export function SupplierStatementsPage() {
     return '';
   }, [canView, from, supplierId, to]);
 
+  async function onExport(format: 'pdf' | 'excel') {
+    if (!canView || !canExport) return;
+
+    setAttempted(true);
+    setError(null);
+
+    const msg = clientValidationError;
+    if (msg) {
+      setError({ body: { message: msg } });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const out = await exportSupplierStatement({
+        supplierId: supplierId.trim(),
+        fromDate: from,
+        toDate: to,
+        format,
+      });
+      triggerBrowserDownload(out.blob, out.fileName);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!canView) return;
     void loadSuppliers();
@@ -70,8 +103,10 @@ export function SupplierStatementsPage() {
     try {
       const rows = await listSuppliers();
       setSuppliers(rows);
+      setSuppliersLoaded(true);
     } catch {
-      setSuppliersLoadError('Unable to load supplier list. Enter Supplier ID manually.');
+      setSuppliersLoadError('Unable to load supplier list.');
+      setSuppliersLoaded(true);
     } finally {
       setSuppliersLoading(false);
     }
@@ -80,6 +115,7 @@ export function SupplierStatementsPage() {
   async function run() {
     if (!canView) return;
 
+    setAttempted(true);
     setError(null);
 
     const msg = clientValidationError;
@@ -113,6 +149,9 @@ export function SupplierStatementsPage() {
               ? 'Failed to load supplier statement.'
               : '';
 
+  const showSupplierRequiredError = attempted && !supplierId.trim();
+  const showNoSuppliers = suppliersLoaded && !suppliersLoading && suppliers.length === 0;
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -128,8 +167,7 @@ export function SupplierStatementsPage() {
           <select
             value={supplierId}
             onChange={(e) => setSupplierId(e.target.value)}
-            onFocus={() => void loadSuppliers()}
-            disabled={!canView || suppliersLoading}
+            disabled={!canView}
             style={{ minWidth: 280 }}
           >
             <option value="">Select supplier…</option>
@@ -141,16 +179,7 @@ export function SupplierStatementsPage() {
           </select>
         </label>
 
-        <label>
-          Supplier ID
-          <input
-            value={supplierId}
-            onChange={(e) => setSupplierId(e.target.value)}
-            disabled={!canView}
-            placeholder="UUID…"
-            style={{ minWidth: 280 }}
-          />
-        </label>
+        {showSupplierRequiredError ? <div style={{ color: 'crimson' }}>Please select a supplier.</div> : null}
 
         <label>
           From
@@ -164,7 +193,24 @@ export function SupplierStatementsPage() {
         <button onClick={() => void run()} disabled={!canView || loading}>
           {loading ? 'Generating…' : 'Generate'}
         </button>
+
+        {canView && canExport ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => void onExport('pdf')} disabled={loading}>
+              Export PDF
+            </button>
+            <button onClick={() => void onExport('excel')} disabled={loading}>
+              Export Excel
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      {showNoSuppliers ? (
+        <div style={{ color: '#666', marginTop: 8 }}>
+          No suppliers found. Create suppliers before generating statements.
+        </div>
+      ) : null}
 
       {suppliersLoadError ? <div style={{ color: '#666', marginTop: 8 }}>{suppliersLoadError}</div> : null}
 

@@ -32,7 +32,7 @@ export class PaymentsService {
     }
 
     const bankAccount = await this.prisma.bankAccount.findFirst({
-      where: { id: dto.bankAccountId, tenantId: tenant.id, isActive: true },
+      where: { id: dto.bankAccountId, tenantId: tenant.id, status: 'ACTIVE' },
       select: { id: true, glAccountId: true },
     });
 

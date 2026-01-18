@@ -28,9 +28,6 @@ export class CreateSupplierInvoiceDto {
   @IsUUID()
   supplierId!: string;
 
-  @IsString()
-  invoiceNumber!: string;
-
   @IsNotEmpty({ message: 'Bill date is required.' })
   @IsDateString()
   invoiceDate!: string;

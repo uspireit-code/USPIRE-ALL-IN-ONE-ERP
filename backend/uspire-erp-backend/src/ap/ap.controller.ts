@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -16,13 +17,17 @@ import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
-import { Permissions } from '../rbac/permissions.decorator';
+import { Permissions, PermissionsAny } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { ApService } from './ap.service';
+import { ApAgingQueryDto } from './dto/ap-aging-query.dto';
+import { ApSupplierStatementExportDto } from './dto/ap-supplier-statement-export.dto';
+import { ApBillExportDto } from './dto/ap-bill-export.dto';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
+import { RejectSupplierInvoiceDto } from './dto/reject-supplier-invoice.dto';
 import { UploadSupplierDocumentDto } from './dto/upload-supplier-document.dto';
 import { CreateSupplierBankAccountDto } from './dto/create-supplier-bank-account.dto';
 import { UpdateSupplierBankAccountDto } from './dto/update-supplier-bank-account.dto';
@@ -42,6 +47,38 @@ export class ApController {
   @Permissions(PERMISSIONS.AP.SUPPLIER_VIEW)
   async listSuppliers(@Req() req: Request) {
     return this.ap.listSuppliers(req);
+  }
+
+  @Get('suppliers/lookup')
+  @PermissionsAny(
+    PERMISSIONS.AP.SUPPLIER_VIEW,
+    PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
+  )
+  async supplierLookup(@Req() req: Request) {
+    return this.ap.listSupplierLookup(req);
+  }
+
+  @Get('aging')
+  @PermissionsAny(
+    PERMISSIONS.REPORT.AP_AGING_VIEW,
+    PERMISSIONS.FINANCE.VIEW_ALL,
+    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
+  async apAging(@Req() req: Request, @Query() dto: ApAgingQueryDto) {
+    return this.ap.apAging(req, dto);
+  }
+
+  @Get('supplier-statements/export')
+  @Permissions(PERMISSIONS.AP.STATEMENT_EXPORT)
+  async exportSupplierStatement(
+    @Req() req: Request,
+    @Query() dto: ApSupplierStatementExportDto,
+    @Res() res: Response,
+  ) {
+    const out = await this.ap.exportSupplierStatement(req, dto);
+    res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
   }
 
   @Get('suppliers/import/template.csv')
@@ -202,6 +239,16 @@ export class ApController {
     return this.ap.createInvoice(req, dto);
   }
 
+  @Patch('bills/:id')
+  @Permissions(PERMISSIONS.AP.INVOICE_CREATE)
+  async updateDraftBill(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: CreateSupplierInvoiceDto,
+  ) {
+    return this.ap.updateDraftInvoice(req, id, dto);
+  }
+
   @Post('invoices/:id/submit')
   @Permissions(PERMISSIONS.AP.INVOICE_SUBMIT)
   async submitInvoice(@Req() req: Request, @Param('id') id: string) {
@@ -224,6 +271,16 @@ export class ApController {
   @Permissions(PERMISSIONS.AP.INVOICE_APPROVE)
   async approveBill(@Req() req: Request, @Param('id') id: string) {
     return this.ap.approveInvoice(req, id);
+  }
+
+  @Post('bills/:id/reject')
+  @Permissions(PERMISSIONS.AP.BILL_REJECT)
+  async rejectBill(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: RejectSupplierInvoiceDto,
+  ) {
+    return this.ap.rejectBill(req, id, dto);
   }
 
   @Post('invoices/:id/post')
@@ -260,5 +317,19 @@ export class ApController {
   @Permissions(PERMISSIONS.AP.INVOICE_VIEW)
   async listBills(@Req() req: Request) {
     return this.ap.listInvoices(req);
+  }
+
+  @Get('bills/:id/export')
+  @Permissions(PERMISSIONS.AP.INVOICE_EXPORT)
+  async exportBill(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Query() dto: ApBillExportDto,
+    @Res() res: Response,
+  ) {
+    const out = await this.ap.exportBill(req, id, dto);
+    res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.send(out.body);
   }
 }
