@@ -10,6 +10,7 @@ import { ImprestService } from './imprest.service';
 import { ImprestTypePoliciesController } from './type-policies.controller';
 import { ImprestFacilitiesController } from './facilities.controller';
 import { ImprestCasesController } from './cases.controller';
+import { ImprestSettlementLinesController } from './settlement-lines.controller';
 
 @Module({
   imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule, GlModule],
@@ -17,6 +18,7 @@ import { ImprestCasesController } from './cases.controller';
     ImprestTypePoliciesController,
     ImprestFacilitiesController,
     ImprestCasesController,
+    ImprestSettlementLinesController,
   ],
   providers: [ImprestService, JwtAuthGuard, PermissionsGuard],
 })

@@ -1291,6 +1291,22 @@ export class GlService {
     });
   }
 
+  async listEntities(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    return this.prisma.entity.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: [{ createdAt: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        jurisdiction: true,
+        baseCurrency: true,
+      },
+    });
+  }
+
   async listDepartments(req: Request, params?: { effectiveOn?: string }) {
     const tenant = req.tenant;
     if (!tenant) throw new BadRequestException('Missing tenant context');

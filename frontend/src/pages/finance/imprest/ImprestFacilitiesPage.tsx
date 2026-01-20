@@ -10,7 +10,7 @@ import { PageLayout } from '../../../components/PageLayout';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage, type ApiError } from '../../../services/api';
 import { listBankCashAccounts, type BankCashAccount } from '../../../services/bankAccounts';
-import { listDepartments, listGlAccounts, listLegalEntities, type DepartmentLookup, type GlAccountLookup, type LegalEntityLookup } from '../../../services/gl';
+import { listDepartments, listEntities, listGlAccounts, type DepartmentLookup, type EntityLookup, type GlAccountLookup } from '../../../services/gl';
 import { listSettingsUsers, type SettingsUser } from '../../../services/settings';
 import {
   createImprestFacility,
@@ -207,7 +207,7 @@ export function ImprestFacilitiesPage() {
   const [rows, setRows] = useState<ImprestFacility[]>([]);
   const [policies, setPolicies] = useState<ImprestTypePolicy[]>([]);
   const [users, setUsers] = useState<SettingsUser[]>([]);
-  const [entities, setEntities] = useState<LegalEntityLookup[]>([]);
+  const [entities, setEntities] = useState<EntityLookup[]>([]);
   const [departments, setDepartments] = useState<DepartmentLookup[]>([]);
   const [glAccounts, setGlAccounts] = useState<GlAccountLookup[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankCashAccount[]>([]);
@@ -279,7 +279,7 @@ export function ImprestFacilitiesPage() {
         listImprestFacilities(),
         listImprestTypePolicies(),
         listSettingsUsers(),
-        listLegalEntities(),
+        listEntities(),
         listDepartments(),
         listGlAccounts(),
         listBankCashAccounts(),
@@ -461,7 +461,12 @@ export function ImprestFacilitiesPage() {
       await refresh();
       closeForm();
     } catch (e) {
-      setFormError(getApiErrorMessage(e as ApiError, 'Failed to save facility'));
+      const msg = getApiErrorMessage(e as ApiError, '');
+      setFormError(
+        msg && msg.trim()
+          ? msg
+          : 'Unable to save facility. Please review the entered values and try again.',
+      );
     } finally {
       setSaving(false);
     }
@@ -492,7 +497,7 @@ export function ImprestFacilitiesPage() {
   }, [users]);
 
   const entityById = useMemo(() => {
-    const m = new Map<string, LegalEntityLookup>();
+    const m = new Map<string, EntityLookup>();
     for (const e of entities ?? []) m.set(e.id, e);
     return m;
   }, [entities]);
@@ -588,7 +593,7 @@ export function ImprestFacilitiesPage() {
                   </DataTable.Td>
                   <DataTable.Td>{tp?.name ?? r.typePolicyId}</DataTable.Td>
                   <DataTable.Td>{custodian?.email ?? r.custodianUserId}</DataTable.Td>
-                  <DataTable.Td>{le ? `${le.code} — ${le.name}` : r.entityId}</DataTable.Td>
+                  <DataTable.Td>{le ? le.name : r.entityId}</DataTable.Td>
                   <DataTable.Td>{dep ? `${dep.code} — ${dep.name}` : r.departmentId}</DataTable.Td>
                   <DataTable.Td>{r.currency}</DataTable.Td>
                   <DataTable.Td align="right">{r.approvedFloatLimit}</DataTable.Td>
@@ -683,7 +688,7 @@ export function ImprestFacilitiesPage() {
                 value={entityId}
                 onChange={setEntityId}
                 disabled={!canAccessForm}
-                options={asOptions(entities, (e) => `${e.code} — ${e.name}`)}
+                options={asOptions(entities, (e) => e.name)}
               />
             </Field>
 

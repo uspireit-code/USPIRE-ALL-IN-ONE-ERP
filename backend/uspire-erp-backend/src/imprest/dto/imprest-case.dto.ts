@@ -32,6 +32,38 @@ export class SubmitImprestCaseDto {
   notes?: string;
 }
 
+export class CreateImprestSettlementLineDto {
+  @IsIn(['EXPENSE', 'CASH_RETURN'] as const)
+  type!: 'EXPENSE' | 'CASH_RETURN';
+
+  @IsString()
+  description!: string;
+
+  @IsString()
+  amount!: string;
+
+  @IsDateString()
+  spentDate!: string;
+}
+
+export class UpdateImprestSettlementLineDto {
+  @IsOptional()
+  @IsIn(['EXPENSE', 'CASH_RETURN'] as const)
+  type?: 'EXPENSE' | 'CASH_RETURN';
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  amount?: string;
+
+  @IsOptional()
+  @IsDateString()
+  spentDate?: string;
+}
+
 export class ReviewImprestCaseDto {
   @IsOptional()
   @IsString()
@@ -71,6 +103,16 @@ export class LinkImprestEvidenceDto {
 export class IssueImprestCaseDto {
   @IsDateString()
   issueDate!: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class SettleImprestCaseDto {
+  @IsOptional()
+  @IsDateString()
+  settlementDate?: string;
 
   @IsOptional()
   @IsString()

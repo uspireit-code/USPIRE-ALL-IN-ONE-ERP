@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, IsUUID, IsIn } from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsUUID, IsIn, IsBoolean } from 'class-validator';
 
 export class CreateDepartmentDto {
   @IsString()
@@ -50,4 +50,30 @@ export class UpdateDepartmentDto {
 export class DepartmentIdParamDto {
   @IsUUID()
   id!: string;
+}
+
+export class CreateDepartmentMemberDto {
+  @IsUUID()
+  userId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveTo?: string;
+}
+
+export class UpdateDepartmentMemberStatusDto {
+  @IsBoolean()
+  isActive!: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveTo?: string;
 }

@@ -101,6 +101,7 @@ import { SettingsRolesPage } from './pages/settings/SettingsRolesPage';
 import { SettingsSystemPage } from './pages/settings/SettingsSystemPage';
 import { SettingsMasterDataPage } from './pages/settings/SettingsMasterDataPage';
 import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPage';
+import { SettingsDepartmentMembersPage } from './pages/settings/SettingsDepartmentMembersPage';
 import { SettingsProjectsPage } from './pages/settings/SettingsProjectsPage';
 import { SettingsFundsPage } from './pages/settings/SettingsFundsPage';
 import { SettingsInvoiceCategoriesPage } from './pages/settings/SettingsInvoiceCategoriesPage';
@@ -613,6 +614,16 @@ export default function App() {
                 element={
                   <PermissionOnlyRoute permission={PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW}>
                     <SettingsDepartmentsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="settings/master-data/departments/:id/members"
+                element={
+                  <PermissionOnlyRoute
+                    permission={PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE}
+                  >
+                    <SettingsDepartmentMembersPage />
                   </PermissionOnlyRoute>
                 }
               />

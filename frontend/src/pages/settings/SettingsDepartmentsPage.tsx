@@ -16,6 +16,7 @@ export function SettingsDepartmentsPage() {
   const canView = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW);
   const canCreate = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.CREATE);
   const canEdit = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.EDIT);
+  const canManageMembers = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE);
 
   const [rows, setRows] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +154,11 @@ export function SettingsDepartmentsPage() {
                 {String(d.effectiveFrom).slice(0, 10)} – {d.effectiveTo ? String(d.effectiveTo).slice(0, 10) : 'open'}
               </td>
               <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                {canManageMembers ? (
+                  <Link to={`/settings/master-data/departments/${d.id}/members`} style={{ marginRight: 10 }}>
+                    Members
+                  </Link>
+                ) : null}
                 {canEdit ? (
                   <button type="button" onClick={() => openEdit(d)} disabled={saving}>
                     Edit

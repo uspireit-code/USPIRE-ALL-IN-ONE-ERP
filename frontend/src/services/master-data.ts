@@ -15,6 +15,17 @@ export type Department = {
   updatedAt: string;
 };
 
+export type DepartmentMember = {
+  id: string;
+  userId: string;
+  status: MasterStatus;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: { id: string; name: string; email: string; isActive: boolean };
+};
+
 export type Project = {
   id: string;
   code: string;
@@ -61,6 +72,24 @@ export async function createDepartment(params: {
 
 export async function updateDepartment(id: string, params: Partial<Omit<Department, 'id' | 'createdAt' | 'updatedAt'>> & { effectiveFrom?: string; effectiveTo?: string | null }) {
   return apiFetch<Department>(`/master-data/departments/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function listDepartmentMembers(departmentId: string) {
+  return apiFetch<DepartmentMember[]>(`/master-data/departments/${departmentId}/members`, { method: 'GET' });
+}
+
+export async function addDepartmentMember(departmentId: string, params: { userId: string; effectiveFrom?: string; effectiveTo?: string }) {
+  return apiFetch<{ id: string }>(`/master-data/departments/${departmentId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function updateDepartmentMemberStatus(departmentId: string, userId: string, params: { isActive: boolean; effectiveFrom?: string; effectiveTo?: string | null }) {
+  return apiFetch<{ id: string }>(`/master-data/departments/${departmentId}/members/${userId}/status`, {
     method: 'PATCH',
     body: JSON.stringify(params),
   });

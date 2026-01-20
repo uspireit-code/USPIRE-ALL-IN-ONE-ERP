@@ -90,6 +90,13 @@ export type FundLookup = {
   status?: 'ACTIVE' | 'INACTIVE';
 };
 
+export type EntityLookup = {
+  id: string;
+  name: string;
+  jurisdiction: string;
+  baseCurrency: string;
+};
+
 export type LegalEntityLookup = {
   id: string;
   code: string;
@@ -295,6 +302,10 @@ export async function listLegalEntities(params?: { effectiveOn?: string }) {
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return apiFetch<LegalEntityLookup[]>(`/gl/legal-entities${suffix}`, { method: 'GET' });
+}
+
+export async function listEntities() {
+  return apiFetch<EntityLookup[]>('/gl/entities', { method: 'GET' });
 }
 
 export async function listDepartments(params?: { effectiveOn?: string }) {

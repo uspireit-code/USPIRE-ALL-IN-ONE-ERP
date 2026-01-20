@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { Permissions } from '../rbac/permissions.decorator';
@@ -7,11 +7,13 @@ import { PERMISSIONS } from '../rbac/permission-catalog';
 import { ImprestService } from './imprest.service';
 import {
   ApproveImprestCaseDto,
+  CreateImprestSettlementLineDto,
   CreateImprestCaseDto,
   IssueImprestCaseDto,
   LinkImprestEvidenceDto,
   RejectImprestCaseDto,
   ReviewImprestCaseDto,
+  SettleImprestCaseDto,
   SubmitImprestCaseDto,
 } from './dto/imprest-case.dto';
 
@@ -96,5 +98,31 @@ export class ImprestCasesController {
     @Body() dto: IssueImprestCaseDto,
   ) {
     return this.imprest.issueCase(req, id, dto);
+  }
+
+  @Post(':id/settle')
+  @Permissions(PERMISSIONS.IMPREST.CASE_SETTLE)
+  async settle(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: SettleImprestCaseDto,
+  ) {
+    return this.imprest.settleCase(req, id, dto);
+  }
+
+  @Post(':id/settlement-lines')
+  @Permissions(PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT)
+  async createSettlementLine(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: CreateImprestSettlementLineDto,
+  ) {
+    return this.imprest.createSettlementLine(req, id, dto);
+  }
+
+  @Get(':id/settlement-summary')
+  @Permissions(PERMISSIONS.IMPREST.CASE_VIEW)
+  async settlementSummary(@Req() req: Request, @Param('id') id: string) {
+    return this.imprest.getSettlementSummary(req, id);
   }
 }

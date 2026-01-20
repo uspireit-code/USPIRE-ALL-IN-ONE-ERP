@@ -73,11 +73,11 @@ DataTable.Th = function DataTableTh(props: { children: React.ReactNode; align?: 
     <th
       style={{
         textAlign: props.align ?? 'left',
-        padding: `${tokens.spacing.x2 - 2}px ${tokens.spacing.x2 - 2}px`,
+        padding: `${tokens.spacing.x2}px ${tokens.spacing.x2}px`,
         fontSize: 12,
-        fontWeight: 750,
+        fontWeight: 600,
         letterSpacing: 0.2,
-        color: tokens.colors.text.primary,
+        color: tokens.colors.text.secondary,
         borderBottom: `1px solid ${tokens.colors.border.subtle}`,
         background: tokens.colors.surface.subtle,
         whiteSpace: 'nowrap',
@@ -94,7 +94,9 @@ DataTable.Td = function DataTableTd(props: { children: React.ReactNode; align?: 
     <td
       style={{
         textAlign: props.align ?? 'left',
-        padding: `${tokens.spacing.x2 - 2}px ${tokens.spacing.x2 - 2}px`,
+        padding: `${tokens.spacing.x2}px ${tokens.spacing.x2}px`,
+        fontSize: 13,
+        fontWeight: 400,
         borderBottom: `1px solid ${tokens.colors.border.subtle}`,
         verticalAlign: 'middle',
         color: tokens.colors.text.primary,
@@ -111,7 +113,7 @@ DataTable.Empty = function DataTableEmpty(props: { colSpan: number; title: strin
     <tr>
       <td colSpan={props.colSpan} style={{ padding: '20px 12px' }}>
         <div style={{ padding: tokens.spacing.x2, borderRadius: tokens.radius.md, background: tokens.colors.surface.subtle, border: `1px solid ${tokens.colors.border.subtle}` }}>
-          <div style={{ fontWeight: 750, color: tokens.colors.text.primary }}>{props.title}</div>
+          <div style={{ fontWeight: 600, color: tokens.colors.text.primary }}>{props.title}</div>
           {props.action ? <div style={{ marginTop: 8 }}>{props.action}</div> : null}
         </div>
       </td>

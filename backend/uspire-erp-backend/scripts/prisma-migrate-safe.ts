@@ -23,7 +23,8 @@ function getLatestMigrationName(migrationsDir: string): string | null {
   const dirs = fs
     .readdirSync(migrationsDir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
-    .map((d) => d.name);
+    .map((d) => d.name)
+    .filter((name) => fs.existsSync(path.join(migrationsDir, name, 'migration.sql')));
   if (dirs.length === 0) return null;
 
   dirs.sort((a, b) => a.localeCompare(b));

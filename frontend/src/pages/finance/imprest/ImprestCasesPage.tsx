@@ -31,40 +31,26 @@ function formatDateTime(value: string) {
 
 function StatusPill(props: { state: string }) {
   const s = (props.state ?? '').toUpperCase();
-  const isDraft = s === 'DRAFT';
-  const isSubmitted = s === 'SUBMITTED' || s === 'IN_REVIEW';
-  const isApproved = s === 'APPROVED' || s === 'ISSUANCE_PENDING_EVIDENCE';
   const isIssued = s === 'ISSUED';
+  const isBlocked = s === 'REJECTED';
 
   const bg = isIssued
-    ? 'rgba(16,185,129,0.12)'
-    : isApproved
-      ? 'rgba(59,130,246,0.12)'
-      : isSubmitted
-        ? 'rgba(237,186,53,0.14)'
-        : isDraft
-          ? 'rgba(148,163,184,0.18)'
-          : 'rgba(239,68,68,0.10)';
+    ? tokens.colors.status.successBg
+    : isBlocked
+      ? tokens.colors.status.errorBg
+      : tokens.colors.status.infoBg;
 
   const border = isIssued
-    ? 'rgba(16,185,129,0.25)'
-    : isApproved
-      ? 'rgba(59,130,246,0.22)'
-      : isSubmitted
-        ? 'rgba(237,186,53,0.32)'
-        : isDraft
-          ? 'rgba(148,163,184,0.28)'
-          : 'rgba(239,68,68,0.22)';
+    ? tokens.colors.status.successBorder
+    : isBlocked
+      ? tokens.colors.status.errorBorder
+      : tokens.colors.status.infoBorder;
 
   const text = isIssued
-    ? 'rgba(16,185,129,0.95)'
-    : isApproved
-      ? 'rgba(59,130,246,0.95)'
-      : isSubmitted
-        ? 'rgba(154,52,18,0.95)'
-        : isDraft
-          ? 'rgba(71,85,105,0.95)'
-          : 'rgba(239,68,68,0.85)';
+    ? 'rgba(16,185,129,0.85)'
+    : isBlocked
+      ? 'rgba(239,68,68,0.75)'
+      : tokens.colors.text.secondary;
 
   return (
     <span
@@ -76,7 +62,7 @@ function StatusPill(props: { state: string }) {
         background: bg,
         border: `1px solid ${border}`,
         fontSize: 12,
-        fontWeight: 750,
+        fontWeight: 600,
         color: text,
         whiteSpace: 'nowrap',
       }}
@@ -135,9 +121,9 @@ function ModalShell(props: {
           }}
         >
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: tokens.colors.text.primary }}>{props.title}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: tokens.colors.text.primary }}>{props.title}</div>
             {props.subtitle ? (
-              <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(11,12,30,0.62)' }}>{props.subtitle}</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: tokens.colors.text.muted }}>{props.subtitle}</div>
             ) : null}
           </div>
           <Button variant="ghost" size="sm" onClick={props.onClose}>
@@ -201,7 +187,7 @@ function Select(props: {
 function Field(props: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 750, color: tokens.colors.text.primary }}>{props.label}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.secondary }}>{props.label}</div>
       {props.hint ? <div style={{ marginTop: 4, fontSize: 12, color: tokens.colors.text.secondary }}>{props.hint}</div> : null}
       <div style={{ marginTop: 6 }}>{props.children}</div>
     </div>
@@ -219,7 +205,7 @@ function CaseTab(props: { label: string; active: boolean; onClick: () => void; c
         borderRadius: 999,
         padding: '8px 12px',
         fontSize: 13,
-        fontWeight: 750,
+        fontWeight: 600,
         color: tokens.colors.text.primary,
         cursor: 'pointer',
         display: 'inline-flex',
@@ -239,7 +225,7 @@ function CaseTab(props: { label: string; active: boolean; onClick: () => void; c
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 12,
-            fontWeight: 800,
+            fontWeight: 600,
             background: 'rgba(11,12,30,0.06)',
             border: '1px solid rgba(11,12,30,0.08)',
             color: 'rgba(11,12,30,0.7)',
@@ -484,32 +470,32 @@ export function ImprestCasesPage() {
                   onClick={() => navigate(`/finance/imprest/cases/${encodeURIComponent(c.id)}`)}
                 >
                   <DataTable.Td>
-                    <div style={{ fontWeight: 800 }}>{c.reference}</div>
-                    <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.secondary }}>{c.id}</div>
+                    <div style={{ fontWeight: 500 }}>{c.reference}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, color: tokens.colors.text.muted }}>{c.id}</div>
                   </DataTable.Td>
                   <DataTable.Td>
-                    <div style={{ fontWeight: 750 }}>{f?.reference ?? c.facilityId}</div>
-                    <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.secondary }}>{f?.currency ?? ''}</div>
+                    <div style={{ fontWeight: 500 }}>{f?.reference ?? c.facilityId}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, color: tokens.colors.text.muted }}>{f?.currency ?? ''}</div>
                   </DataTable.Td>
                   <DataTable.Td>
-                    <div style={{ fontWeight: 750 }}>{c.purpose}</div>
-                    <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.secondary, maxWidth: 440, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontWeight: 500 }}>{c.purpose}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, color: tokens.colors.text.muted, maxWidth: 440, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {c.justification}
                     </div>
                   </DataTable.Td>
                   <DataTable.Td>
-                    <div style={{ fontWeight: 750 }}>{formatDate(c.periodFrom)} → {formatDate(c.periodTo)}</div>
-                    <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.secondary }}>Expected settle: {formatDate(c.expectedSettlementDate)}</div>
+                    <div style={{ fontWeight: 500 }}>{formatDate(c.periodFrom)} → {formatDate(c.periodTo)}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, color: tokens.colors.text.muted }}>Expected settle: {formatDate(c.expectedSettlementDate)}</div>
                   </DataTable.Td>
                   <DataTable.Td align="right">
-                    <div style={{ fontWeight: 800 }}>{c.requestedAmount}</div>
-                    <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.secondary }}>{c.currency}</div>
+                    <div style={{ fontWeight: 500 }}>{c.requestedAmount}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, color: tokens.colors.text.muted }}>{c.currency}</div>
                   </DataTable.Td>
                   <DataTable.Td>
                     <StatusPill state={c.state} />
                   </DataTable.Td>
                   <DataTable.Td>
-                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{formatDateTime(c.updatedAt)}</div>
+                    <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>{formatDateTime(c.updatedAt)}</div>
                   </DataTable.Td>
                 </DataTable.Row>
               );

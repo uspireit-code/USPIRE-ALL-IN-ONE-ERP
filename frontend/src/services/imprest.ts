@@ -166,6 +166,32 @@ export type ImprestCaseEvidenceLink = {
   evidence?: any;
 };
 
+export type ImprestSettlementLineType = 'EXPENSE' | 'CASH_RETURN';
+
+export type ImprestSettlementLine = {
+  id: string;
+  tenantId: string;
+  caseId: string;
+  type: ImprestSettlementLineType;
+  description: string;
+  amount: string;
+  spentDate: string;
+  createdById: string;
+  createdAt: string;
+};
+
+export type ImprestSettlementSummary = {
+  caseId: string;
+  state: string;
+  currency: string;
+  issuedAmount: string;
+  expensesTotal: string;
+  cashReturnedTotal: string;
+  totalAccounted: string;
+  difference: string;
+  linesCount: number;
+};
+
 export type ImprestCase = {
   id: string;
   tenantId: string;
@@ -188,6 +214,7 @@ export type ImprestCase = {
   updatedAt: string;
   transitions?: ImprestCaseTransition[];
   evidence?: ImprestCaseEvidenceLink[];
+  settlementLines?: ImprestSettlementLine[];
   facility?: any;
 };
 
@@ -254,5 +281,45 @@ export async function issueImprestCase(id: string, params: { issueDate: string; 
   return apiFetch<any>(`/imprest/cases/${encodeURIComponent(id)}/issue`, {
     method: 'POST',
     body: JSON.stringify(params),
+  });
+}
+
+export async function settleImprestCase(id: string) {
+  return apiFetch<any>(`/imprest/cases/${encodeURIComponent(id)}/settle`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function getImprestSettlementSummary(caseId: string) {
+  return apiFetch<ImprestSettlementSummary>(
+    `/imprest/cases/${encodeURIComponent(caseId)}/settlement-summary`,
+    { method: 'GET' },
+  );
+}
+
+export async function createImprestSettlementLine(
+  caseId: string,
+  params: { type: ImprestSettlementLineType; description: string; amount: string; spentDate: string },
+) {
+  return apiFetch<ImprestSettlementLine>(`/imprest/cases/${encodeURIComponent(caseId)}/settlement-lines`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function updateImprestSettlementLine(
+  id: string,
+  params: Partial<{ type: ImprestSettlementLineType; description: string; amount: string; spentDate: string }>,
+) {
+  return apiFetch<ImprestSettlementLine>(`/imprest/settlement-lines/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function deleteImprestSettlementLine(id: string) {
+  return apiFetch<{ ok: true }>(`/imprest/settlement-lines/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
   });
 }

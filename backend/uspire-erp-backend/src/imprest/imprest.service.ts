@@ -27,11 +27,14 @@ import {
 import {
   ApproveImprestCaseDto,
   CreateImprestCaseDto,
+  CreateImprestSettlementLineDto,
   IssueImprestCaseDto,
   LinkImprestEvidenceDto,
   RejectImprestCaseDto,
   ReviewImprestCaseDto,
+  SettleImprestCaseDto,
   SubmitImprestCaseDto,
+  UpdateImprestSettlementLineDto,
 } from './dto/imprest-case.dto';
 
 @Injectable()
@@ -40,6 +43,28 @@ export class ImprestService {
   private readonly JOURNAL_NUMBER_SEQUENCE_NAME = 'JOURNAL_ENTRY';
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private async hasActiveDepartmentMembership(params: {
+    tenantId: string;
+    departmentId: string;
+    userId: string;
+    at: Date;
+  }): Promise<boolean> {
+    const at = params.at;
+    const row = await (this.prisma as any).departmentMembership.findFirst({
+      where: {
+        tenantId: params.tenantId,
+        departmentId: params.departmentId,
+        userId: params.userId,
+        status: 'ACTIVE',
+        effectiveFrom: { lte: at },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
+      },
+      select: { id: true },
+    });
+
+    return Boolean(row);
+  }
 
   private async getUserAuthz(req: Request): Promise<{
     tenantId: string;
@@ -227,11 +252,152 @@ export class ImprestService {
     const authz = await this.getUserAuthz(req);
     requirePermission(authz, PERMISSIONS.IMPREST.FACILITY_CREATE);
 
+    const debugRefIds = {
+      tenantId: authz.tenantId,
+      typePolicyId: dto.typePolicyId,
+      entityId: dto.entityId,
+      departmentId: dto.departmentId,
+      custodianUserId: dto.custodianUserId,
+      fundingSourceType: dto.fundingSourceType,
+      bankAccountId: dto.bankAccountId ?? null,
+      controlGlAccountId: dto.controlGlAccountId,
+      projectId: dto.projectId ?? null,
+      fundId: dto.fundId ?? null,
+    };
+
+    const validFrom = new Date(dto.validFrom);
+    const validTo = new Date(dto.validTo);
+    if (Number.isNaN(validFrom.getTime()) || Number.isNaN(validTo.getTime())) {
+      throw new BadRequestException('Valid from/to dates are invalid.');
+    }
+
+    const policy = await this.prisma.imprestTypePolicy.findFirst({
+      where: { id: dto.typePolicyId, tenantId: authz.tenantId },
+      select: { id: true, isActive: true, effectiveFrom: true, effectiveTo: true },
+    });
+    if (!policy) {
+      throw new BadRequestException(
+        'One or more selected references (entity, department, custodian, bank account, or control account) are invalid.',
+      );
+    }
+
+    const policyEffectiveFrom = new Date(policy.effectiveFrom);
+    const policyEffectiveTo = policy.effectiveTo ? new Date(policy.effectiveTo) : null;
+    const policyCoversPeriod =
+      policy.isActive &&
+      policyEffectiveFrom.getTime() <= validFrom.getTime() &&
+      (policyEffectiveTo === null || policyEffectiveTo.getTime() >= validTo.getTime());
+    if (!policyCoversPeriod) {
+      throw new BadRequestException(
+        'The selected imprest type policy is not active for the chosen validity period. Please select an active policy or adjust the dates.',
+      );
+    }
+
+    // Explicit FK validations (do not rely on P2003 to diagnose failures)
+    const entity = await this.prisma.entity.findFirst({
+      where: { id: dto.entityId, tenantId: authz.tenantId },
+      select: { id: true },
+    });
+    if (!entity) {
+      // eslint-disable-next-line no-console
+      console.error('[ImprestService.createFacility] validation failed: entity', debugRefIds);
+      throw new BadRequestException('Selected entity does not exist.');
+    }
+
+    const department = await this.prisma.department.findFirst({
+      where: {
+        id: dto.departmentId,
+        tenantId: authz.tenantId,
+        isActive: true,
+        status: 'ACTIVE' as any,
+      },
+      select: { id: true },
+    });
+    if (!department) {
+      // eslint-disable-next-line no-console
+      console.error('[ImprestService.createFacility] validation failed: department', debugRefIds);
+      throw new BadRequestException('Selected department does not exist or is inactive.');
+    }
+
+    const custodianUser = await this.prisma.user.findFirst({
+      where: { id: dto.custodianUserId, tenantId: authz.tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!custodianUser) {
+      // eslint-disable-next-line no-console
+      console.error('[ImprestService.createFacility] validation failed: custodian user', debugRefIds);
+      throw new BadRequestException('Selected custodian does not exist or is inactive.');
+    }
+
+    const custodianAssigned = await this.hasActiveDepartmentMembership({
+      tenantId: authz.tenantId,
+      departmentId: dto.departmentId,
+      userId: dto.custodianUserId,
+      at: validFrom,
+    });
+    if (!custodianAssigned) {
+      throw new BadRequestException(
+        'The selected custodian is not assigned to the chosen department.',
+      );
+    }
+
     if (dto.fundingSourceType === 'BANK' && !dto.bankAccountId) {
-      throw new BadRequestException({
-        code: 'VALIDATION_ERROR',
-        message: 'Funding source is Bank. Please select a valid Bank Account.',
+      throw new BadRequestException(
+        'A bank account must be selected when the funding source is set to Bank.',
+      );
+    }
+
+    if (dto.fundingSourceType === 'BANK' && dto.bankAccountId) {
+      const bank = await this.prisma.bankAccount.findFirst({
+        where: { id: dto.bankAccountId, tenantId: authz.tenantId, status: 'ACTIVE' as any },
+        select: { id: true, currency: true },
       });
+      if (!bank) {
+        // eslint-disable-next-line no-console
+        console.error('[ImprestService.createFacility] validation failed: bank account', debugRefIds);
+        throw new BadRequestException(
+          'Selected bank account does not exist or is inactive.',
+        );
+      }
+      const bankCurrency = String(bank.currency ?? '').trim().toUpperCase();
+      const facilityCurrency = String(dto.currency ?? '').trim().toUpperCase();
+      if (bankCurrency && facilityCurrency && bankCurrency !== facilityCurrency) {
+        throw new BadRequestException(
+          'The selected bank account currency does not match the facility currency.',
+        );
+      }
+    }
+
+    const control = await this.prisma.account.findFirst({
+      where: { id: dto.controlGlAccountId, tenantId: authz.tenantId, isActive: true },
+      select: { id: true, type: true },
+    });
+    if (!control) {
+      // eslint-disable-next-line no-console
+      console.error('[ImprestService.createFacility] validation failed: control GL', debugRefIds);
+      throw new BadRequestException('Selected control GL account does not exist or is inactive.');
+    }
+    if (String(control.type ?? '').toUpperCase() !== 'ASSET') {
+      throw new BadRequestException(
+        'The imprest control account must be an Asset account.',
+      );
+    }
+
+    const overlap = await this.prisma.imprestFacility.findFirst({
+      where: {
+        tenantId: authz.tenantId,
+        typePolicyId: dto.typePolicyId,
+        entityId: dto.entityId,
+        departmentId: dto.departmentId,
+        validFrom: { lte: validTo },
+        validTo: { gte: validFrom },
+      },
+      select: { id: true },
+    });
+    if (overlap) {
+      throw new BadRequestException(
+        'An imprest facility already exists for this policy, entity, department, and validity period.',
+      );
     }
 
     let created: any;
@@ -252,25 +418,35 @@ export class ImprestService {
           bankAccountId: dto.bankAccountId ?? null,
           riskRating: dto.riskRating as any,
           controlGlAccountId: dto.controlGlAccountId,
-          validFrom: new Date(dto.validFrom),
-          validTo: new Date(dto.validTo),
+          validFrom,
+          validTo,
           status: 'ACTIVE' as any,
           createdById: authz.id,
         },
       });
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[ImprestService.createFacility] prisma error', {
+        refIds: debugRefIds,
+        error: err,
+      });
+
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2002') {
+          throw new BadRequestException(
+            'An imprest facility already exists for this policy, entity, department, and validity period.',
+          );
+        }
+      }
+
       const mapped = mapImprestValidationError(err);
       if (mapped) {
         throw new BadRequestException(mapped);
       }
-      const generic = mapGenericPrismaValidationError(
-        err,
-        'Unable to save facility. Please review the entered values and try again.',
+
+      throw new BadRequestException(
+        'One or more selected references (entity, department, custodian, bank account, or control account) are invalid.',
       );
-      if (generic) {
-        throw new BadRequestException(generic);
-      }
-      throw err;
     }
 
     await writeAuditEventWithPrisma(
@@ -362,10 +538,168 @@ export class ImprestService {
     requirePermission(authz, PERMISSIONS.IMPREST.CASE_VIEW);
     const row = await this.prisma.imprestCase.findFirst({
       where: { id, tenantId: authz.tenantId },
-      include: { evidence: { include: { evidence: true } }, transitions: true, facility: true },
+      include: {
+        evidence: { include: { evidence: true } },
+        transitions: true,
+        facility: true,
+        settlementLines: { orderBy: { createdAt: 'asc' } },
+      },
     });
     if (!row) throw new NotFoundException('Imprest case not found');
     return row;
+  }
+
+  private computeSettlementSummary(args: {
+    requestedAmount: Prisma.Decimal;
+    lines: Array<{ type: any; amount: Prisma.Decimal }>;
+  }) {
+    let expenses = new Prisma.Decimal(0);
+    let cashReturned = new Prisma.Decimal(0);
+
+    for (const l of args.lines) {
+      const t = String(l.type ?? '').toUpperCase();
+      if (t === 'EXPENSE') expenses = expenses.plus(l.amount);
+      else if (t === 'CASH_RETURN') cashReturned = cashReturned.plus(l.amount);
+    }
+
+    const totalAccounted = expenses.plus(cashReturned);
+    const difference = args.requestedAmount.minus(totalAccounted);
+
+    return { expenses, cashReturned, totalAccounted, difference };
+  }
+
+  async getSettlementSummary(req: Request, id: string) {
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, PERMISSIONS.IMPREST.CASE_VIEW);
+
+    const row = await this.prisma.imprestCase.findFirst({
+      where: { id, tenantId: authz.tenantId },
+      select: {
+        id: true,
+        state: true,
+        currency: true,
+        requestedAmount: true,
+        settlementLines: { select: { type: true, amount: true } },
+      },
+    });
+    if (!row) throw new NotFoundException('Imprest case not found');
+
+    const summary = this.computeSettlementSummary({
+      requestedAmount: row.requestedAmount as any,
+      lines: (row.settlementLines as any) ?? [],
+    });
+
+    return {
+      caseId: row.id,
+      state: row.state,
+      currency: row.currency,
+      issuedAmount: row.requestedAmount,
+      expensesTotal: summary.expenses,
+      cashReturnedTotal: summary.cashReturned,
+      totalAccounted: summary.totalAccounted,
+      difference: summary.difference,
+      linesCount: (row.settlementLines ?? []).length,
+    };
+  }
+
+  async createSettlementLine(req: Request, caseId: string, dto: CreateImprestSettlementLineDto) {
+    const { user } = this.getTenantAndUser(req);
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT);
+
+    const row = await this.prisma.imprestCase.findFirst({
+      where: { id: caseId, tenantId: authz.tenantId },
+      select: { id: true, state: true },
+    });
+    if (!row) throw new NotFoundException('Imprest case not found');
+
+    if ((row.state as any) === ('SETTLED' as any)) {
+      throw new BadRequestException('Settlement lines cannot be modified after the case is settled.');
+    }
+
+    if ((row.state as any) !== ('ISSUED' as any)) {
+      throw new BadRequestException('Settlement lines can only be added when the case is ISSUED.');
+    }
+
+    const spentDate = new Date(dto.spentDate);
+    if (Number.isNaN(spentDate.getTime())) throw new BadRequestException('Invalid spentDate');
+
+    const amount = new Prisma.Decimal(dto.amount);
+    if (amount.lte(0)) throw new BadRequestException('Amount must be greater than 0');
+
+    return this.prisma.imprestSettlementLine.create({
+      data: {
+        tenantId: authz.tenantId,
+        caseId: row.id,
+        type: dto.type as any,
+        description: dto.description.trim(),
+        amount,
+        spentDate,
+        createdById: authz.id,
+      } as any,
+    });
+  }
+
+  async updateSettlementLine(req: Request, id: string, dto: UpdateImprestSettlementLineDto) {
+    const { user } = this.getTenantAndUser(req);
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT);
+
+    const line = await this.prisma.imprestSettlementLine.findFirst({
+      where: { id, tenantId: authz.tenantId },
+      include: { imprestCase: { select: { id: true, state: true } } },
+    });
+    if (!line) throw new NotFoundException('Settlement line not found');
+
+    if ((line.imprestCase?.state as any) === ('SETTLED' as any)) {
+      throw new BadRequestException('Settlement lines cannot be modified after the case is settled.');
+    }
+
+    if ((line.imprestCase?.state as any) !== ('ISSUED' as any)) {
+      throw new BadRequestException('Settlement lines can only be edited when the case is ISSUED.');
+    }
+
+    const data: any = {
+      type: dto.type !== undefined ? (dto.type as any) : undefined,
+      description: dto.description !== undefined ? dto.description.trim() : undefined,
+    };
+
+    if (dto.spentDate !== undefined) {
+      const spentDate = new Date(dto.spentDate);
+      if (Number.isNaN(spentDate.getTime())) throw new BadRequestException('Invalid spentDate');
+      data.spentDate = spentDate;
+    }
+
+    if (dto.amount !== undefined) {
+      const amount = new Prisma.Decimal(dto.amount);
+      if (amount.lte(0)) throw new BadRequestException('Amount must be greater than 0');
+      data.amount = amount;
+    }
+
+    return this.prisma.imprestSettlementLine.update({ where: { id: line.id }, data });
+  }
+
+  async deleteSettlementLine(req: Request, id: string) {
+    const { user } = this.getTenantAndUser(req);
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT);
+
+    const line = await this.prisma.imprestSettlementLine.findFirst({
+      where: { id, tenantId: authz.tenantId },
+      include: { imprestCase: { select: { id: true, state: true } } },
+    });
+    if (!line) throw new NotFoundException('Settlement line not found');
+
+    if ((line.imprestCase?.state as any) === ('SETTLED' as any)) {
+      throw new BadRequestException('Settlement lines cannot be modified after the case is settled.');
+    }
+
+    if ((line.imprestCase?.state as any) !== ('ISSUED' as any)) {
+      throw new BadRequestException('Settlement lines can only be deleted when the case is ISSUED.');
+    }
+
+    await this.prisma.imprestSettlementLine.delete({ where: { id: line.id } });
+    return { ok: true };
   }
 
   private async nextImprestCaseRef(tx: PrismaClient, tenantId: string) {
@@ -403,11 +737,25 @@ export class ImprestService {
       throw new ForbiddenException('Imprest facility is not ACTIVE');
     }
 
+    const policy = await this.prisma.imprestTypePolicy.findFirst({
+      where: { id: (facility as any).typePolicyId, tenantId: authz.tenantId },
+      select: { id: true, name: true, defaultFloatLimit: true },
+    });
+    if (!policy) throw new NotFoundException('Imprest type policy not found');
+
+    const requestedAmount = new Prisma.Decimal(dto.requestedAmount);
+    const defaultFloatLimit = policy.defaultFloatLimit as any as Prisma.Decimal;
+    if (requestedAmount.gt(defaultFloatLimit)) {
+      throw new BadRequestException(
+        `The requested amount exceeds the maximum allowed for this imprest type. Requested: ${requestedAmount.toFixed()} ${dto.currency}. Limit: ${defaultFloatLimit.toFixed()} ${dto.currency}.`,
+      );
+    }
+
     const unsettled = await this.prisma.imprestCase.count({
       where: {
         tenantId: authz.tenantId,
         facilityId: facility.id,
-        state: { in: ['ISSUED', 'RETIREMENT_SUBMITTED', 'RETIREMENT_REVIEW'] as any },
+        state: { in: ['ISSUED'] as any },
       },
     });
     if (unsettled > 0) {
@@ -430,7 +778,7 @@ export class ImprestService {
           periodFrom: new Date(dto.periodFrom),
           periodTo: new Date(dto.periodTo),
           expectedSettlementDate: new Date(dto.expectedSettlementDate),
-          requestedAmount: new Prisma.Decimal(dto.requestedAmount),
+          requestedAmount,
           currency: dto.currency,
           state: 'DRAFT',
           createdById: authz.id,
@@ -894,6 +1242,22 @@ export class ImprestService {
     const facility = row.facility;
     if (!facility) throw new NotFoundException('Imprest facility not found');
 
+    const outstandingAgg = await this.prisma.imprestCase.aggregate({
+      where: {
+        tenantId: authz.tenantId,
+        facilityId: facility.id,
+        state: 'ISSUED' as any,
+      },
+      _sum: { requestedAmount: true },
+    });
+
+    const outstandingIssued = (outstandingAgg._sum.requestedAmount ?? new Prisma.Decimal(0)) as any as Prisma.Decimal;
+    const projectedOutstanding = outstandingIssued.plus(row.requestedAmount as any);
+    const approvedFloatLimit = facility.approvedFloatLimit as any as Prisma.Decimal;
+    if (projectedOutstanding.gt(approvedFloatLimit)) {
+      throw new BadRequestException('Issuing this imprest would exceed the facility’s approved float limit.');
+    }
+
     if (facility.fundingSourceType === ('BANK' as any) && !facility.bankAccountId) {
       throw new BadRequestException('Facility fundingSourceType=BANK but bankAccountId is missing');
     }
@@ -964,5 +1328,93 @@ export class ImprestService {
     );
 
     return { case: updated, journal };
+  }
+
+  async settleCase(req: Request, id: string, dto: SettleImprestCaseDto) {
+    const { user } = this.getTenantAndUser(req);
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, PERMISSIONS.IMPREST.CASE_SETTLE);
+
+    const row = await this.prisma.imprestCase.findFirst({
+      where: { id, tenantId: authz.tenantId },
+      select: {
+        id: true,
+        tenantId: true,
+        state: true,
+        issuedJournalId: true,
+        requestedAmount: true,
+        settlementLines: { select: { type: true, amount: true } },
+      },
+    });
+    if (!row) throw new NotFoundException('Imprest case not found');
+
+    if ((row.state as any) === ('SETTLED' as any)) {
+      throw new BadRequestException('This imprest case is already settled.');
+    }
+
+    if ((row.state as any) !== ('ISSUED' as any)) {
+      throw new BadRequestException('Only ISSUED imprest cases can be settled.');
+    }
+
+    if (!row.issuedJournalId) {
+      throw new BadRequestException('Cannot settle imprest case: issuance journal is missing.');
+    }
+
+    const lines = (row.settlementLines as any) ?? [];
+    if (lines.length === 0) {
+      throw new BadRequestException('You must add at least one settlement line before settling this imprest.');
+    }
+
+    const summary = this.computeSettlementSummary({
+      requestedAmount: row.requestedAmount as any,
+      lines,
+    });
+
+    if (!summary.difference.equals(0)) {
+      throw new BadRequestException(
+        'Issued amount must equal total expenses plus cash returned before this imprest can be settled.',
+      );
+    }
+
+    const settlementDate = dto.settlementDate ? new Date(dto.settlementDate) : new Date();
+    if (Number.isNaN(settlementDate.getTime())) {
+      throw new BadRequestException('Invalid settlementDate');
+    }
+
+    const updated = await this.prisma.imprestCase.update({
+      where: { id: row.id },
+      data: {
+        state: 'SETTLED' as any,
+        settlementDate,
+      },
+    });
+
+    await this.logTransition({
+      tenantId: authz.tenantId,
+      caseId: row.id,
+      fromState: row.state,
+      toState: 'SETTLED',
+      actorUserId: authz.id,
+      notes: dto.notes ?? null,
+      metadata: { settlementDate: settlementDate.toISOString() },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.IMPREST_CASE_SETTLED,
+        entityType: AuditEntityType.IMPREST_CASE,
+        entityId: row.id,
+        actorUserId: authz.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: PERMISSIONS.IMPREST.CASE_SETTLE,
+        permissionUsed: PERMISSIONS.IMPREST.CASE_SETTLE,
+        metadata: { settlementDate: settlementDate.toISOString() },
+      },
+      this.prisma,
+    );
+
+    return updated;
   }
 }

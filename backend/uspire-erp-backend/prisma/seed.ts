@@ -154,6 +154,8 @@ async function main() {
     { code: PERMISSIONS.ROLE.VIEW, description: 'View roles' },
     { code: PERMISSIONS.ROLE.ASSIGN, description: 'Assign permissions to roles' },
 
+    { code: PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE, description: 'Manage department memberships (assign users to departments)' },
+
     { code: PERMISSIONS.AR.RECEIPT_POST, description: 'Post receipts' },
     { code: PERMISSIONS.AR.CREDIT_NOTE_POST, description: 'Post credit notes' },
     { code: PERMISSIONS.AR.REFUND_POST, description: 'Post refunds' },
@@ -300,6 +302,7 @@ async function main() {
     { code: PERMISSIONS.IMPREST.CASE_ISSUE, description: 'Issue/fund imprest cases (controlled release)' },
     { code: PERMISSIONS.IMPREST.CASE_RETIRE, description: 'Submit imprest retirement packs' },
     { code: PERMISSIONS.IMPREST.CASE_SETTLE, description: 'Settle imprest cases (finalize retirement)' },
+    { code: PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT, description: 'Add/edit/delete imprest settlement breakdown lines' },
     { code: PERMISSIONS.IMPREST.ADMIN_OVERRIDE, description: 'Imprest administrative override (governed, audited)' },
     { code: PERMISSIONS.PAYMENT.CREATE, description: 'Create payments' },
     { code: PERMISSIONS.PAYMENT.APPROVE, description: 'Approve payments' },
@@ -720,6 +723,7 @@ async function main() {
     PERMISSIONS.USER.EDIT,
     PERMISSIONS.ROLE.VIEW,
     PERMISSIONS.ROLE.ASSIGN,
+    PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE,
     PERMISSIONS.AR.CREDIT_NOTE_VIEW,
     PERMISSIONS.AR.CREDIT_NOTE_VOID,
   ]);
@@ -741,6 +745,10 @@ async function main() {
   await assignPermissionsByCode(financeOfficerRole.id, [PERMISSIONS.USER.VIEW]);
   await assignPermissionsByCode(financeManagerRole.id, [PERMISSIONS.USER.VIEW]);
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.USER.VIEW]);
+
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE,
+  ]);
 
   await removePermissionsByCode(
     [financeOfficerRole.id, financeManagerRole.id, financeControllerRole.id],
@@ -864,6 +872,7 @@ async function main() {
     PERMISSIONS.IMPREST.CASE_VIEW,
     PERMISSIONS.IMPREST.CASE_CREATE,
     PERMISSIONS.IMPREST.CASE_SUBMIT,
+    PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT,
     // UI dependencies (lookups)
     PERMISSIONS.GL.VIEW,
     PERMISSIONS.MASTER_DATA.DEPARTMENT.VIEW,
@@ -877,6 +886,8 @@ async function main() {
     PERMISSIONS.IMPREST.CASE_REVIEW,
     PERMISSIONS.IMPREST.CASE_APPROVE,
     PERMISSIONS.IMPREST.CASE_REJECT,
+    PERMISSIONS.IMPREST.CASE_SETTLE,
+    PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT,
     // UI dependencies (lookups)
     PERMISSIONS.GL.VIEW,
     PERMISSIONS.USER.VIEW,
@@ -900,6 +911,7 @@ async function main() {
     PERMISSIONS.IMPREST.CASE_REJECT,
     PERMISSIONS.IMPREST.CASE_ISSUE,
     PERMISSIONS.IMPREST.CASE_SETTLE,
+    PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT,
     PERMISSIONS.IMPREST.ADMIN_OVERRIDE,
   ]);
 
@@ -988,7 +1000,6 @@ async function main() {
       PERMISSIONS.IMPREST.CASE_SUBMIT,
       PERMISSIONS.IMPREST.CASE_ISSUE,
       PERMISSIONS.IMPREST.CASE_RETIRE,
-      PERMISSIONS.IMPREST.CASE_SETTLE,
       PERMISSIONS.IMPREST.ADMIN_OVERRIDE,
     ],
   );
@@ -1035,6 +1046,11 @@ async function main() {
     PERMISSIONS.AP.SUPPLIER_IMPORT,
   ]);
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.AP.SUPPLIER_VIEW]);
+
+  await assignPermissionsByCode(financeOfficerRole.id, [
+    PERMISSIONS.AUDIT.EVIDENCE_UPLOAD,
+    PERMISSIONS.AUDIT.EVIDENCE_VIEW,
+  ]);
 
   await assignPermissionsByCode(superAdminRole.id, [
     PERMISSIONS.AUDIT_VIEW,
@@ -1528,6 +1544,9 @@ async function main() {
       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
       PERMISSIONS.BANK.ACCOUNT_VIEW,
 
+      PERMISSIONS.AUDIT.EVIDENCE_UPLOAD,
+      PERMISSIONS.AUDIT.EVIDENCE_VIEW,
+
       // Imprest Phase 1 (governance-first): officer can request + submit only.
       PERMISSIONS.USER.VIEW,
       PERMISSIONS.GL.VIEW,
@@ -1537,6 +1556,7 @@ async function main() {
       PERMISSIONS.IMPREST.CASE_VIEW,
       PERMISSIONS.IMPREST.CASE_CREATE,
       PERMISSIONS.IMPREST.CASE_SUBMIT,
+      PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT,
     ] as const;
 
     await prisma.rolePermission.deleteMany({

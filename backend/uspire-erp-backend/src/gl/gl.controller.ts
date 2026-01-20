@@ -82,6 +82,12 @@ export class GlController {
     });
   }
 
+  @Get('entities')
+  @Permissions(PERMISSIONS.GL.VIEW)
+  async listEntities(@Req() req: Request) {
+    return this.gl.listEntities(req);
+  }
+
   @Get('legal-entities')
   @Permissions(PERMISSIONS.GL.VIEW)
   async listLegalEntities(

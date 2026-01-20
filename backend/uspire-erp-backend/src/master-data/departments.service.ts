@@ -2,7 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
-import { CreateDepartmentDto, UpdateDepartmentDto } from './departments.dto';
+import {
+  CreateDepartmentDto,
+  CreateDepartmentMemberDto,
+  UpdateDepartmentDto,
+  UpdateDepartmentMemberStatusDto,
+} from './departments.dto';
 
 @Injectable()
 export class DepartmentsService {
@@ -242,5 +247,135 @@ export class DepartmentsService {
         .catch(() => undefined);
       throw e;
     }
+  }
+
+  async listMembers(req: Request, departmentId: string) {
+    const tenant = this.ensureTenant(req);
+
+    const dep = await this.prisma.department.findFirst({
+      where: { id: departmentId, tenantId: tenant.id },
+      select: { id: true },
+    });
+    if (!dep) throw new NotFoundException('Department not found');
+
+    const rows = await (this.prisma as any).departmentMembership.findMany({
+      where: { tenantId: tenant.id, departmentId },
+      orderBy: [{ status: 'asc' }, { effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+        createdAt: true,
+        updatedAt: true,
+        user: { select: { id: true, name: true, email: true, isActive: true } },
+      } as any,
+    });
+
+    return rows;
+  }
+
+  async addMember(req: Request, departmentId: string, dto: CreateDepartmentMemberDto) {
+    const tenant = this.ensureTenant(req);
+
+    const dep = await this.prisma.department.findFirst({
+      where: { id: departmentId, tenantId: tenant.id },
+      select: { id: true },
+    });
+    if (!dep) throw new NotFoundException('Department not found');
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: dto.userId, tenantId: tenant.id },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const effectiveFrom = dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date();
+    if (dto.effectiveFrom && Number.isNaN(effectiveFrom.getTime())) {
+      throw new BadRequestException('effectiveFrom must be a valid date');
+    }
+    const effectiveTo = dto.effectiveTo ? new Date(dto.effectiveTo) : null;
+    if (dto.effectiveTo && Number.isNaN(effectiveTo?.getTime())) {
+      throw new BadRequestException('effectiveTo must be a valid date');
+    }
+
+    try {
+      return await (this.prisma as any).departmentMembership.upsert({
+        where: {
+          tenantId_departmentId_userId: {
+            tenantId: tenant.id,
+            departmentId,
+            userId: dto.userId,
+          },
+        },
+        create: {
+          tenantId: tenant.id,
+          departmentId,
+          userId: dto.userId,
+          status: 'ACTIVE' as any,
+          effectiveFrom,
+          effectiveTo,
+        } as any,
+        update: {
+          status: 'ACTIVE' as any,
+          effectiveFrom,
+          effectiveTo,
+        } as any,
+        select: { id: true },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new BadRequestException('User is already assigned to this department');
+      }
+      throw e;
+    }
+  }
+
+  async updateMemberStatus(
+    req: Request,
+    departmentId: string,
+    userId: string,
+    dto: UpdateDepartmentMemberStatusDto,
+  ) {
+    const tenant = this.ensureTenant(req);
+
+    const dep = await this.prisma.department.findFirst({
+      where: { id: departmentId, tenantId: tenant.id },
+      select: { id: true },
+    });
+    if (!dep) throw new NotFoundException('Department not found');
+
+    const existing = await (this.prisma as any).departmentMembership.findFirst({
+      where: { tenantId: tenant.id, departmentId, userId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Department member not found');
+
+    const effectiveFrom = dto.effectiveFrom ? new Date(dto.effectiveFrom) : undefined;
+    if (dto.effectiveFrom && Number.isNaN(effectiveFrom?.getTime())) {
+      throw new BadRequestException('effectiveFrom must be a valid date');
+    }
+    const effectiveTo =
+      dto.effectiveTo !== undefined
+        ? dto.effectiveTo
+          ? new Date(dto.effectiveTo)
+          : null
+        : undefined;
+    if (dto.effectiveTo && Number.isNaN((effectiveTo as any)?.getTime?.())) {
+      throw new BadRequestException('effectiveTo must be a valid date');
+    }
+
+    const status = dto.isActive ? ('ACTIVE' as any) : ('INACTIVE' as any);
+
+    return (this.prisma as any).departmentMembership.update({
+      where: { id: existing.id },
+      data: {
+        status,
+        ...(effectiveFrom !== undefined ? { effectiveFrom } : {}),
+        ...(effectiveTo !== undefined ? { effectiveTo } : {}),
+      } as any,
+      select: { id: true },
+    });
   }
 }

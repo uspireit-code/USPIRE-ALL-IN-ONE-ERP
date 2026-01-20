@@ -46,6 +46,7 @@ const EVENT_TYPES = [
   'IMPREST_CASE_REJECTED',
   'IMPREST_CASE_EVIDENCE_LINKED',
   'IMPREST_CASE_ISSUED',
+  'IMPREST_CASE_SETTLED',
 ] as const;
 
 export class AuditEventsQueryDto {
