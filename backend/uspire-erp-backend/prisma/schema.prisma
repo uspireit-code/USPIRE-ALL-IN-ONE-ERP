@@ -519,6 +519,9 @@ model ImprestCase {
   issuedById             String?
   issuedJournalId        String?
   settlementDate         DateTime?
+  settledAt              DateTime?
+  settledByUserId        String?
+  settlementJournalId    String?
   facility               ImprestFacility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   createdBy              User             @relation("ImprestCaseCreatedBy", fields: [createdById], references: [id])
   reviewedBy             User?            @relation("ImprestCaseReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
@@ -526,6 +529,8 @@ model ImprestCase {
   rejectedBy             User?            @relation("ImprestCaseRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
   issuedBy               User?            @relation("ImprestCaseIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
   issuedJournal          JournalEntry?    @relation("ImprestCaseIssuedJournal", fields: [issuedJournalId], references: [id], onDelete: Restrict)
+  settledBy              User?            @relation("ImprestCaseSettledBy", fields: [settledByUserId], references: [id], onDelete: Restrict)
+  settlementJournal      JournalEntry?    @relation("ImprestCaseSettlementJournal", fields: [settlementJournalId], references: [id], onDelete: Restrict)
   tenant                 Tenant           @relation(fields: [tenantId], references: [id])
   transitions            ImprestCaseTransitionLog[]
   evidence               ImprestCaseEvidence[]
@@ -533,6 +538,7 @@ model ImprestCase {
 
   @@unique([tenantId, reference])
   @@unique([tenantId, issuedJournalId])
+  @@unique([tenantId, settlementJournalId])
   @@index([tenantId])
   @@index([tenantId, state])
   @@index([facilityId])
@@ -551,6 +557,7 @@ model ImprestSettlementLine {
   tenantId    String
   caseId      String
   type        ImprestSettlementLineType
+  glAccountId String?
   description String
   amount      Decimal                  @db.Decimal(18, 2)
   spentDate   DateTime
@@ -558,11 +565,13 @@ model ImprestSettlementLine {
   createdAt   DateTime                 @default(now())
 
   imprestCase ImprestCase              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  glAccount   Account?                 @relation(fields: [glAccountId], references: [id], onDelete: Restrict)
   createdBy   User                     @relation("ImprestSettlementLineCreatedBy", fields: [createdById], references: [id])
   tenant      Tenant                   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([caseId])
+  @@index([glAccountId])
   @@index([createdById])
   @@index([tenantId, createdAt])
 }
@@ -1689,6 +1698,7 @@ model User {
   imprestCasesApproved                    ImprestCase[]                    @relation("ImprestCaseApprovedBy")
   imprestCasesRejected                    ImprestCase[]                    @relation("ImprestCaseRejectedBy")
   imprestCasesIssued                      ImprestCase[]                    @relation("ImprestCaseIssuedBy")
+  imprestCasesSettled                     ImprestCase[]                    @relation("ImprestCaseSettledBy")
   imprestCaseTransitionsActed             ImprestCaseTransitionLog[]        @relation("ImprestCaseTransitionActor")
   imprestSettlementLinesCreated           ImprestSettlementLine[]            @relation("ImprestSettlementLineCreatedBy")
 
@@ -1808,6 +1818,7 @@ model Account {
   fixedAssetCategoriesAsDepExpenseAccount FixedAssetCategory[]           @relation("FixedAssetCategoryDepExpenseAccount")
   forecastLines                           ForecastLine[]
   invoiceCategoriesAsRevenueAccount       InvoiceCategory[]              @relation("InvoiceCategoryRevenueAccount")
+  imprestSettlementLinesAsExpense         ImprestSettlementLine[]
   lines                                   JournalLine[]
   recurringTemplateLines                  RecurringJournalTemplateLine[]
   supplierInvoiceLines                    SupplierInvoiceLine[]
@@ -1908,6 +1919,7 @@ model JournalEntry {
   lines                       JournalLine[]
   recurringGenerations        RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
   imprestCasesIssued          ImprestCase[]                @relation("ImprestCaseIssuedJournal")
+  imprestCasesSettled         ImprestCase[]                @relation("ImprestCaseSettlementJournal")
 
   @@unique([tenantId, journalNumber])
   @@index([tenantId])

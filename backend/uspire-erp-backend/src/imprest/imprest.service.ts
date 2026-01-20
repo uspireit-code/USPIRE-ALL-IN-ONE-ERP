@@ -181,6 +181,122 @@ export class ImprestService {
     return created;
   }
 
+  private async createPostedSettlementJournal(
+    tx: any,
+    args: {
+      tenantId: string;
+      actorUserId: string;
+      journalDate: Date;
+      reference: string;
+      description: string;
+      sourceId: string;
+      lines: Array<{
+        accountId: string;
+        debit: Prisma.Decimal;
+        credit: Prisma.Decimal;
+        legalEntityId: string;
+        departmentId: string;
+        projectId?: string | null;
+        fundId?: string | null;
+        lineNumber: number;
+      }>;
+    },
+  ) {
+    const period = await (tx.accountingPeriod as any).findFirst({
+      where: {
+        tenantId: args.tenantId,
+        startDate: { lte: args.journalDate },
+        endDate: { gte: args.journalDate },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (!period) {
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: 'No accounting period exists for the settlement date',
+      });
+    }
+
+    if ((period.status as string) !== 'OPEN') {
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        reason: 'Accounting period is not OPEN for the settlement date',
+      });
+    }
+
+    const accountIds = Array.from(new Set(args.lines.map((l) => l.accountId)));
+    const accounts = await (tx.account as any).findMany({
+      where: {
+        tenantId: args.tenantId,
+        id: { in: accountIds },
+      },
+      select: { id: true, isActive: true, isPostingAllowed: true },
+    });
+    const map = new Map(accounts.map((a) => [a.id, a] as const));
+    for (const id of accountIds) {
+      const a = map.get(id);
+      if (!a) throw new BadRequestException(`Account not found: ${id}`);
+      if (!a.isActive) throw new BadRequestException(`Account is inactive: ${id}`);
+      if (!a.isPostingAllowed) throw new BadRequestException(`Account is non-posting and cannot be used: ${id}`);
+    }
+
+    const now = new Date();
+
+    const counter = await (tx as any).tenantSequenceCounter.upsert({
+      where: {
+        tenantId_name: {
+          tenantId: args.tenantId,
+          name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
+        },
+      },
+      create: {
+        tenantId: args.tenantId,
+        name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
+        value: 0,
+      },
+      update: {},
+      select: { id: true },
+    });
+
+    const bumped = await (tx as any).tenantSequenceCounter.update({
+      where: { id: counter.id },
+      data: { value: { increment: 1 } },
+      select: { value: true },
+    });
+
+    return (tx as any).journalEntry.create({
+      data: {
+        tenantId: args.tenantId,
+        reference: args.reference,
+        description: args.description,
+        status: 'POSTED',
+        createdById: args.actorUserId,
+        postedById: args.actorUserId,
+        postedAt: now,
+        journalDate: args.journalDate,
+        journalType: 'STANDARD',
+        periodId: period.id,
+        journalNumber: bumped.value,
+        sourceType: 'IMPREST_SETTLEMENT',
+        sourceId: args.sourceId,
+        lines: {
+          create: args.lines.map((l) => ({
+            accountId: l.accountId,
+            debit: l.debit,
+            credit: l.credit,
+            legalEntityId: l.legalEntityId,
+            departmentId: l.departmentId,
+            projectId: l.projectId ?? null,
+            fundId: l.fundId ?? null,
+            lineNumber: l.lineNumber,
+          })),
+        },
+      },
+      include: { lines: true },
+    });
+  }
+
   async updateTypePolicy(req: Request, id: string, dto: UpdateImprestTypePolicyDto) {
     const { user } = this.getTenantAndUser(req);
     const authz = await this.getUserAuthz(req);
@@ -627,11 +743,24 @@ export class ImprestService {
     const amount = new Prisma.Decimal(dto.amount);
     if (amount.lte(0)) throw new BadRequestException('Amount must be greater than 0');
 
+    if (dto.type === 'EXPENSE') {
+      if (!dto.glAccountId) {
+        throw new BadRequestException('Expense settlement lines require a GL account');
+      }
+    }
+
+    if (dto.type === 'CASH_RETURN') {
+      if (dto.glAccountId) {
+        throw new BadRequestException('Cash return settlement lines must not specify a GL account');
+      }
+    }
+
     return this.prisma.imprestSettlementLine.create({
       data: {
         tenantId: authz.tenantId,
         caseId: row.id,
         type: dto.type as any,
+        glAccountId: dto.glAccountId ?? null,
         description: dto.description.trim(),
         amount,
         spentDate,
@@ -661,8 +790,25 @@ export class ImprestService {
 
     const data: any = {
       type: dto.type !== undefined ? (dto.type as any) : undefined,
+      glAccountId: dto.glAccountId !== undefined ? dto.glAccountId : undefined,
       description: dto.description !== undefined ? dto.description.trim() : undefined,
     };
+
+    const nextType = dto.type !== undefined ? dto.type : (line.type as any);
+    const nextGlAccountId = dto.glAccountId !== undefined ? dto.glAccountId : (line as any).glAccountId;
+
+    if (String(nextType).toUpperCase() === 'EXPENSE') {
+      if (!nextGlAccountId) {
+        throw new BadRequestException('Expense settlement lines require a GL account');
+      }
+    }
+
+    if (String(nextType).toUpperCase() === 'CASH_RETURN') {
+      if (nextGlAccountId) {
+        throw new BadRequestException('Cash return settlement lines must not specify a GL account');
+      }
+      data.glAccountId = null;
+    }
 
     if (dto.spentDate !== undefined) {
       const spentDate = new Date(dto.spentDate);
@@ -1339,11 +1485,25 @@ export class ImprestService {
       where: { id, tenantId: authz.tenantId },
       select: {
         id: true,
+        reference: true,
         tenantId: true,
         state: true,
         issuedJournalId: true,
+        settlementJournalId: true,
         requestedAmount: true,
-        settlementLines: { select: { type: true, amount: true } },
+        facility: {
+          select: {
+            id: true,
+            fundingSourceType: true,
+            bankAccountId: true,
+            controlGlAccountId: true,
+            entityId: true,
+            departmentId: true,
+            projectId: true,
+            fundId: true,
+          },
+        },
+        settlementLines: { select: { type: true, amount: true, glAccountId: true } },
       },
     });
     if (!row) throw new NotFoundException('Imprest case not found');
@@ -1358,6 +1518,29 @@ export class ImprestService {
 
     if (!row.issuedJournalId) {
       throw new BadRequestException('Cannot settle imprest case: issuance journal is missing.');
+    }
+
+    if (row.settlementJournalId) {
+      throw new BadRequestException('Cannot settle imprest case: settlement journal already exists.');
+    }
+
+    const facility = row.facility as any;
+    if (!facility) throw new NotFoundException('Imprest facility not found');
+
+    if (!facility.entityId) {
+      throw new BadRequestException('Imprest facility is missing legal entity (entityId)');
+    }
+
+    if (!facility.departmentId) {
+      throw new BadRequestException('Imprest facility is missing department/cost centre (departmentId)');
+    }
+
+    const entity = await this.prisma.entity.findFirst({
+      where: { id: facility.entityId, tenantId: authz.tenantId },
+      select: { id: true, name: true },
+    });
+    if (!entity) {
+      throw new BadRequestException('Imprest facility legal entity reference is invalid');
     }
 
     const lines = (row.settlementLines as any) ?? [];
@@ -1381,12 +1564,131 @@ export class ImprestService {
       throw new BadRequestException('Invalid settlementDate');
     }
 
-    const updated = await this.prisma.imprestCase.update({
-      where: { id: row.id },
-      data: {
-        state: 'SETTLED' as any,
-        settlementDate,
+    const expenseByAccount = new Map<string, Prisma.Decimal>();
+    let cashReturned = new Prisma.Decimal(0);
+    for (const l of lines) {
+      const t = String(l.type ?? '').toUpperCase();
+      if (t === 'EXPENSE') {
+        if (!l.glAccountId) {
+          throw new BadRequestException('Expense settlement lines require a GL account');
+        }
+        const prev = expenseByAccount.get(l.glAccountId) ?? new Prisma.Decimal(0);
+        expenseByAccount.set(l.glAccountId, prev.plus(l.amount));
+      } else if (t === 'CASH_RETURN') {
+        cashReturned = cashReturned.plus(l.amount);
+      }
+    }
+
+    if (facility.fundingSourceType !== ('BANK' as any)) {
+      throw new BadRequestException('Phase 3A supports settlement posting for BANK funding source only');
+    }
+    if (!facility.bankAccountId) {
+      throw new BadRequestException('Facility fundingSourceType=BANK but bankAccountId is missing');
+    }
+
+    const bank = await this.prisma.bankAccount.findFirst({
+      where: { id: facility.bankAccountId, tenantId: authz.tenantId },
+      select: { id: true, glAccountId: true, status: true },
+    });
+    if (!bank) throw new NotFoundException('Funding bank account not found');
+    if (bank.status !== ('ACTIVE' as any)) {
+      throw new ForbiddenException('Funding bank account is not ACTIVE');
+    }
+
+    const legalEntity = await (this.prisma.legalEntity as any).findFirst({
+      where: {
+        tenantId: authz.tenantId,
+        name: entity.name,
+        isActive: true,
+        effectiveFrom: { lte: settlementDate },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: settlementDate } }],
       },
+      select: { id: true },
+    });
+
+    if (!legalEntity) {
+      throw new BadRequestException(
+        `No active Legal Entity is configured for this Imprest facility (missing LegalEntity with name: ${entity.name}).`,
+      );
+    }
+
+    const dims = {
+      legalEntityId: legalEntity.id as string,
+      departmentId: facility.departmentId as string,
+      projectId: facility.projectId ?? null,
+      fundId: facility.fundId ?? null,
+    };
+
+    const journalLines: Array<{
+      accountId: string;
+      debit: Prisma.Decimal;
+      credit: Prisma.Decimal;
+      legalEntityId: string;
+      departmentId: string;
+      projectId?: string | null;
+      fundId?: string | null;
+      lineNumber: number;
+    }> = [];
+
+    let lineNo = 1;
+
+    const expenseAccountIds = Array.from(expenseByAccount.keys());
+    for (const accountId of expenseAccountIds) {
+      const amount = expenseByAccount.get(accountId)!;
+      if (amount.lte(0)) continue;
+      journalLines.push({
+        accountId,
+        debit: amount,
+        credit: new Prisma.Decimal(0),
+        ...dims,
+        lineNumber: lineNo++,
+      });
+    }
+
+    if (cashReturned.gt(0)) {
+      journalLines.push({
+        accountId: bank.glAccountId,
+        debit: cashReturned,
+        credit: new Prisma.Decimal(0),
+        ...dims,
+        lineNumber: lineNo++,
+      });
+    }
+
+    const requestedAmount = row.requestedAmount as any as Prisma.Decimal;
+    journalLines.push({
+      accountId: facility.controlGlAccountId,
+      debit: new Prisma.Decimal(0),
+      credit: requestedAmount,
+      ...dims,
+      lineNumber: lineNo++,
+    });
+
+    const now = new Date();
+
+    const { updated, journal } = await this.prisma.$transaction(async (tx) => {
+      const journal = await this.createPostedSettlementJournal(tx as any, {
+        tenantId: authz.tenantId,
+        actorUserId: authz.id,
+        journalDate: settlementDate,
+        reference: row.reference ?? row.id,
+        description: `Imprest settlement: ${row.reference ?? row.id}`,
+        sourceId: row.id,
+        lines: journalLines,
+      });
+
+      const updated = await (tx as any).imprestCase.update({
+        where: { id: row.id },
+        data: {
+          state: 'SETTLED' as any,
+          settlementDate,
+          settledAt: now,
+          settledByUserId: authz.id,
+          settlementJournalId: journal.id,
+        },
+      });
+
+      return { updated, journal };
     });
 
     await this.logTransition({
@@ -1396,7 +1698,7 @@ export class ImprestService {
       toState: 'SETTLED',
       actorUserId: authz.id,
       notes: dto.notes ?? null,
-      metadata: { settlementDate: settlementDate.toISOString() },
+      metadata: { settlementDate: settlementDate.toISOString(), journalId: journal.id },
     });
 
     await writeAuditEventWithPrisma(
@@ -1410,7 +1712,7 @@ export class ImprestService {
         outcome: 'SUCCESS' as any,
         action: PERMISSIONS.IMPREST.CASE_SETTLE,
         permissionUsed: PERMISSIONS.IMPREST.CASE_SETTLE,
-        metadata: { settlementDate: settlementDate.toISOString() },
+        metadata: { settlementDate: settlementDate.toISOString(), journalId: journal.id },
       },
       this.prisma,
     );

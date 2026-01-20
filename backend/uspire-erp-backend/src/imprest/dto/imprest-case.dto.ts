@@ -36,6 +36,10 @@ export class CreateImprestSettlementLineDto {
   @IsIn(['EXPENSE', 'CASH_RETURN'] as const)
   type!: 'EXPENSE' | 'CASH_RETURN';
 
+  @IsOptional()
+  @IsUUID()
+  glAccountId?: string;
+
   @IsString()
   description!: string;
 
@@ -50,6 +54,10 @@ export class UpdateImprestSettlementLineDto {
   @IsOptional()
   @IsIn(['EXPENSE', 'CASH_RETURN'] as const)
   type?: 'EXPENSE' | 'CASH_RETURN';
+
+  @IsOptional()
+  @IsUUID()
+  glAccountId?: string;
 
   @IsOptional()
   @IsString()

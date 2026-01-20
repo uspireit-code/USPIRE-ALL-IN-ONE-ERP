@@ -173,6 +173,7 @@ export type ImprestSettlementLine = {
   tenantId: string;
   caseId: string;
   type: ImprestSettlementLineType;
+  glAccountId?: string | null;
   description: string;
   amount: string;
   spentDate: string;
@@ -210,6 +211,7 @@ export type ImprestCase = {
   approvedById?: string | null;
   issuedById?: string | null;
   issuedJournalId?: string | null;
+  settlementJournalId?: string | null;
   createdAt: string;
   updatedAt: string;
   transitions?: ImprestCaseTransition[];
@@ -300,7 +302,7 @@ export async function getImprestSettlementSummary(caseId: string) {
 
 export async function createImprestSettlementLine(
   caseId: string,
-  params: { type: ImprestSettlementLineType; description: string; amount: string; spentDate: string },
+  params: { type: ImprestSettlementLineType; glAccountId?: string; description: string; amount: string; spentDate: string },
 ) {
   return apiFetch<ImprestSettlementLine>(`/imprest/cases/${encodeURIComponent(caseId)}/settlement-lines`, {
     method: 'POST',
@@ -310,7 +312,7 @@ export async function createImprestSettlementLine(
 
 export async function updateImprestSettlementLine(
   id: string,
-  params: Partial<{ type: ImprestSettlementLineType; description: string; amount: string; spentDate: string }>,
+  params: Partial<{ type: ImprestSettlementLineType; glAccountId: string | null; description: string; amount: string; spentDate: string }>,
 ) {
   return apiFetch<ImprestSettlementLine>(`/imprest/settlement-lines/${encodeURIComponent(id)}`, {
     method: 'PATCH',

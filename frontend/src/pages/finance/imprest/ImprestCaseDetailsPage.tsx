@@ -10,6 +10,7 @@ import { PageLayout } from '../../../components/PageLayout';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage, type ApiError } from '../../../services/api';
 import { downloadAuditEvidence, uploadAuditEvidence, type AuditEvidenceRow } from '../../../services/auditEvidence';
+import { listGlAccounts, type GlAccountLookup } from '../../../services/gl';
 import {
   approveImprestCase,
   createImprestSettlementLine,
@@ -243,10 +244,13 @@ export function ImprestCaseDetailsPage() {
   const [settlementError, setSettlementError] = useState('');
 
   const [settlementType, setSettlementType] = useState<ImprestSettlementLineType>('EXPENSE');
+  const [settlementGlAccountId, setSettlementGlAccountId] = useState<string>('');
   const [settlementDescription, setSettlementDescription] = useState('');
   const [settlementAmount, setSettlementAmount] = useState('');
   const [settlementSpentDate, setSettlementSpentDate] = useState('');
   const [editingSettlementLineId, setEditingSettlementLineId] = useState<string>('');
+
+  const [glAccounts, setGlAccounts] = useState<GlAccountLookup[]>([]);
 
   useEffect(() => {
     if (!canView) return;
@@ -254,6 +258,17 @@ export function ImprestCaseDetailsPage() {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, caseId]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await listGlAccounts();
+        setGlAccounts(rows ?? []);
+      } catch {
+        setGlAccounts([]);
+      }
+    })();
+  }, []);
 
   async function refresh() {
     setLoading(true);
@@ -287,6 +302,7 @@ export function ImprestCaseDetailsPage() {
 
   function resetSettlementForm() {
     setSettlementType('EXPENSE');
+    setSettlementGlAccountId('');
     setSettlementDescription('');
     setSettlementAmount('');
     setSettlementSpentDate('');
@@ -309,6 +325,7 @@ export function ImprestCaseDetailsPage() {
 
       const payload = {
         type: settlementType,
+        glAccountId: settlementType === 'EXPENSE' ? (settlementGlAccountId || undefined) : undefined,
         description: settlementDescription.trim(),
         amount: settlementAmount.trim(),
         spentDate: settlementSpentDate ? new Date(settlementSpentDate).toISOString() : new Date().toISOString(),
@@ -323,8 +340,16 @@ export function ImprestCaseDetailsPage() {
         return;
       }
 
+      if (payload.type === 'EXPENSE' && !payload.glAccountId) {
+        setError('Expense lines require a GL account');
+        return;
+      }
+
       if (editingSettlementLineId) {
-        await updateImprestSettlementLine(editingSettlementLineId, payload);
+        await updateImprestSettlementLine(editingSettlementLineId, {
+          ...payload,
+          glAccountId: payload.type === 'EXPENSE' ? (payload.glAccountId ?? null) : null,
+        });
         setSuccess('Settlement line updated');
       } else {
         await createImprestSettlementLine(caseId, payload);
@@ -361,6 +386,7 @@ export function ImprestCaseDetailsPage() {
   async function startEditSettlementLine(l: ImprestSettlementLine) {
     setEditingSettlementLineId(l.id);
     setSettlementType((String(l.type ?? 'EXPENSE').toUpperCase() as any) ?? 'EXPENSE');
+    setSettlementGlAccountId(String((l as any).glAccountId ?? ''));
     setSettlementDescription(String(l.description ?? ''));
     setSettlementAmount(String(l.amount ?? ''));
     const d = new Date(String(l.spentDate ?? ''));
@@ -586,6 +612,11 @@ export function ImprestCaseDetailsPage() {
           {row?.issuedJournalId ? (
             <Button onClick={() => navigate(`/finance/gl/journals/${encodeURIComponent(row.issuedJournalId!)}`)}>View Journal</Button>
           ) : null}
+          {row?.settlementJournalId ? (
+            <Button onClick={() => navigate(`/finance/gl/journals/${encodeURIComponent(row.settlementJournalId!)}`)}>
+              View Settlement Journal
+            </Button>
+          ) : null}
         </div>
       }
     >
@@ -671,12 +702,23 @@ export function ImprestCaseDetailsPage() {
 
                 {canEditSettlement ? (
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '0.35fr 1fr 0.35fr 0.35fr', gap: 10, alignItems: 'end' }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: settlementType === 'EXPENSE' ? '0.35fr 0.6fr 1fr 0.35fr 0.35fr' : '0.35fr 1fr 0.35fr 0.35fr',
+                        gap: 10,
+                        alignItems: 'end',
+                      }}
+                    >
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.secondary }}>Type</div>
                         <select
                           value={settlementType}
-                          onChange={(e) => setSettlementType(e.target.value as any)}
+                          onChange={(e) => {
+                            const next = e.target.value as any;
+                            setSettlementType(next);
+                            if (String(next).toUpperCase() !== 'EXPENSE') setSettlementGlAccountId('');
+                          }}
                           disabled={acting || !canModifySettlementLines}
                           style={{
                             width: '100%',
@@ -696,6 +738,37 @@ export function ImprestCaseDetailsPage() {
                           <option value="CASH_RETURN">Cash Return</option>
                         </select>
                       </div>
+
+                      {settlementType === 'EXPENSE' ? (
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.secondary }}>Expense GL</div>
+                          <select
+                            value={settlementGlAccountId}
+                            onChange={(e) => setSettlementGlAccountId(e.target.value)}
+                            disabled={acting || !canModifySettlementLines}
+                            style={{
+                              width: '100%',
+                              height: 40,
+                              padding: '0 10px',
+                              borderRadius: tokens.radius.sm,
+                              border: `1px solid ${tokens.colors.border.default}`,
+                              background: tokens.colors.white,
+                              color: tokens.colors.text.primary,
+                              fontSize: 14,
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                              marginTop: 6,
+                            }}
+                          >
+                            <option value="">Select GL account…</option>
+                            {glAccounts.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.code} — {a.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.secondary }}>Description</div>
                         <div style={{ marginTop: 6 }}>
