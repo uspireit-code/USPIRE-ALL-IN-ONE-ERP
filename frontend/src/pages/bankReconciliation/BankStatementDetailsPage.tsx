@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
-import { addStatementLine, getStatement, type BankStatementDetail } from '../../services/bankReconciliation';
+import { addStatementLine, createAdjustment, getStatement, type BankStatementDetail, type BankStatementLine } from '../../services/bankReconciliation';
+import { listAllGlAccounts, type GlAccountLookup } from '../../services/gl';
 
 function money(n: number) {
   return Number(n).toFixed(2);
@@ -20,6 +21,7 @@ export function BankStatementDetailsPage() {
   const { hasPermission } = useAuth();
   const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
   const canImport = hasPermission(PERMISSIONS.BANK.STATEMENT.IMPORT);
+  const canReconcile = hasPermission(PERMISSIONS.BANK.RECONCILIATION.MATCH);
 
   const [data, setData] = useState<BankStatementDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,10 +31,42 @@ export function BankStatementDetailsPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [txDate, setTxDate] = useState(todayIsoDate());
   const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [reference, setReference] = useState('');
+  const [debitAmount, setDebitAmount] = useState('');
+  const [creditAmount, setCreditAmount] = useState('');
+
+  const [adjustLine, setAdjustLine] = useState<BankStatementLine | null>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustPostingDate, setAdjustPostingDate] = useState(todayIsoDate());
+  const [adjustGlAccountId, setAdjustGlAccountId] = useState('');
+  const [adjustMemo, setAdjustMemo] = useState('');
+  const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const [glAccounts, setGlAccounts] = useState<GlAccountLookup[]>([]);
+  const [glAccountsLoading, setGlAccountsLoading] = useState(false);
 
   const showAdd = searchParams.get('addLine') === '1';
+
+  useEffect(() => {
+    let mounted = true;
+    if (!adjustOpen || !canReconcile) return;
+    setGlAccountsLoading(true);
+    listAllGlAccounts()
+      .then((rows) => {
+        if (!mounted) return;
+        setGlAccounts(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setGlAccounts([]);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setGlAccountsLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [adjustOpen, canReconcile]);
 
   useEffect(() => {
     let mounted = true;
@@ -63,7 +97,65 @@ export function BankStatementDetailsPage() {
     };
   }, [canView, id]);
 
-  const reconciledCount = useMemo(() => (data?.lines ?? []).filter((l) => l.isReconciled).length, [data]);
+  const matchedCount = useMemo(() => (data?.lines ?? []).filter((l) => l.matched).length, [data]);
+
+  const adjustmentCandidates = useMemo(() => {
+    if (!adjustLine) return [];
+    const t = String(adjustLine.classification ?? '').toUpperCase();
+    const expected = t === 'BANK_CHARGE' ? 'EXPENSE' : t === 'INTEREST' ? 'INCOME' : '';
+    if (!expected) return [];
+    return (glAccounts ?? [])
+      .filter((a) => a.isActive && String(a.type ?? '').toUpperCase() === expected)
+      .sort((a, b) => String(a.code ?? '').localeCompare(String(b.code ?? '')))
+      .slice(0, 200);
+  }, [adjustLine, glAccounts]);
+
+  function openAdjustment(line: BankStatementLine) {
+    if (!canReconcile) return;
+    setAdjustError(null);
+    setAdjustLine(line);
+    setAdjustOpen(true);
+    setAdjustPostingDate(line.txnDate?.slice(0, 10) || todayIsoDate());
+    setAdjustGlAccountId('');
+    setAdjustMemo('');
+  }
+
+  function closeAdjustment() {
+    setAdjustOpen(false);
+    setAdjustLine(null);
+    setAdjustError(null);
+    setAdjusting(false);
+  }
+
+  async function submitAdjustment(e: FormEvent) {
+    e.preventDefault();
+    if (!id || !canReconcile || !adjustLine) return;
+
+    setAdjustError(null);
+    if (!adjustPostingDate || !adjustGlAccountId) {
+      setAdjustError('Posting date and GL account are required');
+      return;
+    }
+
+    setAdjusting(true);
+    try {
+      await createAdjustment({
+        lineId: adjustLine.id,
+        glAccountId: adjustGlAccountId,
+        postingDate: adjustPostingDate,
+        memo: adjustMemo?.trim() ? adjustMemo.trim() : undefined,
+      });
+
+      const refreshed = await getStatement(id);
+      setData(refreshed);
+      closeAdjustment();
+    } catch (err: any) {
+      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to create adjustment journal';
+      setAdjustError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setAdjusting(false);
+    }
+  }
 
   async function submitAddLine(e: React.FormEvent) {
     e.preventDefault();
@@ -71,9 +163,18 @@ export function BankStatementDetailsPage() {
 
     setAddError(null);
 
-    const n = Number(amount);
-    if (!txDate || !description || !(n === 0 || n)) {
-      setAddError('Transaction date, description, and amount are required');
+    const debit = debitAmount ? Number(debitAmount) : 0;
+    const credit = creditAmount ? Number(creditAmount) : 0;
+    const hasDebit = debitAmount.trim().length > 0;
+    const hasCredit = creditAmount.trim().length > 0;
+
+    if (!txDate || !description) {
+      setAddError('Transaction date and description are required');
+      return;
+    }
+
+    if ((hasDebit && hasCredit) || (!hasDebit && !hasCredit)) {
+      setAddError('Enter either a debit amount or a credit amount (not both).');
       return;
     }
 
@@ -81,10 +182,10 @@ export function BankStatementDetailsPage() {
     try {
       await addStatementLine({
         statementId: id,
-        transactionDate: txDate,
+        txnDate: txDate,
         description,
-        amount: n,
-        reference: reference || undefined,
+        debitAmount: hasDebit ? debit : 0,
+        creditAmount: hasCredit ? credit : 0,
       });
 
       const refreshed = await getStatement(id);
@@ -92,8 +193,8 @@ export function BankStatementDetailsPage() {
 
       setTxDate(todayIsoDate());
       setDescription('');
-      setAmount('');
-      setReference('');
+      setDebitAmount('');
+      setCreditAmount('');
 
       navigate(`/bank-reconciliation/statements/${id}`, { replace: true });
     } catch (err: any) {
@@ -120,7 +221,10 @@ export function BankStatementDetailsPage() {
       {data ? (
         <div style={{ marginTop: 12 }}>
           <div>
-            <b>Statement date:</b> {data.statementDate.slice(0, 10)}
+            <b>Statement window:</b> {data.statementStartDate.slice(0, 10)} - {data.statementEndDate.slice(0, 10)}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <b>Status:</b> {data.status}
           </div>
           <div style={{ marginTop: 6 }}>
             <b>Opening:</b> {money(Number(data.openingBalance))}
@@ -129,7 +233,7 @@ export function BankStatementDetailsPage() {
             <b>Closing:</b> {money(Number(data.closingBalance))}
           </div>
           <div style={{ marginTop: 6 }}>
-            <b>Lines:</b> {data.lines.length} (reconciled: {reconciledCount})
+            <b>Lines:</b> {data.lines.length} (matched: {matchedCount})
           </div>
 
           {canImport ? (
@@ -154,13 +258,13 @@ export function BankStatementDetailsPage() {
               </label>
 
               <label>
-                Amount
-                <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" required />
+                Debit Amount
+                <input value={debitAmount} onChange={(e) => setDebitAmount(e.target.value)} inputMode="decimal" />
               </label>
 
               <label>
-                Reference
-                <input value={reference} onChange={(e) => setReference(e.target.value)} />
+                Credit Amount
+                <input value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} inputMode="decimal" />
               </label>
 
               <div style={{ display: 'flex', gap: 8 }}>
@@ -179,23 +283,97 @@ export function BankStatementDetailsPage() {
               <tr>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Date</th>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Description</th>
-                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Amount</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Debit</th>
+                <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Credit</th>
                 <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
+                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {data.lines.map((l) => (
-                <tr key={l.id}>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.transactionDate.slice(0, 10)}</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.description}</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{money(Number(l.amount))}</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.isReconciled ? 'Reconciled' : 'Unreconciled'}</td>
-                </tr>
-              ))}
+              {data.lines.map((l) => {
+                const cls = String(l.classification ?? '').toUpperCase();
+                const eligible =
+                  canReconcile &&
+                  !l.matched &&
+                  !l.adjustmentJournalId &&
+                  (cls === 'BANK_CHARGE' || cls === 'INTEREST');
+
+                return (
+                  <tr key={l.id}>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.txnDate.slice(0, 10)}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.description}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{money(Number(l.debitAmount))}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{money(Number(l.creditAmount))}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{l.matched ? 'Matched' : 'Unmatched'}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      {l.adjustmentJournalId ? (
+                        <Link to={`/finance/gl/journals/${encodeURIComponent(String(l.adjustmentJournalId))}`}>View Journal</Link>
+                      ) : eligible ? (
+                        <button type="button" onClick={() => openAdjustment(l)}>
+                          Create Adjustment
+                        </button>
+                      ) : (
+                        <span style={{ color: '#888' }}>-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
-          <div style={{ marginTop: 12, fontSize: 12, color: '#666' }}>Reconciled lines are read-only (no unmatch/undo UI).</div>
+          {adjustOpen ? (
+            <div style={{ marginTop: 14, padding: 12, border: '1px solid #ddd', borderRadius: 6, maxWidth: 720 }}>
+              <div style={{ fontWeight: 700 }}>Create Adjustment Journal</div>
+              {adjustLine ? (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
+                  Line: {adjustLine.txnDate.slice(0, 10)} — {adjustLine.description}
+                </div>
+              ) : null}
+
+              {adjustError ? <div style={{ marginTop: 10, color: 'crimson' }}>{adjustError}</div> : null}
+
+              <form onSubmit={submitAdjustment} style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <label>
+                  Posting Date
+                  <input type="date" value={adjustPostingDate} onChange={(e) => setAdjustPostingDate(e.target.value)} required />
+                </label>
+
+                <label>
+                  GL Account
+                  <select
+                    value={adjustGlAccountId}
+                    onChange={(e) => setAdjustGlAccountId(e.target.value)}
+                    disabled={glAccountsLoading || adjusting}
+                    required
+                  >
+                    <option value="">Select account</option>
+                    {adjustmentCandidates.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code} — {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Memo (optional)
+                  <input value={adjustMemo} onChange={(e) => setAdjustMemo(e.target.value)} disabled={adjusting} />
+                </label>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="submit" disabled={!canReconcile || adjusting}>
+                    {adjusting ? 'Creating...' : 'Create'}
+                  </button>
+                  <button type="button" onClick={closeAdjustment} disabled={adjusting}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : null}
+
+          <div style={{ marginTop: 12, fontSize: 12, color: '#666' }}>Matched lines are read-only (no unmatch/undo UI).</div>
         </div>
       ) : null}
     </div>

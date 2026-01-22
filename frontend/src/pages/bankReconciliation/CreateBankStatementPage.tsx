@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
-import type { BankAccount } from '../../services/payments';
-import { listBankAccounts } from '../../services/payments';
+import type { BankCashAccount } from '../../services/bankAccounts';
+import { listBankCashAccounts } from '../../services/bankAccounts';
 import { createStatement } from '../../services/bankReconciliation';
 
 function todayIsoDate() {
@@ -17,7 +17,7 @@ export function CreateBankStatementPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankCashAccount[]>([]);
   const [bankAccountId, setBankAccountId] = useState(searchParams.get('bankAccountId') ?? '');
   const [statementDate, setStatementDate] = useState(todayIsoDate());
   const [openingBalance, setOpeningBalance] = useState('0');
@@ -30,7 +30,7 @@ export function CreateBankStatementPage() {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    listBankAccounts()
+    listBankCashAccounts()
       .then((banks) => {
         if (!mounted) return;
         setBankAccounts(banks);
@@ -69,7 +69,8 @@ export function CreateBankStatementPage() {
     try {
       const created = await createStatement({
         bankAccountId,
-        statementDate,
+        statementStartDate: statementDate,
+        statementEndDate: statementDate,
         openingBalance: ob,
         closingBalance: cb,
       });
@@ -106,7 +107,7 @@ export function CreateBankStatementPage() {
             <option value="">-- select --</option>
             {bankAccounts.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.bankName} {b.accountNumber} ({b.currency})
+                {b.name} ({b.currency})
               </option>
             ))}
           </select>

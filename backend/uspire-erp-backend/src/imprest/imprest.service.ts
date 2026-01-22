@@ -1483,14 +1483,7 @@ export class ImprestService {
 
     const row = await this.prisma.imprestCase.findFirst({
       where: { id, tenantId: authz.tenantId },
-      select: {
-        id: true,
-        reference: true,
-        tenantId: true,
-        state: true,
-        issuedJournalId: true,
-        settlementJournalId: true,
-        requestedAmount: true,
+      include: {
         facility: {
           select: {
             id: true,
@@ -1615,8 +1608,8 @@ export class ImprestService {
     const dims = {
       legalEntityId: legalEntity.id as string,
       departmentId: facility.departmentId as string,
-      projectId: facility.projectId ?? null,
-      fundId: facility.fundId ?? null,
+      projectId: (row as any).projectId ?? null,
+      fundId: (row as any).fundId ?? null,
     };
 
     const journalLines: Array<{

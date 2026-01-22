@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
-import { listBankAccounts } from '../../services/payments';
-import type { BankAccount } from '../../services/payments';
-import { getReconciliationStatus, getStatements } from '../../services/bankReconciliation';
+import { listBankCashAccounts } from '../../services/bankAccounts';
+import type { BankCashAccount } from '../../services/bankAccounts';
+import { getStatementPreview, getStatements } from '../../services/bankReconciliation';
+import type { BankReconciliationPreview, BankStatementListItem } from '../../services/bankReconciliation';
 
 export function BankReconciliationHomePage() {
   const { hasPermission } = useAuth();
@@ -12,35 +13,28 @@ export function BankReconciliationHomePage() {
 
   const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
 
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankCashAccount[]>([]);
   const [bankAccountId, setBankAccountId] = useState('');
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [totalStatements, setTotalStatements] = useState<number | null>(null);
-  const [status, setStatus] = useState<
-    | {
-        totalStatementLines: number;
-        reconciledCount: number;
-        unreconciledCount: number;
-      }
-    | null
-  >(null);
+  const [selectedStatement, setSelectedStatement] = useState<BankStatementListItem | null>(null);
+  const [preview, setPreview] = useState<BankReconciliationPreview | null>(null);
 
   useEffect(() => {
     let mounted = true;
     setLoadingAccounts(true);
     setError(null);
 
-    listBankAccounts()
+    listBankCashAccounts()
       .then((banks) => {
         if (!mounted) return;
         setBankAccounts(banks);
       })
       .catch((err: any) => {
-        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load bank accounts';
-        setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load bank accounts.';
+        setError(typeof msg === 'string' ? msg : 'Failed to load bank accounts.');
       })
       .finally(() => {
         if (!mounted) return;
@@ -54,23 +48,42 @@ export function BankReconciliationHomePage() {
 
   const selectedBank = useMemo(() => bankAccounts.find((b) => b.id === bankAccountId) ?? null, [bankAccounts, bankAccountId]);
 
+  function resolveActiveStatement(statements: BankStatementListItem[]) {
+    const inProgress = statements.find((s) => s.status === 'IN_PROGRESS');
+    if (inProgress) return inProgress;
+
+    return (
+      statements
+        .slice()
+        .sort((a, b) => new Date(b.statementEndDate).getTime() - new Date(a.statementEndDate).getTime())[0] ?? null
+    );
+  }
+
   async function loadSummary() {
     if (!canView || !bankAccountId) return;
     setError(null);
+    setSelectedStatement(null);
+    setPreview(null);
     setLoadingSummary(true);
     try {
-      const [s, statements] = await Promise.all([
-        getReconciliationStatus(bankAccountId),
-        getStatements(bankAccountId),
-      ]);
-      setStatus({
-        totalStatementLines: s.totalStatementLines,
-        reconciledCount: s.reconciledCount,
-        unreconciledCount: s.unreconciledCount,
-      });
-      setTotalStatements(statements.length);
+      const statements = await getStatements(bankAccountId);
+      if (!statements.length) {
+        setError('No bank statement found for this account. Create a statement first.');
+        return;
+      }
+
+      const active = resolveActiveStatement(statements);
+      if (!active) {
+        setError('No bank statement found for this account. Create a statement first.');
+        return;
+      }
+
+      setSelectedStatement(active);
+
+      const p = await getStatementPreview(active.id);
+      setPreview(p);
     } catch (err: any) {
-      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load reconciliation status';
+      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load reconciliation summary';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setLoadingSummary(false);
@@ -91,7 +104,7 @@ export function BankReconciliationHomePage() {
             <option value="">-- select --</option>
             {bankAccounts.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.bankName} {b.accountNumber} ({b.currency})
+                {b.name} ({b.currency})
               </option>
             ))}
           </select>
@@ -108,19 +121,37 @@ export function BankReconciliationHomePage() {
         </div>
       ) : null}
 
-      {status ? (
+      {selectedStatement && preview ? (
         <div style={{ marginTop: 16 }}>
           <div>
-            <b>Total statements:</b> {totalStatements ?? '-'}
+            <b>Active statement:</b> {selectedStatement.id}
           </div>
           <div style={{ marginTop: 6 }}>
-            <b>Total statement lines:</b> {status.totalStatementLines}
+            <b>Statement end date:</b> {selectedStatement.statementEndDate.slice(0, 10)}
           </div>
           <div style={{ marginTop: 6 }}>
-            <b>Reconciled lines:</b> {status.reconciledCount}
+            <b>Status:</b> {selectedStatement.status}
           </div>
-          <div style={{ marginTop: 6 }}>
-            <b>Unreconciled lines:</b> {status.unreconciledCount}
+
+          <div style={{ marginTop: 14 }}>
+            <div>
+              <b>System bank balance (as at end date):</b> {preview.systemBankBalanceAsAtEndDate}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <b>Outstanding payments total:</b> {preview.outstandingPaymentsTotal}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <b>Deposits in transit total:</b> {preview.depositsInTransitTotal}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <b>Matched count:</b> {preview.matchedCount}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <b>Unmatched statement lines count:</b> {preview.unmatchedStatementLinesCount}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <b>Difference preview:</b> {preview.differencePreview}
+            </div>
           </div>
 
           <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>

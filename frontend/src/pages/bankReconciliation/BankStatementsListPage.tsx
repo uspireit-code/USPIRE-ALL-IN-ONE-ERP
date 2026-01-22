@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
-import { listBankAccounts } from '../../services/payments';
-import type { BankAccount } from '../../services/payments';
+import { listBankCashAccounts } from '../../services/bankAccounts';
+import type { BankCashAccount } from '../../services/bankAccounts';
 import { getStatements, type BankStatementListItem } from '../../services/bankReconciliation';
 
 function money(n: number) {
@@ -17,7 +17,7 @@ export function BankStatementsListPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankCashAccount[]>([]);
   const [statements, setStatements] = useState<BankStatementListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function BankStatementsListPage() {
 
   useEffect(() => {
     let mounted = true;
-    listBankAccounts()
+    listBankCashAccounts()
       .then((banks) => {
         if (!mounted) return;
         setBankAccounts(banks);
@@ -92,7 +92,7 @@ export function BankStatementsListPage() {
             <option value="">-- select --</option>
             {bankAccounts.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.bankName} {b.accountNumber} ({b.currency})
+                {b.name} ({b.currency})
               </option>
             ))}
           </select>
@@ -115,7 +115,8 @@ export function BankStatementsListPage() {
         <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 12 }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Statement Date</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Statement End Date</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Status</th>
               <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Opening</th>
               <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: 8 }}>Closing</th>
             </tr>
@@ -124,8 +125,9 @@ export function BankStatementsListPage() {
             {statements.map((s) => (
               <tr key={s.id}>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                  <Link to={`/bank-reconciliation/statements/${s.id}`}>{s.statementDate.slice(0, 10)}</Link>
+                  <Link to={`/bank-reconciliation/statements/${s.id}`}>{s.statementEndDate.slice(0, 10)}</Link>
                 </td>
+                <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{s.status}</td>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{money(Number(s.openingBalance))}</td>
                 <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{money(Number(s.closingBalance))}</td>
               </tr>

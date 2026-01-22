@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
-import { getReconciliationStatus, getStatements, getUnmatchedItems, matchPayment, type UnmatchedPayment, type UnmatchedStatementLine } from '../../services/bankReconciliation';
+import {
+  getStatementPreview,
+  getStatements,
+  getUnmatchedItems,
+  matchPayment,
+  type BankStatementListItem,
+  type UnmatchedPayment,
+  type UnmatchedStatementLine,
+} from '../../services/bankReconciliation';
 
 function money(n: number) {
   return Number(n).toFixed(2);
@@ -30,9 +38,17 @@ export function MatchBankReconciliationPage() {
   const [selectedLineId, setSelectedLineId] = useState('');
   const [selectedPaymentId, setSelectedPaymentId] = useState('');
 
-  const [summary, setSummary] = useState<{ totalStatements: number; totalStatementLines: number; reconciledCount: number; unreconciledCount: number } | null>(
-    null,
-  );
+  const [summary, setSummary] = useState<{ totalStatements: number; matchedCount: number; unmatchedStatementLinesCount: number } | null>(null);
+
+  function resolveActiveStatement(statements: BankStatementListItem[]) {
+    const inProgress = statements.find((s) => s.status === 'IN_PROGRESS');
+    if (inProgress) return inProgress;
+    return (
+      statements
+        .slice()
+        .sort((a, b) => new Date(b.statementEndDate).getTime() - new Date(a.statementEndDate).getTime())[0] ?? null
+    );
+  }
 
   const selectedLine = useMemo(() => lines.find((l) => l.id === selectedLineId) ?? null, [lines, selectedLineId]);
   const selectedPayment = useMemo(() => payments.find((p) => p.id === selectedPaymentId) ?? null, [payments, selectedPaymentId]);
@@ -51,21 +67,26 @@ export function MatchBankReconciliationPage() {
     setError(null);
     setLoading(true);
     try {
-      const [unmatched, status, statements] = await Promise.all([
-        getUnmatchedItems(),
-        getReconciliationStatus(bankAccountId),
-        getStatements(bankAccountId),
-      ]);
+      const [unmatched, statements] = await Promise.all([getUnmatchedItems(), getStatements(bankAccountId)]);
 
-      setSummary({
-        totalStatements: statements.length,
-        totalStatementLines: status.totalStatementLines,
-        reconciledCount: status.reconciledCount,
-        unreconciledCount: status.unreconciledCount,
-      });
+      const active = resolveActiveStatement(statements);
+      if (active) {
+        const p = await getStatementPreview(active.id);
+        setSummary({
+          totalStatements: statements.length,
+          matchedCount: p.matchedCount,
+          unmatchedStatementLinesCount: p.unmatchedStatementLinesCount,
+        });
+      } else {
+        setSummary({
+          totalStatements: statements.length,
+          matchedCount: 0,
+          unmatchedStatementLinesCount: 0,
+        });
+      }
 
-      setPayments(unmatched.unreconciledPayments.filter((p) => p.bankAccountId === bankAccountId));
-      setLines(unmatched.unreconciledStatementLines.filter((l) => l.bankStatement.bankAccountId === bankAccountId));
+      setPayments(unmatched.unreconciledPayments.filter((p: UnmatchedPayment) => p.bankAccountId === bankAccountId));
+      setLines(unmatched.unreconciledStatementLines.filter((l: UnmatchedStatementLine) => l.bankStatement.bankAccountId === bankAccountId));
 
       setSelectedLineId('');
       setSelectedPaymentId('');
@@ -120,8 +141,7 @@ export function MatchBankReconciliationPage() {
 
       {summary ? (
         <div style={{ marginTop: 12, color: '#666' }}>
-          Statements: {summary.totalStatements} | Lines: {summary.totalStatementLines} | Reconciled: {summary.reconciledCount} | Unreconciled:{' '}
-          {summary.unreconciledCount}
+          Statements: {summary.totalStatements} | Matched: {summary.matchedCount} | Unmatched lines: {summary.unmatchedStatementLinesCount}
         </div>
       ) : null}
 

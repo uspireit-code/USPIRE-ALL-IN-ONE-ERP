@@ -34,6 +34,7 @@ import { RequestLoggerMiddleware } from './internal/request-logger.middleware';
 import { TenantMiddleware } from './tenant/tenant.middleware';
 import { MasterDataModule } from './master-data/master-data.module';
 import { ImprestModule } from './imprest/imprest.module';
+import { BankReconModule } from './bank-recon/bank-recon.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { ImprestModule } from './imprest/imprest.module';
     PeriodsModule,
     MasterDataModule,
     ImprestModule,
+    BankReconModule,
   ],
   controllers: [AppController],
   providers: [AppService],

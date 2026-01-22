@@ -36,7 +36,7 @@ export type Payment = {
 };
 
 export async function listBankAccounts() {
-  return apiFetch<BankAccount[]>('/bank/accounts', { method: 'GET' });
+  return apiFetch<BankAccount[]>('/bank-accounts', { method: 'GET' });
 }
 
 export async function listPayments() {

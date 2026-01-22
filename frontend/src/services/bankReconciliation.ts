@@ -3,7 +3,9 @@ import { apiFetch } from './api';
 export type BankStatementListItem = {
   id: string;
   bankAccountId: string;
-  statementDate: string;
+  statementStartDate: string;
+  statementEndDate: string;
+  status: 'DRAFT' | 'IN_PROGRESS' | 'RECONCILED' | 'LOCKED';
   openingBalance: number;
   closingBalance: number;
   createdAt: string;
@@ -11,28 +13,36 @@ export type BankStatementListItem = {
 
 export type BankStatementLine = {
   id: string;
-  transactionDate: string;
+  txnDate: string;
   description: string;
-  amount: number;
-  reference?: string | null;
-  isReconciled: boolean;
+  debitAmount: number;
+  creditAmount: number;
+  matched: boolean;
+  matchedJournalLineId?: string | null;
+  classification?: string;
+  adjustmentJournalId?: string | null;
 };
 
 export type BankStatementDetail = {
   id: string;
   bankAccountId: string;
-  statementDate: string;
+  statementStartDate: string;
+  statementEndDate: string;
+  status: 'DRAFT' | 'IN_PROGRESS' | 'RECONCILED' | 'LOCKED';
   openingBalance: number;
   closingBalance: number;
   createdAt: string;
   lines: BankStatementLine[];
 };
 
-export type ReconciliationStatus = {
-  bankAccountId: string;
-  totalStatementLines: number;
-  reconciledCount: number;
-  unreconciledCount: number;
+export type BankReconciliationPreview = {
+  bankClosingBalance: number;
+  systemBankBalanceAsAtEndDate: number;
+  outstandingPaymentsTotal: number;
+  depositsInTransitTotal: number;
+  matchedCount: number;
+  unmatchedStatementLinesCount: number;
+  differencePreview: number;
 };
 
 export type UnmatchedPayment = {
@@ -63,15 +73,24 @@ export type UnmatchedResponse = {
 };
 
 export function getStatements(bankAccountId: string) {
-  return apiFetch<BankStatementListItem[]>(`/bank/statements?bankAccountId=${encodeURIComponent(bankAccountId)}`, { method: 'GET' });
+  return apiFetch<BankStatementListItem[]>(
+    `/bank-recon/statements?bankAccountId=${encodeURIComponent(bankAccountId)}`,
+    { method: 'GET' },
+  );
 }
 
 export function getStatement(statementId: string) {
-  return apiFetch<BankStatementDetail>(`/bank/statements/${encodeURIComponent(statementId)}`, { method: 'GET' });
+  return apiFetch<BankStatementDetail>(`/bank-recon/statements/${encodeURIComponent(statementId)}`, { method: 'GET' });
 }
 
-export function createStatement(params: { bankAccountId: string; statementDate: string; openingBalance: number; closingBalance: number }) {
-  return apiFetch<any>('/bank/statements', {
+export function createStatement(params: {
+  bankAccountId: string;
+  statementStartDate: string;
+  statementEndDate: string;
+  openingBalance: number;
+  closingBalance: number;
+}) {
+  return apiFetch<any>('/bank-recon/statements', {
     method: 'POST',
     body: JSON.stringify(params),
   });
@@ -79,28 +98,54 @@ export function createStatement(params: { bankAccountId: string; statementDate: 
 
 export function addStatementLine(params: {
   statementId: string;
-  transactionDate: string;
+  txnDate: string;
   description: string;
-  amount: number;
-  reference?: string;
+  debitAmount: number;
+  creditAmount: number;
 }) {
-  return apiFetch<any>(`/bank/statements/${encodeURIComponent(params.statementId)}/lines`, {
+  return apiFetch<any>(`/bank-recon/statements/${encodeURIComponent(params.statementId)}/lines`, {
     method: 'POST',
     body: JSON.stringify({
       lines: [
         {
-          transactionDate: params.transactionDate,
+          txnDate: params.txnDate,
           description: params.description,
-          amount: params.amount,
-          reference: params.reference || undefined,
+          debitAmount: params.debitAmount,
+          creditAmount: params.creditAmount,
         },
       ],
     }),
   });
 }
 
-export function getReconciliationStatus(bankAccountId: string) {
-  return apiFetch<ReconciliationStatus>(`/bank/reconciliation/status?bankAccountId=${encodeURIComponent(bankAccountId)}`, { method: 'GET' });
+export function getStatementPreview(statementId: string) {
+  return apiFetch<BankReconciliationPreview>(
+    `/bank-recon/statements/${encodeURIComponent(statementId)}/preview`,
+    { method: 'GET' },
+  );
+}
+
+export function listStatementLines(statementId: string, params?: { matched?: boolean }) {
+  const q = typeof params?.matched === 'boolean' ? `?matched=${params.matched ? 'true' : 'false'}` : '';
+  return apiFetch<BankStatementLine[]>(`/bank-recon/statements/${encodeURIComponent(statementId)}/lines${q}`, {
+    method: 'GET',
+  });
+}
+
+export function createAdjustment(params: {
+  lineId: string;
+  glAccountId: string;
+  postingDate: string;
+  memo?: string;
+}) {
+  return apiFetch<any>(`/bank-recon/lines/${encodeURIComponent(params.lineId)}/create-adjustment`, {
+    method: 'POST',
+    body: JSON.stringify({
+      glAccountId: params.glAccountId,
+      postingDate: params.postingDate,
+      memo: params.memo,
+    }),
+  });
 }
 
 export function getUnmatchedItems() {

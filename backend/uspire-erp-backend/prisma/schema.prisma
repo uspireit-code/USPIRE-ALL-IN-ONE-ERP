@@ -233,56 +233,68 @@ model TaxRate {
   @@index([glAccountId])
 }
 
-model BankStatement {
-  id             String              @id @default(uuid())
-  tenantId       String
-  bankAccountId  String
-  statementDate  DateTime
-  openingBalance Decimal             @db.Decimal(18, 2)
-  closingBalance Decimal             @db.Decimal(18, 2)
-  createdAt      DateTime            @default(now())
-  bankAccount    BankAccount         @relation(fields: [bankAccountId], references: [id])
-  tenant         Tenant              @relation(fields: [tenantId], references: [id])
-  lines          BankStatementLine[]
+enum BankStatementStatus {
+  DRAFT
+  IN_PROGRESS
+  RECONCILED
+  LOCKED
+}
 
-  @@unique([tenantId, bankAccountId, statementDate])
+enum BankStatementLineClassification {
+  SYSTEM_MATCH
+  BANK_CHARGE
+  INTEREST
+  ERROR
+  UNIDENTIFIED
+}
+
+model BankStatement {
+  id                 String                      @id @default(uuid())
+  tenantId           String
+  bankAccountId      String
+  statementStartDate DateTime
+  statementEndDate   DateTime
+  openingBalance     Decimal                     @db.Decimal(18, 2)
+  closingBalance     Decimal                     @db.Decimal(18, 2)
+  status             BankStatementStatus         @default(DRAFT)
+  createdByUserId    String
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @default(now()) @updatedAt
+  bankAccount        BankAccount                 @relation(fields: [bankAccountId], references: [id])
+  tenant             Tenant                      @relation(fields: [tenantId], references: [id])
+  createdBy          User                        @relation("BankStatementCreatedBy", fields: [createdByUserId], references: [id])
+  lines              BankStatementLine[]
+
+  @@unique([tenantId, bankAccountId, statementEndDate])
   @@index([tenantId])
   @@index([bankAccountId])
+  @@index([tenantId, bankAccountId, statementStartDate])
+  @@index([tenantId, bankAccountId, statementEndDate])
 }
 
 model BankStatementLine {
-  id              String              @id @default(uuid())
-  bankStatementId String
-  transactionDate DateTime
-  description     String
-  amount          Decimal             @db.Decimal(18, 2)
-  reference       String?
-  isReconciled    Boolean             @default(false)
-  reconciledAt    DateTime?
-  reconciledBy    String?
-  reconciliation  BankReconciliation?
-  bankStatement   BankStatement       @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  id                  String                         @id @default(uuid())
+  statementId         String
+  txnDate             DateTime
+  description         String
+  reference           String?
+  debitAmount         Decimal                        @default(0) @db.Decimal(18, 2)
+  creditAmount        Decimal                        @default(0) @db.Decimal(18, 2)
+  matched             Boolean                        @default(false)
+  matchedJournalLineId String?
+  adjustmentJournalId  String?
+  classification      BankStatementLineClassification @default(UNIDENTIFIED)
+  statement           BankStatement                  @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  matchedJournalLine  JournalLine?                   @relation("BankStatementLineMatchedJournalLine", fields: [matchedJournalLineId], references: [id], onDelete: Restrict)
+  adjustmentJournal   JournalEntry?                  @relation("BankStatementLineAdjustmentJournal", fields: [adjustmentJournalId], references: [id], onDelete: Restrict)
+  clearedJournalLine  JournalLine?                   @relation("JournalLineClearedByStatementLine")
 
-  @@index([bankStatementId])
-  @@index([transactionDate])
-  @@index([isReconciled])
-}
-
-model BankReconciliation {
-  id              String            @id @default(uuid())
-  tenantId        String
-  bankAccountId   String
-  paymentId       String?           @unique
-  statementLineId String            @unique
-  reconciledAt    DateTime
-  reconciledBy    String
-  bankAccount     BankAccount       @relation(fields: [bankAccountId], references: [id])
-  payment         Payment?          @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  statementLine   BankStatementLine @relation(fields: [statementLineId], references: [id])
-  tenant          Tenant            @relation(fields: [tenantId], references: [id])
-
-  @@index([tenantId])
-  @@index([bankAccountId])
+  @@unique([matchedJournalLineId])
+  @@unique([adjustmentJournalId])
+  @@index([statementId])
+  @@index([txnDate])
+  @@index([matched])
+  @@index([matchedJournalLineId])
 }
 
 model InvoiceTaxLine {
@@ -327,7 +339,6 @@ model BankAccount {
   updatedAt       DateTime             @default(now()) @updatedAt
   glAccount       Account              @relation(fields: [glAccountId], references: [id])
   tenant          Tenant               @relation(fields: [tenantId], references: [id])
-  reconciliations BankReconciliation[]
   statements      BankStatement[]
   customerRefunds CustomerRefund[]
   payments        Payment[]
@@ -354,7 +365,6 @@ model Payment {
   createdAt       DateTime            @default(now())
   approvedAt      DateTime?
   postedAt        DateTime?
-  reconciliations BankReconciliation?
   approvedBy      User?               @relation("PaymentApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   bankAccount     BankAccount         @relation(fields: [bankAccountId], references: [id])
   createdBy       User                @relation("PaymentCreatedBy", fields: [createdById], references: [id])
@@ -1394,7 +1404,6 @@ model Tenant {
   auditEvents                    AuditEvent[]
   auditEvidence                  AuditEvidence[]
   bankAccounts                   BankAccount[]
-  bankReconciliations            BankReconciliation[]
   bankStatements                 BankStatement[]
   budgets                        Budget[]
   budgetLines                    BudgetLine[]
@@ -1624,6 +1633,7 @@ model User {
   createdAt                               DateTime                        @default(now())
   name                                    String
   accountsCreated                         Account[]                       @relation("AccountCreatedBy")
+  bankStatementsCreated                   BankStatement[]                 @relation("BankStatementCreatedBy")
   periodsClosed                           AccountingPeriod[]              @relation("PeriodClosedBy")
   accountingPeriodsCreated                AccountingPeriod[]              @relation("AccountingPeriodCreatedBy")
   accountingPeriodChecklistsCompleted     AccountingPeriodChecklist[]     @relation("AccountingPeriodChecklistCompletedBy")
@@ -1917,6 +1927,7 @@ model JournalEntry {
   submittedBy                 User?                        @relation("JournalSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
   tenant                      Tenant                       @relation(fields: [tenantId], references: [id])
   lines                       JournalLine[]
+  bankStatementLineAdjustments BankStatementLine[]          @relation("BankStatementLineAdjustmentJournal")
   recurringGenerations        RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
   imprestCasesIssued          ImprestCase[]                @relation("ImprestCaseIssuedJournal")
   imprestCasesSettled         ImprestCase[]                @relation("ImprestCaseSettlementJournal")
@@ -2129,20 +2140,27 @@ model JournalLine {
   legalEntityId  String?
   fundId         String?
   projectId      String?
+  cleared        Boolean      @default(false)
+  clearedAt      DateTime?
+  bankStatementLineId String?
   account        Account      @relation(fields: [accountId], references: [id])
   department     Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   fund           Fund?        @relation(fields: [fundId], references: [id], onDelete: Restrict)
   journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   legalEntity    LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
   project        Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  bankStatementLine BankStatementLine? @relation("JournalLineClearedByStatementLine", fields: [bankStatementLineId], references: [id], onDelete: Restrict)
+  matchedByBankStatementLine BankStatementLine? @relation("BankStatementLineMatchedJournalLine")
 
   @@index([journalEntryId])
   @@index([accountId])
+  @@index([accountId, cleared])
   @@index([legalEntityId])
   @@index([departmentId])
   @@index([projectId])
   @@index([fundId])
   @@index([journalEntryId, lineNumber])
+  @@unique([bankStatementLineId])
 }
 
 model Budget {
@@ -2415,7 +2433,7 @@ enum AuditEventType {
   JOURNAL_POST
   PERIOD_CHECKLIST_COMPLETE
   PERIOD_CLOSE
-  SOD_VIOLATION
+  PERIOD_REOPEN
   AP_POST
   AR_POST
   INVOICE_POSTED
@@ -2425,6 +2443,11 @@ enum AuditEventType {
   FA_DEPRECIATION_RUN
   FA_DISPOSE
   BANK_RECONCILIATION_MATCH
+  CREATE_BANK_STATEMENT
+  ADD_BANK_STATEMENT_LINE
+  BANK_RECON_LINE_MATCHED
+  BANK_RECON_LINE_UNMATCHED
+  BANK_RECON_ADJUSTMENT_JOURNAL_CREATED
   EVIDENCE_UPLOAD
   BUDGET_CREATE
   BUDGET_APPROVE
@@ -2459,7 +2482,6 @@ enum AuditEventType {
   RECURRING_JOURNAL_GENERATED
   JOURNAL_UPLOAD
   JOURNAL_UPLOAD_FAILED
-  PERIOD_REOPEN
   DISCLOSURE_NOTE_GENERATE
   DISCLOSURE_NOTE_VIEW
   GL_JOURNAL_SUBMITTED
@@ -2559,6 +2581,8 @@ enum AuditEntityType {
   FIXED_ASSET
   FIXED_ASSET_DEPRECIATION_RUN
   BANK_RECONCILIATION_MATCH
+  BANK_STATEMENT
+  BANK_STATEMENT_LINE
   USER
   BUDGET
   FORECAST
