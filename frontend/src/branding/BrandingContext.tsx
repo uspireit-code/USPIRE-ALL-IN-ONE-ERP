@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { TenantSystemConfig } from '../services/settings';
 import { getSystemConfig } from '../services/settings';
+import { getCurrentBranding } from '../services/branding';
 
 type BrandingOverrides = Partial<Pick<TenantSystemConfig, 'organisationName' | 'organisationShortName' | 'logoUrl' | 'faviconUrl' | 'primaryColor' | 'secondaryColor' | 'accentColor' | 'secondaryAccentColor'>>;
 
@@ -76,7 +77,54 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
     const accessToken = localStorage.getItem('accessToken') ?? '';
 
     if (!tenantId || !accessToken) {
-      const cached = tenantId ? tryLoadCachedBranding(tenantId) : null;
+      if (!tenantId) {
+        setBase(null);
+        return;
+      }
+
+      if (!accessToken) {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const publicBrand = await getCurrentBranding();
+          const mapped: TenantSystemConfig = {
+            id: tenantId,
+            name: '',
+            organisationName: publicBrand.organisationName,
+            organisationShortName: publicBrand.organisationShortName,
+            legalName: null,
+            defaultCurrency: null,
+            country: null,
+            timezone: null,
+            financialYearStartMonth: null,
+            dateFormat: null,
+            numberFormat: null,
+            defaultLandingPage: null,
+            defaultDashboard: null,
+            defaultLanguage: null,
+            demoModeEnabled: null,
+            defaultUserRoleCode: null,
+            logoUrl: publicBrand.logoUrl,
+            faviconUrl: null,
+            primaryColor: publicBrand.primaryColor ?? '#020445',
+            secondaryColor: null,
+            accentColor: null,
+            secondaryAccentColor: null,
+            updatedAt: new Date().toISOString(),
+          };
+          setBase(mapped);
+          saveCachedBranding(tenantId, mapped);
+          lastLoadedTenantKey.current = tenantId;
+        } catch {
+          const cached = tryLoadCachedBranding(tenantId);
+          setBase(cached);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const cached = tryLoadCachedBranding(tenantId);
       setBase(cached);
       return;
     }
@@ -85,8 +133,15 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
     setError(null);
     try {
       const cfg = await getSystemConfig();
-      setBase(cfg);
-      saveCachedBranding(tenantId, cfg);
+      const normalized: TenantSystemConfig = {
+        ...cfg,
+        logoUrl:
+          cfg.logoUrl && cfg.logoUrl.startsWith('/settings/organisation/logo')
+            ? `/branding/logo?tenantId=${encodeURIComponent(tenantId)}`
+            : cfg.logoUrl,
+      };
+      setBase(normalized);
+      saveCachedBranding(tenantId, normalized);
       lastLoadedTenantKey.current = tenantId;
     } catch (e: any) {
       setError(e?.message || 'Failed to load system configuration');

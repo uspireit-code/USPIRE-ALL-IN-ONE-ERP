@@ -63,6 +63,36 @@ export class BankReconService {
     }
   }
 
+  private async assertStatementEndDateInOpenPeriod(params: {
+    prisma: PrismaService;
+    tenantId: string;
+    statementEndDate: Date;
+  }) {
+    const period = await (params.prisma.accountingPeriod as any).findFirst({
+      where: {
+        tenantId: params.tenantId,
+        startDate: { lte: params.statementEndDate },
+        endDate: { gte: params.statementEndDate },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (!period) {
+      throw new BadRequestException(
+        'Cannot reconcile: accounting period is CLOSED.',
+      );
+    }
+
+    const status = String((period as any).status);
+    if (status !== 'OPEN') {
+      throw new BadRequestException(
+        'Cannot reconcile: accounting period is CLOSED.',
+      );
+    }
+
+    return period;
+  }
+
   private async assertPostingDateInOpenPeriod(params: {
     prisma: PrismaService;
     tenantId: string;
@@ -257,9 +287,7 @@ export class BankReconService {
       },
     });
     if (!statement) throw new NotFoundException('Bank statement not found');
-    if (statement.status === 'LOCKED') {
-      throw new BadRequestException('Cannot modify a LOCKED statement');
-    }
+    this.assertStatementMutable(String(statement.status));
 
     const now = new Date();
 
@@ -339,9 +367,7 @@ export class BankReconService {
 
     if (!line) throw new NotFoundException('Bank statement line not found');
 
-    if (line.statement.status === 'LOCKED') {
-      throw new BadRequestException('Cannot modify a LOCKED statement');
-    }
+    this.assertStatementMutable(String(line.statement.status));
 
     if (line.matched) {
       throw new BadRequestException('Cannot delete a matched bank statement line');
@@ -635,6 +661,196 @@ export class BankReconService {
       matchedCount,
       unmatchedStatementLinesCount: unmatchedCount,
       differencePreview,
+    };
+  }
+
+  async reconcileAndLockStatement(req: Request, statementId: string) {
+    const tenant = this.ensureTenant(req);
+    const user = this.ensureUser(req);
+
+    const now = new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const statement = await tx.bankStatement.findFirst({
+        where: { id: statementId, tenantId: tenant.id },
+        include: {
+          bankAccount: { select: { id: true, glAccountId: true } },
+        },
+      });
+
+      if (!statement) throw new NotFoundException('Bank statement not found');
+
+      const status = String(statement.status);
+      if (status === 'LOCKED' || status === 'RECONCILED') {
+        throw new ConflictException('Statement is already reconciled/locked');
+      }
+      if (status !== 'DRAFT' && status !== 'IN_PROGRESS') {
+        throw new BadRequestException('Statement is not eligible for reconciliation');
+      }
+
+      await this.assertStatementEndDateInOpenPeriod({
+        prisma: tx as any,
+        tenantId: tenant.id,
+        statementEndDate: statement.statementEndDate,
+      });
+
+      // Compute preview using the same underlying aggregation logic.
+      const [balanceAgg, outstandingAgg] = await Promise.all([
+        tx.journalLine.aggregate({
+          where: {
+            accountId: statement.bankAccount.glAccountId,
+            journalEntry: {
+              tenantId: tenant.id,
+              status: 'POSTED',
+              journalDate: { lte: statement.statementEndDate },
+            },
+          },
+          _sum: { debit: true, credit: true },
+        }),
+        tx.journalLine.aggregate({
+          where: {
+            accountId: statement.bankAccount.glAccountId,
+            cleared: false,
+            journalEntry: {
+              tenantId: tenant.id,
+              status: 'POSTED',
+              journalDate: { lte: statement.statementEndDate },
+            },
+          },
+          _sum: { debit: true, credit: true },
+        }),
+      ]);
+
+      const systemDebit = this.toNumber2(balanceAgg._sum.debit);
+      const systemCredit = this.toNumber2(balanceAgg._sum.credit);
+      const systemBankBalanceAsAtEndDate = this.round2(systemDebit - systemCredit);
+
+      const depositsInTransitTotal = this.toNumber2(outstandingAgg._sum.debit);
+      const outstandingPaymentsTotal = this.toNumber2(outstandingAgg._sum.credit);
+
+      const bankClosingBalance = this.toNumber2(statement.closingBalance);
+
+      const differencePreview = this.round2(
+        bankClosingBalance +
+          depositsInTransitTotal -
+          outstandingPaymentsTotal -
+          systemBankBalanceAsAtEndDate,
+      );
+
+      if (differencePreview !== 0) {
+        throw new BadRequestException('Cannot reconcile: difference is not zero.');
+      }
+
+      const reconciled = await tx.bankStatement.update({
+        where: { id: statement.id },
+        data: {
+          status: 'RECONCILED' as any,
+          reconciledAt: now,
+          reconciledByUserId: user.id,
+        } as any,
+        select: { id: true },
+      });
+
+      const adjustedBankBalance = this.round2(
+        bankClosingBalance + depositsInTransitTotal - outstandingPaymentsTotal,
+      );
+
+      await (tx as any).bankReconciliationSnapshot.create({
+        data: {
+          tenantId: tenant.id,
+          bankStatementId: statement.id,
+          bankAccountId: statement.bankAccountId,
+          statementEndDate: statement.statementEndDate,
+          bankClosingBalance: new Prisma.Decimal(this.round2(bankClosingBalance)),
+          systemBankBalance: new Prisma.Decimal(this.round2(systemBankBalanceAsAtEndDate)),
+          outstandingPaymentsTotal: new Prisma.Decimal(this.round2(outstandingPaymentsTotal)),
+          depositsInTransitTotal: new Prisma.Decimal(this.round2(depositsInTransitTotal)),
+          adjustedBankBalance: new Prisma.Decimal(this.round2(adjustedBankBalance)),
+          adjustedGLBalance: new Prisma.Decimal(this.round2(systemBankBalanceAsAtEndDate)),
+          difference: new Prisma.Decimal(0),
+          createdByUserId: user.id,
+        },
+        select: { id: true },
+      });
+
+      const locked = await tx.bankStatement.update({
+        where: { id: reconciled.id },
+        data: {
+          status: 'LOCKED' as any,
+          lockedAt: now,
+          lockedByUserId: user.id,
+        } as any,
+        select: { id: true, status: true },
+      });
+
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: 'BANK_RECON_STATEMENT_RECONCILED' as any,
+          entityType: AuditEntityType.BANK_STATEMENT,
+          entityId: statement.id,
+          actorUserId: user.id,
+          timestamp: now,
+          outcome: 'SUCCESS' as any,
+          action: 'BANK_RECON_STATEMENT_RECONCILED',
+          permissionUsed: PERMISSIONS.BANK.RECONCILE,
+          lifecycleType: 'UPDATE',
+          metadata: {
+            bankStatementId: statement.id,
+            bankAccountId: statement.bankAccountId,
+            statementEndDate: statement.statementEndDate,
+            difference: 0,
+          },
+        },
+        tx as any,
+      ).catch(() => undefined);
+
+      return locked;
+    });
+
+    return result;
+  }
+
+  async getFinalReconciliationSummary(req: Request, statementId: string) {
+    const tenant = this.ensureTenant(req);
+
+    const statement = await (this.prisma as any).bankStatement.findFirst({
+      where: { id: statementId, tenantId: tenant.id },
+      select: {
+        id: true,
+        status: true,
+        reconciledAt: true,
+        reconciledBy: { select: { id: true, name: true, email: true } },
+        lockedAt: true,
+        lockedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    if (!statement) throw new NotFoundException('Bank statement not found');
+    if (String(statement.status) !== 'LOCKED') {
+      throw new BadRequestException('Statement not yet reconciled.');
+    }
+
+    const snapshot = await (this.prisma as any).bankReconciliationSnapshot.findFirst({
+      where: { tenantId: tenant.id, bankStatementId: statement.id },
+    });
+
+    if (!snapshot) {
+      throw new NotFoundException('Final reconciliation snapshot not found');
+    }
+
+    return {
+      bankClosingBalance: Number(snapshot.bankClosingBalance),
+      systemBankBalance: Number(snapshot.systemBankBalance),
+      outstandingPaymentsTotal: Number(snapshot.outstandingPaymentsTotal),
+      depositsInTransitTotal: Number(snapshot.depositsInTransitTotal),
+      adjustedBankBalance: Number(snapshot.adjustedBankBalance),
+      adjustedGLBalance: Number(snapshot.adjustedGLBalance),
+      difference: Number(snapshot.difference),
+      reconciledAt: statement.reconciledAt ?? null,
+      reconciledBy: statement.reconciledBy ?? null,
+      lockedAt: statement.lockedAt ?? null,
+      lockedBy: statement.lockedBy ?? null,
     };
   }
 

@@ -45,6 +45,20 @@ export type BankReconciliationPreview = {
   differencePreview: number;
 };
 
+export type BankReconciliationFinalSummary = {
+  bankClosingBalance: number;
+  systemBankBalance: number;
+  outstandingPaymentsTotal: number;
+  depositsInTransitTotal: number;
+  adjustedBankBalance: number;
+  adjustedGLBalance: number;
+  difference: number;
+  reconciledAt: string | null;
+  reconciledBy: { id: string; name: string; email: string } | null;
+  lockedAt: string | null;
+  lockedBy: { id: string; name: string; email: string } | null;
+};
+
 export type UnmatchedPayment = {
   id: string;
   type: 'SUPPLIER_PAYMENT' | 'CUSTOMER_RECEIPT';
@@ -121,6 +135,19 @@ export function addStatementLine(params: {
 export function getStatementPreview(statementId: string) {
   return apiFetch<BankReconciliationPreview>(
     `/bank-recon/statements/${encodeURIComponent(statementId)}/preview`,
+    { method: 'GET' },
+  );
+}
+
+export function reconcileStatement(statementId: string) {
+  return apiFetch<any>(`/bank-recon/statements/${encodeURIComponent(statementId)}/reconcile`, {
+    method: 'POST',
+  });
+}
+
+export function getFinalSummary(statementId: string) {
+  return apiFetch<BankReconciliationFinalSummary>(
+    `/bank-recon/statements/${encodeURIComponent(statementId)}/final-summary`,
     { method: 'GET' },
   );
 }

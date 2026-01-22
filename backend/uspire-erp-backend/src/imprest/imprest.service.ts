@@ -226,7 +226,7 @@ export class ImprestService {
     }
 
     const accountIds = Array.from(new Set(args.lines.map((l) => l.accountId)));
-    const accounts = await (tx.account as any).findMany({
+    const accounts: Array<{ id: string; isActive: boolean; isPostingAllowed: boolean }> = await (tx.account as any).findMany({
       where: {
         tenantId: args.tenantId,
         id: { in: accountIds },

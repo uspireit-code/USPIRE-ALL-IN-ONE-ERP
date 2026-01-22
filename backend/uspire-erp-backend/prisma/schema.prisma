@@ -257,19 +257,55 @@ model BankStatement {
   openingBalance     Decimal                     @db.Decimal(18, 2)
   closingBalance     Decimal                     @db.Decimal(18, 2)
   status             BankStatementStatus         @default(DRAFT)
+  reconciledAt       DateTime?
+  reconciledByUserId String?
+  lockedAt           DateTime?
+  lockedByUserId     String?
   createdByUserId    String
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @default(now()) @updatedAt
   bankAccount        BankAccount                 @relation(fields: [bankAccountId], references: [id])
   tenant             Tenant                      @relation(fields: [tenantId], references: [id])
   createdBy          User                        @relation("BankStatementCreatedBy", fields: [createdByUserId], references: [id])
+  reconciledBy       User?                       @relation("BankStatementReconciledBy", fields: [reconciledByUserId], references: [id], onDelete: Restrict)
+  lockedBy           User?                       @relation("BankStatementLockedBy", fields: [lockedByUserId], references: [id], onDelete: Restrict)
   lines              BankStatementLine[]
+  reconciliationSnapshot BankReconciliationSnapshot?
 
   @@unique([tenantId, bankAccountId, statementEndDate])
   @@index([tenantId])
   @@index([bankAccountId])
   @@index([tenantId, bankAccountId, statementStartDate])
   @@index([tenantId, bankAccountId, statementEndDate])
+  @@index([tenantId, status])
+}
+
+model BankReconciliationSnapshot {
+  id                      String   @id @default(cuid())
+  tenantId                String
+  bankStatementId         String   @unique
+  bankAccountId           String
+  statementEndDate        DateTime
+
+  bankClosingBalance        Decimal @db.Decimal(18, 2)
+  systemBankBalance         Decimal @db.Decimal(18, 2)
+  outstandingPaymentsTotal  Decimal @db.Decimal(18, 2)
+  depositsInTransitTotal    Decimal @db.Decimal(18, 2)
+  adjustedBankBalance       Decimal @db.Decimal(18, 2)
+  adjustedGLBalance         Decimal @db.Decimal(18, 2)
+  difference                Decimal @db.Decimal(18, 2)
+
+  createdAt              DateTime @default(now())
+  createdByUserId        String
+
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id])
+  bankStatement          BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  bankAccount            BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  createdBy              User          @relation("BankReconciliationSnapshotCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([bankAccountId])
+  @@index([statementEndDate])
 }
 
 model BankStatementLine {
@@ -340,6 +376,7 @@ model BankAccount {
   glAccount       Account              @relation(fields: [glAccountId], references: [id])
   tenant          Tenant               @relation(fields: [tenantId], references: [id])
   statements      BankStatement[]
+  reconciliationSnapshots BankReconciliationSnapshot[]
   customerRefunds CustomerRefund[]
   payments        Payment[]
   paymentRuns     PaymentRun[]
@@ -1404,6 +1441,7 @@ model Tenant {
   auditEvents                    AuditEvent[]
   auditEvidence                  AuditEvidence[]
   bankAccounts                   BankAccount[]
+  bankReconciliationSnapshots     BankReconciliationSnapshot[]
   bankStatements                 BankStatement[]
   budgets                        Budget[]
   budgetLines                    BudgetLine[]
@@ -1632,8 +1670,17 @@ model User {
   isActive                                Boolean                         @default(true)
   createdAt                               DateTime                        @default(now())
   name                                    String
+  phone                                   String?
+  jobTitle                                String?
+  timezone                                String?
+  language                                String?
+  avatarUrl                               String?
+  updatedAt                               DateTime                        @default(now()) @updatedAt
   accountsCreated                         Account[]                       @relation("AccountCreatedBy")
   bankStatementsCreated                   BankStatement[]                 @relation("BankStatementCreatedBy")
+  bankStatementsReconciled                BankStatement[]                 @relation("BankStatementReconciledBy")
+  bankStatementsLocked                    BankStatement[]                 @relation("BankStatementLockedBy")
+  bankReconciliationSnapshotsCreated      BankReconciliationSnapshot[]    @relation("BankReconciliationSnapshotCreatedBy")
   periodsClosed                           AccountingPeriod[]              @relation("PeriodClosedBy")
   accountingPeriodsCreated                AccountingPeriod[]              @relation("AccountingPeriodCreatedBy")
   accountingPeriodChecklistsCompleted     AccountingPeriodChecklist[]     @relation("AccountingPeriodChecklistCompletedBy")
@@ -2443,6 +2490,7 @@ enum AuditEventType {
   FA_DEPRECIATION_RUN
   FA_DISPOSE
   BANK_RECONCILIATION_MATCH
+  BANK_RECON_STATEMENT_RECONCILED
   CREATE_BANK_STATEMENT
   ADD_BANK_STATEMENT_LINE
   BANK_RECON_LINE_MATCHED
@@ -2465,6 +2513,8 @@ enum AuditEventType {
   USER_CREATE
   USER_STATUS_CHANGE
   USER_ROLE_ASSIGN
+  USER_PROFILE_UPDATED
+  USER_AVATAR_UPDATED
   COA_CREATE
   COA_UPDATE
   COA_DEACTIVATE

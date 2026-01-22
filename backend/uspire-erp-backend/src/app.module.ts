@@ -35,6 +35,9 @@ import { TenantMiddleware } from './tenant/tenant.middleware';
 import { MasterDataModule } from './master-data/master-data.module';
 import { ImprestModule } from './imprest/imprest.module';
 import { BankReconModule } from './bank-recon/bank-recon.module';
+import { SearchModule } from './search/search.module';
+import { UsersModule } from './users/users.module';
+import { BrandingModule } from './branding/branding.module';
 
 @Module({
   imports: [
@@ -66,6 +69,9 @@ import { BankReconModule } from './bank-recon/bank-recon.module';
     MasterDataModule,
     ImprestModule,
     BankReconModule,
+    SearchModule,
+    UsersModule,
+    BrandingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

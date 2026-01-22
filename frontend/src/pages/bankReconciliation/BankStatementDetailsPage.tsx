@@ -2,7 +2,18 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
-import { addStatementLine, createAdjustment, getStatement, type BankStatementDetail, type BankStatementLine } from '../../services/bankReconciliation';
+import {
+  addStatementLine,
+  createAdjustment,
+  getFinalSummary,
+  getStatement,
+  getStatementPreview,
+  reconcileStatement,
+  type BankReconciliationFinalSummary,
+  type BankReconciliationPreview,
+  type BankStatementDetail,
+  type BankStatementLine,
+} from '../../services/bankReconciliation';
 import { listAllGlAccounts, type GlAccountLookup } from '../../services/gl';
 
 function money(n: number) {
@@ -26,6 +37,12 @@ export function BankStatementDetailsPage() {
   const [data, setData] = useState<BankStatementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [preview, setPreview] = useState<BankReconciliationPreview | null>(null);
+  const [finalSummary, setFinalSummary] = useState<BankReconciliationFinalSummary | null>(null);
+  const [finalLoading, setFinalLoading] = useState(false);
+  const [finalError, setFinalError] = useState<string | null>(null);
+  const [reconciling, setReconciling] = useState(false);
 
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -79,9 +96,33 @@ export function BankStatementDetailsPage() {
     setError(null);
 
     getStatement(id)
-      .then((res) => {
+      .then(async (res) => {
         if (!mounted) return;
         setData(res);
+
+        setFinalError(null);
+        setFinalSummary(null);
+        setPreview(null);
+
+        try {
+          if (String(res.status) === 'LOCKED') {
+            setFinalLoading(true);
+            const s = await getFinalSummary(id);
+            if (!mounted) return;
+            setFinalSummary(s);
+          } else {
+            const p = await getStatementPreview(id);
+            if (!mounted) return;
+            setPreview(p);
+          }
+        } catch (err: any) {
+          if (!mounted) return;
+          const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load reconciliation summary';
+          setFinalError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        } finally {
+          if (!mounted) return;
+          setFinalLoading(false);
+        }
       })
       .catch((err: any) => {
         const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load statement';
@@ -96,6 +137,39 @@ export function BankStatementDetailsPage() {
       mounted = false;
     };
   }, [canView, id]);
+
+  const isLocked = String(data?.status ?? '') === 'LOCKED';
+  const differenceIsZero = Number(preview?.differencePreview ?? 0) === 0;
+
+  async function doReconcileAndLock() {
+    if (!id || !data || !canReconcile) return;
+    if (String(data.status) === 'LOCKED') return;
+    if (!preview || Number(preview.differencePreview) !== 0) return;
+
+    const ok = window.confirm('Once reconciled, this statement will be locked and cannot be edited. Continue?');
+    if (!ok) return;
+
+    setError(null);
+    setReconciling(true);
+    try {
+      await reconcileStatement(id);
+      const refreshed = await getStatement(id);
+      setData(refreshed);
+
+      setPreview(null);
+      setFinalError(null);
+      setFinalSummary(null);
+      setFinalLoading(true);
+      const s = await getFinalSummary(id);
+      setFinalSummary(s);
+    } catch (err: any) {
+      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to reconcile & lock';
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setFinalLoading(false);
+      setReconciling(false);
+    }
+  }
 
   const matchedCount = useMemo(() => (data?.lines ?? []).filter((l) => l.matched).length, [data]);
 
@@ -226,6 +300,77 @@ export function BankStatementDetailsPage() {
           <div style={{ marginTop: 6 }}>
             <b>Status:</b> {data.status}
           </div>
+
+          {isLocked ? (
+            <div style={{ marginTop: 12, padding: 12, border: '1px solid #ddd', borderRadius: 6, maxWidth: 820 }}>
+              <div style={{ fontWeight: 700 }}>Final Reconciliation Summary</div>
+              {finalLoading ? <div style={{ marginTop: 8 }}>Loading...</div> : null}
+              {finalError ? <div style={{ marginTop: 8, color: 'crimson' }}>{finalError}</div> : null}
+              {finalSummary ? (
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <b>Bank closing balance:</b> {money(finalSummary.bankClosingBalance)}
+                  </div>
+                  <div>
+                    <b>System bank balance:</b> {money(finalSummary.systemBankBalance)}
+                  </div>
+                  <div>
+                    <b>Outstanding payments:</b> {money(finalSummary.outstandingPaymentsTotal)}
+                  </div>
+                  <div>
+                    <b>Deposits in transit:</b> {money(finalSummary.depositsInTransitTotal)}
+                  </div>
+                  <div>
+                    <b>Adjusted bank balance:</b> {money(finalSummary.adjustedBankBalance)}
+                  </div>
+                  <div>
+                    <b>Adjusted GL balance:</b> {money(finalSummary.adjustedGLBalance)}
+                  </div>
+                  <div>
+                    <b>Difference:</b> {money(finalSummary.difference)}
+                  </div>
+                  <div>
+                    <b>Reconciled at:</b> {finalSummary.reconciledAt ? finalSummary.reconciledAt.slice(0, 19) : '-'}
+                  </div>
+                  <div>
+                    <b>Reconciled by:</b> {finalSummary.reconciledBy ? finalSummary.reconciledBy.name : '-'}
+                  </div>
+                  <div>
+                    <b>Locked at:</b> {finalSummary.lockedAt ? finalSummary.lockedAt.slice(0, 19) : '-'}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, padding: 12, border: '1px solid #ddd', borderRadius: 6, maxWidth: 820 }}>
+              <div style={{ fontWeight: 700 }}>Reconciliation Preview</div>
+              {!preview ? <div style={{ marginTop: 8, color: '#666' }}>Loading...</div> : null}
+              {preview ? (
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <b>System bank balance (as at end date):</b> {money(preview.systemBankBalanceAsAtEndDate)}
+                  </div>
+                  <div>
+                    <b>Outstanding payments:</b> {money(preview.outstandingPaymentsTotal)}
+                  </div>
+                  <div>
+                    <b>Deposits in transit:</b> {money(preview.depositsInTransitTotal)}
+                  </div>
+                  <div>
+                    <b>Difference preview:</b> {money(preview.differencePreview)}
+                  </div>
+                </div>
+              ) : null}
+
+              {canReconcile && preview && differenceIsZero ? (
+                <div style={{ marginTop: 12 }}>
+                  <button type="button" onClick={doReconcileAndLock} disabled={reconciling}>
+                    {reconciling ? 'Reconciling...' : 'Reconcile & Lock'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
           <div style={{ marginTop: 6 }}>
             <b>Opening:</b> {money(Number(data.openingBalance))}
           </div>
@@ -236,13 +381,13 @@ export function BankStatementDetailsPage() {
             <b>Lines:</b> {data.lines.length} (matched: {matchedCount})
           </div>
 
-          {canImport ? (
+          {canImport && !isLocked ? (
             <div style={{ marginTop: 12 }}>
               <Link to={`/bank-reconciliation/statements/${data.id}?addLine=1`}>Add Statement Line</Link>
             </div>
           ) : null}
 
-          {showAdd ? (
+          {showAdd && !isLocked ? (
             <form onSubmit={submitAddLine} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 680 }}>
               <div style={{ fontWeight: 700 }}>Add Line</div>
               {addError ? <div style={{ color: 'crimson' }}>{addError}</div> : null}
@@ -294,6 +439,7 @@ export function BankStatementDetailsPage() {
                 const cls = String(l.classification ?? '').toUpperCase();
                 const eligible =
                   canReconcile &&
+                  !isLocked &&
                   !l.matched &&
                   !l.adjustmentJournalId &&
                   (cls === 'BANK_CHARGE' || cls === 'INTEREST');

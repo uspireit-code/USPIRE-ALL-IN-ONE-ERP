@@ -73,6 +73,18 @@ export class BankReconController {
     return this.bankRecon.previewStatement(req, statementId);
   }
 
+  @Post('statements/:id/reconcile')
+  @Permissions(PERMISSIONS.BANK.RECONCILE)
+  async reconcile(@Req() req: Request, @Param('id') statementId: string) {
+    return this.bankRecon.reconcileAndLockStatement(req, statementId);
+  }
+
+  @Get('statements/:id/final-summary')
+  @Permissions(PERMISSIONS.BANK.RECONCILIATION_VIEW)
+  async finalSummary(@Req() req: Request, @Param('id') statementId: string) {
+    return this.bankRecon.getFinalReconciliationSummary(req, statementId);
+  }
+
   @Delete('lines/:id')
   @Permissions(PERMISSIONS.BANK.STATEMENT_IMPORT)
   async deleteLine(@Req() req: Request, @Param('id') id: string) {

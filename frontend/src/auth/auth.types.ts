@@ -2,6 +2,11 @@ export type AuthUser = {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
+  jobTitle?: string | null;
+  timezone?: string | null;
+  language?: string | null;
+  avatarUrl?: string | null;
   roles: string[];
 };
 

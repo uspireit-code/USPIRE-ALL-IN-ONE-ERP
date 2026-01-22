@@ -24,7 +24,7 @@ import { ReconciliationStatusQueryDto } from './dto/reconciliation-status-query.
 @Controller('bank')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class BankController {
-  constructor(private readonly bank: BankService) {}
+  constructor(private readonly bank: any) {}
 
   @Post('accounts')
   @Permissions(PERMISSIONS.BANK.ACCOUNT_CREATE)

@@ -5,7 +5,7 @@ import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { Alert } from '../components/Alert';
 import { tokens } from '../designTokens';
-import { useBrandColors, useBranding } from '../branding/BrandingContext';
+import { resolveBrandAssetUrl, useBrandColors, useBranding } from '../branding/BrandingContext';
 
 export function LoginPage() {
   const { login, state } = useAuth();
@@ -13,6 +13,7 @@ export function LoginPage() {
   const location = useLocation();
   const brand = useBrandColors();
   const { effective } = useBranding();
+  const [logoOk, setLogoOk] = useState(true);
 
   const [tenantId, setTenantId] = useState(localStorage.getItem('tenantId') ?? state.tenantId ?? '');
   const [showPassword, setShowPassword] = useState(false);
@@ -128,6 +129,16 @@ export function LoginPage() {
         >
           <div style={{ width: '100%', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: '100%', textAlign: 'left' }}>
+              {effective?.logoUrl && logoOk ? (
+                <div style={{ marginBottom: 18 }}>
+                  <img
+                    src={resolveBrandAssetUrl(effective.logoUrl) ?? ''}
+                    alt="Organisation logo"
+                    style={{ maxHeight: 80, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+                    onError={() => setLogoOk(false)}
+                  />
+                </div>
+              ) : null}
               <div style={{ fontSize: 25, fontWeight: 800, letterSpacing: 0.2 }}>
                 {effective?.organisationName || 'USPiRE Enterprise Resource Planning (ERP)'}
               </div>

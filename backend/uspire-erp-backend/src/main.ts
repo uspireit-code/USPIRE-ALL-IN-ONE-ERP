@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './internal/http-exception.filter';
 import { validateEnvOrExit } from './internal/env-validation';
@@ -9,9 +11,11 @@ import { ReadinessService } from './internal/readiness.service';
 async function bootstrap() {
   validateEnvOrExit();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), { prefix: '/uploads' });
 
   const corsOrigins = (
     process.env.CORS_ORIGIN ?? 'http://127.0.0.1:5173,http://localhost:5173'

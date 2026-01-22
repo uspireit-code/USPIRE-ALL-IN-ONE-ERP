@@ -4,7 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
 import { listBankCashAccounts } from '../../services/bankAccounts';
 import type { BankCashAccount } from '../../services/bankAccounts';
-import { getStatementPreview, getStatements } from '../../services/bankReconciliation';
+import { getStatementPreview, getStatements, reconcileStatement } from '../../services/bankReconciliation';
 import type { BankReconciliationPreview, BankStatementListItem } from '../../services/bankReconciliation';
 
 export function BankReconciliationHomePage() {
@@ -12,6 +12,7 @@ export function BankReconciliationHomePage() {
   const navigate = useNavigate();
 
   const canView = hasPermission(PERMISSIONS.BANK.RECONCILIATION.VIEW);
+  const canReconcile = hasPermission(PERMISSIONS.BANK.RECONCILIATION.MATCH);
 
   const [bankAccounts, setBankAccounts] = useState<BankCashAccount[]>([]);
   const [bankAccountId, setBankAccountId] = useState('');
@@ -21,6 +22,7 @@ export function BankReconciliationHomePage() {
 
   const [selectedStatement, setSelectedStatement] = useState<BankStatementListItem | null>(null);
   const [preview, setPreview] = useState<BankReconciliationPreview | null>(null);
+  const [reconciling, setReconciling] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -57,6 +59,27 @@ export function BankReconciliationHomePage() {
         .slice()
         .sort((a, b) => new Date(b.statementEndDate).getTime() - new Date(a.statementEndDate).getTime())[0] ?? null
     );
+  }
+
+  async function doReconcileAndLock() {
+    if (!canReconcile || !selectedStatement || !preview) return;
+    if (selectedStatement.status === 'LOCKED') return;
+    if (Number(preview.differencePreview) !== 0) return;
+
+    const ok = window.confirm('Once reconciled, this statement will be locked and cannot be edited. Continue?');
+    if (!ok) return;
+
+    setError(null);
+    setReconciling(true);
+    try {
+      await reconcileStatement(selectedStatement.id);
+      await loadSummary();
+    } catch (err: any) {
+      const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to reconcile & lock';
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setReconciling(false);
+    }
   }
 
   async function loadSummary() {
@@ -153,6 +176,14 @@ export function BankReconciliationHomePage() {
               <b>Difference preview:</b> {preview.differencePreview}
             </div>
           </div>
+
+          {canReconcile && selectedStatement.status !== 'LOCKED' && Number(preview.differencePreview) === 0 ? (
+            <div style={{ marginTop: 14 }}>
+              <button type="button" onClick={doReconcileAndLock} disabled={reconciling}>
+                {reconciling ? 'Reconciling...' : 'Reconcile & Lock'}
+              </button>
+            </div>
+          ) : null}
 
           <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
             <Link to={`/bank-reconciliation/statements?bankAccountId=${encodeURIComponent(bankAccountId)}`}>View Statements</Link>

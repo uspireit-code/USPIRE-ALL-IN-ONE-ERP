@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { canAny } from '../auth/permissions';
 import { PERMISSIONS } from '../auth/permission-catalog';
 import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
 import { AuthBootstrapGate } from './AuthBootstrapGate';
+import { globalSearch, type GlobalSearchResponse, type GlobalSearchResultItem } from '../services/search';
+import { getApiErrorMessage } from '../services/api';
+import { changeMyPassword, updateMyProfile, uploadMyAvatar } from '../services/users';
 
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const brand = useBranding();
   const { effective } = brand;
+  const [brandLogoOk, setBrandLogoOk] = useState(true);
   const Icon = (props: { children: React.ReactNode }) => {
     return (
       <span
@@ -28,6 +33,601 @@ export function Layout() {
       </span>
     );
   };
+
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const [searchValue, setSearchValue] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<GlobalSearchResultItem[]>([]);
+  const searchWrapRef = useRef<HTMLDivElement | null>(null);
+
+  const { state, logout, hasPermission, refreshMe } = useAuth();
+
+  const tenantName = state.me?.tenant?.name ?? '';
+  const userEmail = state.me?.user?.email ?? '';
+  const userRoles = Array.isArray(state.me?.user?.roles) ? state.me?.user?.roles : [];
+
+  const avatarUrl = state.me?.user?.avatarUrl ?? null;
+  const avatarSrc = useMemo(() => {
+    if (!avatarUrl) return '';
+    if (/^https?:\/\//i.test(avatarUrl)) return avatarUrl;
+    if (avatarUrl.startsWith('/')) {
+      const base = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+      return `${base}${avatarUrl}`;
+    }
+    return avatarUrl;
+  }, [avatarUrl]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node | null;
+      if (searchOpen && searchWrapRef.current && t && !searchWrapRef.current.contains(t)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [searchOpen]);
+
+  function ProfileDrawer() {
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string>('');
+    const [success, setSuccess] = useState<string>('');
+
+    const [fullName, setFullName] = useState(state.me?.user?.name ?? '');
+    const [phone, setPhone] = useState(state.me?.user?.phone ?? '');
+    const [jobTitle, setJobTitle] = useState(state.me?.user?.jobTitle ?? '');
+    const [timezone, setTimezone] = useState(state.me?.user?.timezone ?? '');
+    const [language, setLanguage] = useState(state.me?.user?.language ?? 'en');
+
+    const [pwOpen, setPwOpen] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [pwSaving, setPwSaving] = useState(false);
+    const [pwError, setPwError] = useState('');
+    const [pwSuccess, setPwSuccess] = useState('');
+
+    useEffect(() => {
+      if (!profileOpen) return;
+      setError('');
+      setSuccess('');
+      setFullName(state.me?.user?.name ?? '');
+      setPhone(state.me?.user?.phone ?? '');
+      setJobTitle(state.me?.user?.jobTitle ?? '');
+      setTimezone(state.me?.user?.timezone ?? '');
+      setLanguage(state.me?.user?.language ?? 'en');
+    }, [profileOpen, state.me?.user?.avatarUrl, state.me?.user?.jobTitle, state.me?.user?.language, state.me?.user?.name, state.me?.user?.phone, state.me?.user?.timezone]);
+
+    async function onSaveProfile() {
+      setError('');
+      setSuccess('');
+
+      const nameTrimmed = fullName.trim();
+      if (!nameTrimmed) {
+        setError('Full name is required');
+        return;
+      }
+
+      setSaving(true);
+      try {
+        await updateMyProfile({
+          fullName: nameTrimmed,
+          phone: phone.trim(),
+          jobTitle: jobTitle.trim(),
+          timezone: timezone.trim(),
+          language: language.trim(),
+        });
+        await refreshMe();
+        setSuccess('Profile saved');
+      } catch (e) {
+        setError(getApiErrorMessage(e, 'Failed to save profile'));
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    function onCancelProfile() {
+      setError('');
+      setSuccess('');
+      setFullName(state.me?.user?.name ?? '');
+      setPhone(state.me?.user?.phone ?? '');
+      setJobTitle(state.me?.user?.jobTitle ?? '');
+      setTimezone(state.me?.user?.timezone ?? '');
+      setLanguage(state.me?.user?.language ?? 'en');
+    }
+
+    async function onAvatarSelected(file: File | null) {
+      if (!file) return;
+      setError('');
+      setSuccess('');
+      setSaving(true);
+      try {
+        await uploadMyAvatar(file);
+        await refreshMe();
+        setSuccess('Avatar updated');
+      } catch (e) {
+        setError(getApiErrorMessage(e, 'Failed to upload avatar'));
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    async function onChangePassword() {
+      setPwError('');
+      setPwSuccess('');
+      if (!currentPassword.trim()) {
+        setPwError('Current password is required');
+        return;
+      }
+      if (newPassword.length < 8) {
+        setPwError('New password must be at least 8 characters');
+        return;
+      }
+      if (newPassword !== confirmNewPassword) {
+        setPwError('Passwords do not match');
+        return;
+      }
+
+      setPwSaving(true);
+      try {
+        await changeMyPassword({
+          currentPassword,
+          newPassword,
+          confirmNewPassword,
+        });
+        setPwSuccess('Password updated');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setShowCurrentPassword(false);
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+      } catch (e) {
+        setPwError(getApiErrorMessage(e, 'Failed to change password'));
+      } finally {
+        setPwSaving(false);
+      }
+    }
+
+    const EyeIcon = (props: { off?: boolean }) => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2" />
+        {props.off ? (
+          <path d="M4 20L20 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        ) : null}
+      </svg>
+    );
+
+    return profileOpen ? (
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 80,
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => setProfileOpen(false)}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            border: 0,
+            background: 'rgba(0,0,0,0.55)',
+          }}
+        />
+
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            bottom: 12,
+            width: 540,
+            maxWidth: 'calc(100vw - 24px)',
+            background: '#040648',
+            color: '#FFFFFF',
+            borderRadius: 16,
+            boxShadow: '0 24px 60px rgba(0,0,0,0.55)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            overflowX: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: '1px solid rgba(255,255,255,0.10)',
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: 0.4 }}>My Profile</div>
+            <button
+              type="button"
+              onClick={() => setProfileOpen(false)}
+              style={{
+                border: 0,
+                background: 'rgba(255,255,255,0.10)',
+                color: '#fff',
+                width: 34,
+                height: 34,
+                borderRadius: 12,
+                cursor: 'pointer',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ padding: 20, overflowY: 'auto', overflowX: 'hidden' }}>
+            <div style={{ display: 'grid', gap: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div
+                style={{
+                  width: 74,
+                  height: 74,
+                  borderRadius: 999,
+                  border: '2px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(255,255,255,0.10)',
+                  overflow: 'hidden',
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" />
+                  </svg>
+                )}
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 900 }}>{state.me?.user?.name ?? userEmail}</div>
+                <div style={{ marginTop: 3, fontSize: 12, opacity: 0.85 }}>{state.me?.user?.email ?? ''}</div>
+                <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      background: 'rgba(255,255,255,0.08)',
+                      cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.7 : 1,
+                      fontSize: 12,
+                      fontWeight: 800,
+                    }}
+                  >
+                    Upload avatar
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      disabled={saving}
+                      style={{ display: 'none' }}
+                      onChange={(e) => onAvatarSelected(e.currentTarget.files?.[0] ?? null)}
+                    />
+                  </label>
+
+                  <div style={{ fontSize: 12, opacity: 0.75, alignSelf: 'center' }}>PNG/JPG/WEBP up to 2MB</div>
+                </div>
+              </div>
+            </div>
+
+            {error ? (
+              <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: 'rgba(255,74,74,0.12)', border: '1px solid rgba(255,74,74,0.22)', fontSize: 12 }}>
+                {error}
+              </div>
+            ) : null}
+            {success ? (
+              <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: 'rgba(55,255,170,0.12)', border: '1px solid rgba(55,255,170,0.20)', fontSize: 12 }}>
+                {success}
+              </div>
+            ) : null}
+
+            <div style={{ display: 'grid', gap: 24 }}>
+              <div>
+                <div style={{ fontSize: 11, opacity: 0.78, fontWeight: 800, marginBottom: 6 }}>Full name</div>
+                <input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Full name"
+                  style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 12px', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16, rowGap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 11, opacity: 0.78, fontWeight: 800, marginBottom: 6 }}>Phone</div>
+                  <input
+                    value={phone ?? ''}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Phone"
+                    style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 12px', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, opacity: 0.78, fontWeight: 800, marginBottom: 6 }}>Job title</div>
+                  <input
+                    value={jobTitle ?? ''}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="Job title"
+                    style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 12px', outline: 'none' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16, rowGap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 11, opacity: 0.78, fontWeight: 800, marginBottom: 6 }}>Timezone</div>
+                  <select
+                    value={timezone ?? ''}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 12px', outline: 'none' }}
+                  >
+                    <option value="">(none)</option>
+                    <option value="UTC">UTC</option>
+                    <option value="Africa/Johannesburg">Africa/Johannesburg</option>
+                    <option value="Europe/London">Europe/London</option>
+                    <option value="America/New_York">America/New_York</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, opacity: 0.78, fontWeight: 800, marginBottom: 6 }}>Language</div>
+                  <select
+                    value={language ?? 'en'}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 12px', outline: 'none' }}
+                  >
+                    <option value="en">English</option>
+                    <option value="fr">French</option>
+                    <option value="es">Spanish</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={onSaveProfile}
+                  disabled={saving}
+                  style={{
+                    height: 38,
+                    padding: '0 14px',
+                    borderRadius: 12,
+                    border: 0,
+                    background: '#FFFFFF',
+                    color: '#040648',
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    fontWeight: 900,
+                  }}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelProfile}
+                  disabled={saving}
+                  style={{
+                    height: 38,
+                    padding: '0 14px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    background: 'transparent',
+                    color: '#fff',
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    fontWeight: 850,
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.10)' }} />
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPwOpen((v) => !v);
+                  setPwError('');
+                  setPwSuccess('');
+                }}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  border: 0,
+                  background: 'transparent',
+                  color: '#fff',
+                  fontWeight: 900,
+                  padding: 0,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                Change password
+                <span style={{ opacity: 0.85 }}>{pwOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {pwOpen ? (
+                <div style={{ display: 'grid', gap: 14 }}>
+                  {pwError ? (
+                    <div style={{ padding: 10, borderRadius: 12, background: 'rgba(255,74,74,0.12)', border: '1px solid rgba(255,74,74,0.22)', fontSize: 12 }}>
+                      {pwError}
+                    </div>
+                  ) : null}
+                  {pwSuccess ? (
+                    <div style={{ padding: 10, borderRadius: 12, background: 'rgba(55,255,170,0.12)', border: '1px solid rgba(55,255,170,0.20)', fontSize: 12 }}>
+                      {pwSuccess}
+                    </div>
+                  ) : null}
+
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Current password"
+                      style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 42px 0 12px', outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword((v) => !v)}
+                      aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                      style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,0.85)', cursor: 'pointer', padding: 4 }}
+                    >
+                      <EyeIcon off={showCurrentPassword} />
+                    </button>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="New password"
+                      style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 42px 0 12px', outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                      style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,0.85)', cursor: 'pointer', padding: 4 }}
+                    >
+                      <EyeIcon off={showNewPassword} />
+                    </button>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      style={{ width: '100%', height: 38, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', padding: '0 42px 0 12px', outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', border: 0, background: 'transparent', color: 'rgba(255,255,255,0.85)', cursor: 'pointer', padding: 4 }}
+                    >
+                      <EyeIcon off={showConfirmPassword} />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onChangePassword}
+                    disabled={pwSaving}
+                    style={{
+                      height: 38,
+                      padding: '0 14px',
+                      borderRadius: 12,
+                      border: 0,
+                      background: 'rgba(255,255,255,0.92)',
+                      color: '#040648',
+                      cursor: pwSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: 900,
+                      justifySelf: 'start',
+                    }}
+                  >
+                    {pwSaving ? 'Updating…' : 'Update password'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.10)' }} />
+
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>
+                <div style={{ marginTop: 4 }}>Tenant: {tenantName || ''}</div>
+                <div style={{ marginTop: 4 }}>{userRoles.length ? `Roles: ${userRoles.join(', ')}` : ''}</div>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <div style={{ padding: 16, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setProfileOpen(false);
+                logout();
+              }}
+              style={{
+                width: '100%',
+                height: 42,
+                borderRadius: 14,
+                border: '1px solid rgba(255,74,74,0.75)',
+                background: 'transparent',
+                color: '#FF4A4A',
+                fontWeight: 900,
+                cursor: 'pointer',
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+  }
+
+  async function runSearch(term: string) {
+    const q = term.trim();
+    setSearchError(null);
+    setSearchLoading(true);
+    try {
+      const resp: GlobalSearchResponse = await globalSearch(q);
+      setSearchResults(Array.isArray(resp.results) ? resp.results : []);
+      setSearchOpen(true);
+    } catch (e: any) {
+      setSearchError('Search failed');
+      setSearchResults([]);
+      setSearchOpen(true);
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
+  function groupResults(items: GlobalSearchResultItem[]) {
+    const groups: Record<string, GlobalSearchResultItem[]> = {};
+    for (const r of items) {
+      const k = String(r.type);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(r);
+    }
+    return groups;
+  }
 
   type NavLevel = 1 | 2 | 3;
 
@@ -230,6 +830,44 @@ export function Layout() {
   const pageTitle = pageTitleByPath.find((x) => x.match(location.pathname))?.title ?? (effective?.organisationShortName || effective?.organisationName || 'USPIRE ERP');
   const showTopBar = !location.pathname.startsWith('/login');
 
+  const headerEnvRaw = String((import.meta as any)?.env?.VITE_APP_ENV ?? '').trim();
+  const headerEnv = headerEnvRaw ? headerEnvRaw.toUpperCase() : 'DEV';
+
+  function getBreadcrumbForPath(p: string) {
+    const segs = (p ?? '').split('?')[0].split('/').filter(Boolean);
+    if (segs.length === 0) return { module: 'Dashboard', sub: '' };
+
+    if (p.startsWith('/finance/gl')) {
+      const sub = p.startsWith('/finance/gl/journals') ? 'Journals' : p.startsWith('/finance/gl/upload') ? 'Journal Upload' : 'General Ledger';
+      return { module: 'Finance & Accounting', sub };
+    }
+    if (p.startsWith('/finance/ap')) return { module: 'Finance & Accounting', sub: 'Accounts Payable' };
+    if (p.startsWith('/finance/ar')) return { module: 'Finance & Accounting', sub: 'Accounts Receivable' };
+    if (p.startsWith('/finance/imprest')) return { module: 'Finance & Accounting', sub: 'Imprest' };
+    if (p.startsWith('/finance/cash') || p.startsWith('/finance/cash-bank') || p.startsWith('/bank-reconciliation')) {
+      return { module: 'Cash & Bank', sub: 'Bank Reconciliation' };
+    }
+    if (p.startsWith('/reports')) return { module: 'Reports', sub: '' };
+    if (p.startsWith('/periods')) return { module: 'Finance & Accounting', sub: 'Periods' };
+    if (p.startsWith('/audit')) return { module: 'Audit', sub: '' };
+    if (p.startsWith('/settings')) return { module: 'Settings', sub: '' };
+
+    return { module: pageTitle, sub: '' };
+  }
+
+  const breadcrumb = useMemo(() => getBreadcrumbForPath(location.pathname), [location.pathname, pageTitle]);
+  const breadcrumbDisplay = breadcrumb.sub ? `${breadcrumb.module} \u203a ${breadcrumb.sub}` : breadcrumb.module;
+
+  const envBadge = useMemo(() => {
+    const env = headerEnv;
+    const isDev = env === 'DEV' || env === 'LOCAL';
+    const isStaging = env === 'STAGING' || env === 'UAT';
+    const bg = isDev ? 'rgba(56, 189, 248, 0.20)' : isStaging ? 'rgba(249, 115, 22, 0.22)' : 'rgba(34, 197, 94, 0.22)';
+    const border = isDev ? 'rgba(56, 189, 248, 0.35)' : isStaging ? 'rgba(249, 115, 22, 0.36)' : 'rgba(34, 197, 94, 0.36)';
+    const color = isDev ? '#BAE6FD' : isStaging ? '#FED7AA' : '#BBF7D0';
+    return { env, bg, border, color };
+  }, [headerEnv]);
+
   const GridIcon = () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -296,8 +934,6 @@ export function Layout() {
       <circle cx="12" cy="12" r="4" />
     </svg>
   );
-
-  const { state, logout, hasPermission } = useAuth();
 
   const COLORS = {
     navy: '#020445',
@@ -618,11 +1254,12 @@ export function Layout() {
       >
         <div style={{ textAlign: 'left' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 8px' }}>
-            {effective?.logoUrl ? (
+            {effective?.logoUrl && brandLogoOk ? (
               <img
                 src={resolveBrandAssetUrl(effective.logoUrl) ?? ''}
                 alt="Organisation logo"
                 style={{ height: 22, width: 'auto', maxWidth: 120, objectFit: 'contain' }}
+                onError={() => setBrandLogoOk(false)}
               />
             ) : null}
             <div style={{ fontWeight: 800, letterSpacing: 0.3, fontSize: 15 }}>
@@ -967,12 +1604,42 @@ export function Layout() {
             boxSizing: 'border-box',
           }}
         >
-          <div style={{ fontWeight: 750, fontSize: 15, letterSpacing: 0.2, whiteSpace: 'nowrap' }}>{pageTitle}</div>
+          <div style={{ fontWeight: 750, fontSize: 14, letterSpacing: 0.2, whiteSpace: 'nowrap', opacity: 0.98 }}>
+            {breadcrumbDisplay}
+          </div>
 
-          <div style={{ flex: '0 1 520px', padding: '0 18px' }}>
+          <div ref={searchWrapRef} style={{ flex: '0 1 520px', padding: '0 18px', position: 'relative' }}>
             <input
-              placeholder="Search…"
-              aria-label="Search"
+              placeholder="Search modules, menus, reference numbers…"
+              aria-label="Global search"
+              value={searchValue}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                if (!e.target.value.trim()) {
+                  setSearchResults([]);
+                  setSearchOpen(false);
+                  setSearchError(null);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const q = searchValue.trim();
+                  if (!q) return;
+                  runSearch(q);
+                }
+                if (e.key === 'Escape') {
+                  setSearchOpen(false);
+                }
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(237,186,53,0.60)';
+                e.currentTarget.style.boxShadow = '0 0 0 4px rgba(237,186,53,0.18)';
+                if (searchResults.length > 0 || searchError) setSearchOpen(true);
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
               style={{
                 width: '100%',
                 height: 38,
@@ -985,40 +1652,179 @@ export function Layout() {
                 boxSizing: 'border-box',
                 fontFamily: 'inherit',
               }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(237,186,53,0.60)';
-                e.currentTarget.style.boxShadow = '0 0 0 4px rgba(237,186,53,0.18)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
             />
+
+            {searchOpen ? (
+              <div
+                role="listbox"
+                style={{
+                  position: 'absolute',
+                  top: 44,
+                  left: 18,
+                  right: 18,
+                  background: '#0B0C1E',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 12,
+                  boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
+                  overflow: 'hidden',
+                  zIndex: 30,
+                }}
+              >
+                <div style={{ padding: '10px 12px', fontSize: 12, opacity: 0.9, borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+                  {searchLoading ? 'Searching…' : searchError ? searchError : `Results for “${searchValue.trim()}”`}
+                </div>
+                {searchLoading ? null : (
+                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                    {(() => {
+                      const groups = groupResults(searchResults);
+                      const groupOrder: Array<{ key: GlobalSearchResultItem['type']; label: string }> = [
+                        { key: 'ROUTE', label: 'Menu' },
+                        { key: 'JOURNAL', label: 'Journals' },
+                        { key: 'BANK_STATEMENT', label: 'Bank Statements' },
+                        { key: 'IMPREST', label: 'Imprest' },
+                      ];
+
+                      const sections = groupOrder.filter((g) => (groups[g.key] ?? []).length > 0);
+                      if (sections.length === 0) {
+                        return <div style={{ padding: 12, fontSize: 13, opacity: 0.88 }}>No results found.</div>;
+                      }
+
+                      return sections.map((g) => (
+                        <div key={g.key}>
+                          <div style={{ padding: '10px 12px', fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', opacity: 0.75 }}>
+                            {g.label}
+                          </div>
+                          {(groups[g.key] ?? []).map((r, idx) => (
+                            <button
+                              key={`${g.key}-${idx}-${r.targetUrl}`}
+                              type="button"
+                              role="option"
+                              onClick={() => {
+                                setSearchOpen(false);
+                                setSearchValue('');
+                                setSearchResults([]);
+                                navigate(r.targetUrl);
+                              }}
+                              style={{
+                                width: '100%',
+                                textAlign: 'left',
+                                padding: '10px 12px',
+                                border: 0,
+                                background: 'transparent',
+                                color: COLORS.white,
+                                cursor: 'pointer',
+                                fontSize: 13,
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
-              aria-hidden
+              style={{
+                height: 24,
+                padding: '0 10px',
+                borderRadius: 999,
+                background: envBadge.bg,
+                border: `1px solid ${envBadge.border}`,
+                color: envBadge.color,
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: 0.8,
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}
+              title={`Environment: ${envBadge.env}`}
+            >
+              {envBadge.env}
+            </div>
+
+            <button
+              type="button"
+              title="Notifications (coming soon)"
+              disabled
               style={{
                 width: 34,
                 height: 34,
                 borderRadius: 12,
-                background: 'rgba(255,255,255,0.10)',
-                border: '1px solid rgba(255,255,255,0.16)',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
                 display: 'grid',
                 placeItems: 'center',
+                color: 'rgba(255,255,255,0.55)',
+                cursor: 'not-allowed',
               }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" />
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
+            </button>
+
+            <div style={{ fontSize: 12, opacity: 0.92, whiteSpace: 'nowrap' }} title={tenantName ? `Tenant: ${tenantName}` : ''}>
+              {tenantName ? `Tenant: ${tenantName}` : ''}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 650, whiteSpace: 'nowrap' }}>{state.me?.user?.email ?? '—'}</div>
-            <div style={{ fontSize: 12, opacity: 0.9 }}>▼</div>
+
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                border: 0,
+                background: 'transparent',
+                color: COLORS.white,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              <div
+                aria-hidden
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.10)',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" />
+                  </svg>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 750, whiteSpace: 'nowrap' }}>{userEmail}</div>
+              </div>
+            </button>
           </div>
         </div>
       ) : null}
+
+      <ProfileDrawer />
 
       <div
         style={{

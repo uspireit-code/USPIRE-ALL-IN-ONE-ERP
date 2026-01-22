@@ -160,7 +160,7 @@ export class ReviewPackService {
             OR: eventEntityFilters,
           },
           {
-            eventType: 'SOD_VIOLATION',
+            eventType: 'SOD_VIOLATION' as any,
             action: {
               in: [
                 'FINANCE_PERIOD_CHECKLIST_COMPLETE',

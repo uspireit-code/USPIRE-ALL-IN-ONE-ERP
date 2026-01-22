@@ -216,7 +216,7 @@ export class PermissionsGuard implements CanActivate {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'SOD_VIOLATION',
+            eventType: 'SOD_VIOLATION' as any,
             entityType: 'USER',
             entityId: user.id,
             action: refundExclusivityConflict.permissionAttempted,
@@ -269,7 +269,7 @@ export class PermissionsGuard implements CanActivate {
         .create({
           data: {
             tenantId: tenant.id,
-            eventType: 'SOD_VIOLATION',
+            eventType: 'SOD_VIOLATION' as any,
             entityType: 'USER',
             entityId: user.id,
             action: conflict.permissionAttempted,

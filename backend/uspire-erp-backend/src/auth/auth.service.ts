@@ -288,15 +288,20 @@ export class AuthService {
       throw new UnauthorizedException('Missing user context');
     }
 
-    const user = await this.prisma.user.findUnique({
+    const user: any = await this.prisma.user.findUnique({
       where: { id: sessionUser.id },
       select: {
         id: true,
         name: true,
         email: true,
+        phone: true,
+        jobTitle: true,
+        timezone: true,
+        language: true,
+        avatarUrl: true,
         isActive: true,
         tenantId: true,
-      },
+      } as any,
     });
 
     if (!user || !user.isActive || user.tenantId !== tenant.id) {
@@ -412,6 +417,11 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone ?? null,
+        jobTitle: user.jobTitle ?? null,
+        timezone: user.timezone ?? null,
+        language: user.language ?? null,
+        avatarUrl: user.avatarUrl ?? null,
         roles: Array.from(roles),
       },
       tenant: {
