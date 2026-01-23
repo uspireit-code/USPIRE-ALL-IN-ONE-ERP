@@ -17,15 +17,8 @@ async function bootstrap() {
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), { prefix: '/uploads' });
 
-  const corsOrigins = (
-    process.env.CORS_ORIGIN ?? 'http://127.0.0.1:5173,http://localhost:5173'
-  )
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
-
   app.enableCors({
-    origin: corsOrigins,
+    origin: ['http://staging.uspireservices.com'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
@@ -34,6 +27,7 @@ async function bootstrap() {
     ],
     exposedHeaders: ['Content-Disposition'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
   });
   app.useGlobalPipes(
     new ValidationPipe({
