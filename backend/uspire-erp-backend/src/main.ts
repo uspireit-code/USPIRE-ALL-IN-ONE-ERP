@@ -19,14 +19,14 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
-      'http://staging.uspireservices.com',
-      'https://staging.uspireservices.com',
+      'https://erptest.uspireservices.com',
     ],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
     exposedHeaders: ['Content-Disposition'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -72,4 +72,5 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
+
 bootstrap();
