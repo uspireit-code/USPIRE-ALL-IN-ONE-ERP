@@ -8,11 +8,11 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "node dist/src/main.js",
+    "start": "node dist/main.js",
     "dev": "node --watch -r ts-node/register/transpile-only -r tsconfig-paths/register src/main.ts",
     "start:dev": "node --watch -r ts-node/register/transpile-only -r tsconfig-paths/register src/main.ts",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/src/main.js",
+    "start:prod": "node dist/main.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "ts-node scripts/prisma-migrate-safe.ts create",
     "prisma:migrate:create": "ts-node scripts/prisma-migrate-safe.ts create",

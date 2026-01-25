@@ -11,7 +11,31 @@ export class AuthController {
 
   @Post('login')
   async login(@Req() req: Request, @Body() dto: LoginDto) {
-    return this.authService.login(req, dto);
+    try {
+      return await this.authService.login(req, dto);
+    } catch (e) {
+      // TEMP DEBUG: capture why /auth/login is returning 500 in production.
+      // eslint-disable-next-line no-console
+      console.error('[AuthController.login] error', {
+        message: (e as any)?.message,
+        name: (e as any)?.name,
+        status: (e as any)?.status,
+        response: (e as any)?.response,
+        request: {
+          method: req.method,
+          url: req.originalUrl,
+          origin: req.header('origin') ?? null,
+          hasTenantHeader: Boolean(req.header('x-tenant-id')),
+        },
+        body: {
+          email: (dto as any)?.email,
+          tenantId: (dto as any)?.tenantId ?? null,
+          tenantName: (dto as any)?.tenantName ?? null,
+          password: '[redacted]',
+        },
+      });
+      throw e;
+    }
   }
 
   @Post('refresh')
