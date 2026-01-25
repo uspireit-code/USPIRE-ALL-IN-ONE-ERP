@@ -72,6 +72,23 @@ async function bootstrap() {
     }
   }
 
+  const debugRoutes =
+    (process.env.DEBUG_ROUTES ?? '').toString().toLowerCase() === 'true';
+  if (debugRoutes) {
+    await app.init();
+    const instance: any = app.getHttpAdapter().getInstance();
+    const stack: any[] = instance?._router?.stack ?? [];
+    const routes = stack
+      .filter((l) => l?.route?.path)
+      .map((l) => ({
+        path: l.route.path,
+        methods: Object.keys(l.route.methods ?? {}).filter((m) => l.route.methods[m]),
+      }));
+
+    // eslint-disable-next-line no-console
+    console.log('[routes]', routes);
+  }
+
   await app.listen(process.env.PORT ?? 3000);
 }
 
