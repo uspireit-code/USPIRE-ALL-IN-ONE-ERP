@@ -23,6 +23,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const requestId = (req as any)?.requestId;
 
+    if (requestId) {
+      res.setHeader('x-request-id', requestId);
+    }
+
     if (exception instanceof HttpException) {
       const response = exception.getResponse() as any;
 
@@ -50,6 +54,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       });
       return;
     }
+
+    // Always log unknown/unhandled exceptions server-side for diagnostics.
+    // eslint-disable-next-line no-console
+    console.error('[HTTP 500]', {
+      path: req.path,
+      method: req.method,
+      requestId,
+      message: (exception as any)?.message,
+      name: (exception as any)?.name,
+      stack: (exception as any)?.stack,
+    });
 
     res.status(status).json({
       error: 'INTERNAL_SERVER_ERROR',
