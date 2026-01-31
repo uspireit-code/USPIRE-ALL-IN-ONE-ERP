@@ -52,6 +52,13 @@ export enum DepartmentRequirement {
   FORBIDDEN = 'FORBIDDEN',
 }
 
+type GlScopedProps = {
+  effectiveTo?: Date | null;
+  isActive?: boolean;
+  type?: string | null;
+  isControlAccount?: boolean | null;
+};
+
 type JournalRiskStage = 'SUBMIT' | 'REVIEW' | 'POST';
 
 type JournalRiskResult = {
@@ -2223,10 +2230,11 @@ export class GlService {
               message: `Invalid legalEntityCode: ${l.legalEntityCode}`,
             });
           } else {
+            const effectiveTo = (le as GlScopedProps).effectiveTo ?? null;
             const effective =
               le.effectiveFrom <= j.journalDate &&
-              (le.effectiveTo === null || le.effectiveTo >= j.journalDate);
-            if (!le.isActive) {
+              (effectiveTo === null || effectiveTo >= j.journalDate);
+            if (!(le as GlScopedProps).isActive) {
               errors.push({
                 journalKey: key,
                 sheet: isXlsx ? 'JournalLines' : 'CSV',
@@ -2257,7 +2265,7 @@ export class GlService {
               field: 'departmentCode',
               message: this.getDepartmentRequirementMessage({
                 requirement: departmentRequirement,
-                accountType: acc.type,
+                accountType: (acc as GlScopedProps).type,
               }),
             });
           }
@@ -2270,7 +2278,7 @@ export class GlService {
               field: 'departmentCode',
               message: this.getDepartmentRequirementMessage({
                 requirement: departmentRequirement,
-                accountType: acc.type,
+                accountType: (acc as GlScopedProps).type,
               }),
             });
           }
@@ -2287,8 +2295,9 @@ export class GlService {
           } else {
             const effective =
               d.effectiveFrom <= j.journalDate &&
-              (d.effectiveTo === null || d.effectiveTo >= j.journalDate);
-            if (!d.isActive) {
+              ((d as GlScopedProps).effectiveTo === null ||
+                (d as GlScopedProps).effectiveTo! >= j.journalDate);
+            if (!(d as GlScopedProps).isActive) {
               errors.push({
                 journalKey: key,
                 sheet: isXlsx ? 'JournalLines' : 'CSV',
@@ -2335,8 +2344,9 @@ export class GlService {
           } else {
             const effective =
               p.effectiveFrom <= j.journalDate &&
-              (p.effectiveTo === null || p.effectiveTo >= j.journalDate);
-            if (!p.isActive) {
+              ((p as GlScopedProps).effectiveTo === null ||
+                (p as GlScopedProps).effectiveTo! >= j.journalDate);
+            if (!(p as GlScopedProps).isActive) {
               errors.push({
                 journalKey: key,
                 sheet: isXlsx ? 'JournalLines' : 'CSV',
@@ -2371,8 +2381,9 @@ export class GlService {
           } else {
             const effective =
               f.effectiveFrom <= j.journalDate &&
-              (f.effectiveTo === null || f.effectiveTo >= j.journalDate);
-            if (!f.isActive) {
+              ((f as GlScopedProps).effectiveTo === null ||
+                (f as GlScopedProps).effectiveTo! >= j.journalDate);
+            if (!(f as GlScopedProps).isActive) {
               errors.push({
                 journalKey: key,
                 sheet: isXlsx ? 'JournalLines' : 'CSV',
@@ -5450,8 +5461,9 @@ export class GlService {
         } else {
           const effective =
             le.effectiveFrom <= journalDate &&
-            (le.effectiveTo === null || le.effectiveTo >= journalDate);
-          if (!le.isActive) {
+            ((le as GlScopedProps).effectiveTo === null ||
+              (le as GlScopedProps).effectiveTo! >= journalDate);
+          if (!(le as GlScopedProps).isActive) {
             submitErrors.push({
               lineId: l.id,
               lineNumber: l.lineNumber ?? null,
@@ -5510,7 +5522,8 @@ export class GlService {
         } else {
           const effective =
             d.effectiveFrom <= journalDate &&
-            (d.effectiveTo === null || d.effectiveTo >= journalDate);
+            ((d as GlScopedProps).effectiveTo === null ||
+              (d as GlScopedProps).effectiveTo! >= journalDate);
           if ((d as any).status && (d as any).status !== 'ACTIVE') {
             submitErrors.push({
               lineId: l.id,
@@ -5519,7 +5532,7 @@ export class GlService {
               message: 'Department is inactive',
             });
           }
-          if (!d.isActive) {
+          if (!(d as GlScopedProps).isActive) {
             submitErrors.push({
               lineId: l.id,
               lineNumber: l.lineNumber ?? null,
@@ -5591,7 +5604,8 @@ export class GlService {
         } else {
           const effective =
             p.effectiveFrom <= journalDate &&
-            (p.effectiveTo === null || p.effectiveTo >= journalDate);
+            ((p as GlScopedProps).effectiveTo === null ||
+              (p as GlScopedProps).effectiveTo! >= journalDate);
           if ((p as any).status === 'CLOSED') {
             submitErrors.push({
               lineId: l.id,
@@ -5600,7 +5614,7 @@ export class GlService {
               message: 'Project is closed',
             });
           }
-          if (!p.isActive) {
+          if (!(p as GlScopedProps).isActive) {
             submitErrors.push({
               lineId: l.id,
               lineNumber: l.lineNumber ?? null,
@@ -5631,7 +5645,8 @@ export class GlService {
         } else {
           const effective =
             f.effectiveFrom <= journalDate &&
-            (f.effectiveTo === null || f.effectiveTo >= journalDate);
+            ((f as GlScopedProps).effectiveTo === null ||
+              (f as GlScopedProps).effectiveTo! >= journalDate);
           if ((f as any).status && (f as any).status !== 'ACTIVE') {
             submitErrors.push({
               lineId: l.id,
@@ -5640,7 +5655,7 @@ export class GlService {
               message: 'Fund is inactive',
             });
           }
-          if (!f.isActive) {
+          if (!(f as GlScopedProps).isActive) {
             submitErrors.push({
               lineId: l.id,
               lineNumber: l.lineNumber ?? null,
@@ -6304,7 +6319,7 @@ export class GlService {
       );
     }
 
-    if (effectivePeriod.type === 'OPENING') {
+    if ((effectivePeriod as GlScopedProps).type === 'OPENING') {
       await this.assertOpeningBalanceAccountsAllowed({
         tenantId: authz.tenantId,
         lines: original.lines.map((l) => ({
