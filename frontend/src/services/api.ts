@@ -37,7 +37,7 @@ export type ApiConfig = {
 };
 
 const defaultConfig: ApiConfig = {
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000',
+  baseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api',
 };
 
 const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase() === 'true';

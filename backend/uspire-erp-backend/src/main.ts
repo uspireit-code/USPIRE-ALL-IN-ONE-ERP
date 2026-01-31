@@ -27,6 +27,10 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:5174',
+      'http://127.0.0.1:5174',
       'https://erptest.uspireservices.com',
     ],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
