@@ -136,7 +136,7 @@ export class GlController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { fileSize: 25 * 1024 * 1024 },
     }),
   )
   async uploadJournals(@Req() req: Request, @UploadedFile() file: any) {

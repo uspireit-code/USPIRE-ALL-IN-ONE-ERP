@@ -127,9 +127,11 @@ export function SettingsUsersPage() {
   const { state, hasPermission } = useAuth();
   const me = state.me?.user;
 
-  const canCreateUser = hasPermission(PERMISSIONS.USER.CREATE);
-  const canEditUser = hasPermission(PERMISSIONS.USER.EDIT);
-  const canAssignRoles = hasPermission(PERMISSIONS.ROLE.ASSIGN);
+  const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+
+  const canCreateUser = hasPermission(PERMISSIONS.USER.CREATE) || hasSystemViewAll;
+  const canEditUser = hasPermission(PERMISSIONS.USER.EDIT) || hasSystemViewAll;
+  const canAssignRoles = hasPermission(PERMISSIONS.ROLE.ASSIGN) || hasSystemViewAll;
 
   const [users, setUsers] = useState<SettingsUser[]>([]);
   const [roles, setRoles] = useState<SettingsRole[]>([]);
