@@ -4,6 +4,9 @@ import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { getFirstEnv } from '../internal/env.util';
+import { MailerService } from './mailer.service';
+import { SuperAdminGuard } from './super-admin.guard';
+import { UnlockRequestsService } from './unlock-requests.service';
 
 function parseDurationToSeconds(
   value: string,
@@ -50,7 +53,7 @@ function parseDurationToSeconds(
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, MailerService, SuperAdminGuard, UnlockRequestsService],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

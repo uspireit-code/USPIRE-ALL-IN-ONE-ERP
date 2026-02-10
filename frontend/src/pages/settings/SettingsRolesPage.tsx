@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { tokens } from '../../designTokens';
 import type { SettingsRoleDetails, SettingsRoleOverview } from '../../services/settings';
 import { getSettingsRoleDetails, listSettingsRolesOverview } from '../../services/settings';
@@ -99,17 +100,15 @@ export function SettingsRolesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 750, color: '#0B0C1E' }}>Roles & Permissions</div>
-          <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(11,12,30,0.62)', lineHeight: '18px', maxWidth: 760 }}>
-            Roles define what users can do in the system. Permissions are grouped and controlled to enforce accountability and segregation of duties.
-          </div>
-        </div>
-        <Button variant="ghost" onClick={refresh} disabled={loadingList}>
-          Refresh
-        </Button>
-      </div>
+      <SettingsPageHeader
+        title="Roles & Permissions"
+        subtitle="Roles define what users can do in the system. Permissions are grouped and controlled to enforce accountability and segregation of duties."
+        rightSlot={
+          <Button variant="ghost" onClick={refresh} disabled={loadingList}>
+            Refresh
+          </Button>
+        }
+      />
 
       {error ? (
         <div style={{ marginTop: 14 }}>

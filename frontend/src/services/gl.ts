@@ -241,6 +241,7 @@ export type JournalDetailResponse = {
   reversalPreparedBy?: null | { id: string; email: string };
   submittedBy?: null | { id: string; email: string };
   reviewedBy: null | { id: string; email: string };
+  reviewedActedBy?: null | { id: string; email: string };
   rejectedBy?: null | { id: string; email: string };
   approvedBy: null | { id: string; email: string };
   postedBy: null | { id: string; email: string };

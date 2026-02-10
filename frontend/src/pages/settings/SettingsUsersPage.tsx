@@ -3,6 +3,7 @@ import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { DataTable } from '../../components/DataTable';
 import { Input } from '../../components/Input';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { tokens } from '../../designTokens';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
@@ -12,6 +13,7 @@ import {
   createSettingsUser,
   listSettingsRoles,
   listSettingsUsers,
+  unlockUser,
   updateSettingsUserRoles,
   updateSettingsUserStatus,
   validateSettingsUserRoles,
@@ -21,6 +23,37 @@ function formatDate(value: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString();
+}
+
+function LockPill(props: { locked: boolean }) {
+  const locked = Boolean(props.locked);
+  const bg = locked ? 'rgba(239,68,68,0.10)' : 'rgba(16,185,129,0.12)';
+  const border = locked ? 'rgba(239,68,68,0.22)' : 'rgba(16,185,129,0.25)';
+  const text = locked ? 'rgba(239,68,68,0.85)' : 'rgba(16,185,129,0.95)';
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '3px 10px',
+        borderRadius: 999,
+        background: bg,
+        border: `1px solid ${border}`,
+        fontSize: 12,
+        fontWeight: 750,
+        color: text,
+      }}
+    >
+      {locked ? 'LOCKED' : 'UNLOCKED'}
+    </span>
+  );
+}
+
+function formatDateTime(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
 }
 
 function StatusPill(props: { status: 'ACTIVE' | 'INACTIVE' }) {
@@ -127,6 +160,17 @@ export function SettingsUsersPage() {
   const { state, hasPermission } = useAuth();
   const me = state.me?.user;
 
+  const canUnlockUsers = (() => {
+    const roles = (me?.roles ?? []).map((r) => String(r ?? '').toUpperCase());
+    const isPrivileged = roles.some((r) => ['SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN'].includes(r));
+    if (isPrivileged) return true;
+
+    const email = String(me?.email ?? '').toLowerCase();
+    if (email && email.startsWith('superadmin@')) return true;
+
+    return false;
+  })();
+
   const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
   const canCreateUser = hasPermission(PERMISSIONS.USER.CREATE) || hasSystemViewAll;
@@ -152,8 +196,28 @@ export function SettingsUsersPage() {
   const [assignValidating, setAssignValidating] = useState(false);
   const [assignSubmitting, setAssignSubmitting] = useState(false);
 
+  const [unlockTarget, setUnlockTarget] = useState<null | SettingsUser>(null);
+  const [unlockSubmitting, setUnlockSubmitting] = useState(false);
+
   const canActOn = (u: SettingsUser) => {
     return Boolean(me?.id) && u.id !== me?.id;
+  };
+
+  const onConfirmUnlock = async () => {
+    if (!unlockTarget) return;
+    setUnlockSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await unlockUser(unlockTarget.id);
+      setSuccess('User account unlocked successfully.');
+      setUnlockTarget(null);
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to unlock user account.');
+    } finally {
+      setUnlockSubmitting(false);
+    }
   };
 
   const refresh = async () => {
@@ -292,20 +356,20 @@ export function SettingsUsersPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 750, color: '#0B0C1E' }}>Users</div>
-          <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(11,12,30,0.62)' }}>Manage system users and assign roles.</div>
-        </div>
-        <Button
-          variant="accent"
-          onClick={() => setShowCreate(true)}
-          disabled={!canCreateUser}
-          title={!canCreateUser ? 'You do not have permission to create users. Required: USER_CREATE.' : undefined}
-        >
-          Add User
-        </Button>
-      </div>
+      <SettingsPageHeader
+        title="Users"
+        subtitle="Manage system users and assign roles."
+        rightSlot={
+          <Button
+            variant="accent"
+            onClick={() => setShowCreate(true)}
+            disabled={!canCreateUser}
+            title={!canCreateUser ? 'You do not have permission to create users. Required: USER_CREATE.' : undefined}
+          >
+            Add User
+          </Button>
+        }
+      />
 
       {error ? (
         <div style={{ marginTop: 14 }}>
@@ -330,13 +394,14 @@ export function SettingsUsersPage() {
               <DataTable.Th>Email</DataTable.Th>
               <DataTable.Th>Roles</DataTable.Th>
               <DataTable.Th>Status</DataTable.Th>
+              <DataTable.Th>Account Lock</DataTable.Th>
               <DataTable.Th>Created date</DataTable.Th>
               <DataTable.Th align="right">Actions</DataTable.Th>
             </DataTable.Row>
           </DataTable.Head>
           <DataTable.Body>
             {users.length === 0 ? (
-              <DataTable.Empty colSpan={6} title={loading ? 'Loading…' : 'No users found'} />
+              <DataTable.Empty colSpan={7} title={loading ? 'Loading…' : 'No users found'} />
             ) : (
               users.map((u, idx) => (
                 <DataTable.Row key={u.id} zebra index={idx}>
@@ -372,24 +437,51 @@ export function SettingsUsersPage() {
                   <DataTable.Td>
                     <StatusPill status={u.status} />
                   </DataTable.Td>
+                  <DataTable.Td>
+                    <div>
+                      <LockPill locked={Boolean((u as any)?.isLocked)} />
+                      {(u as any)?.lockedAt ? (
+                        <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(11,12,30,0.52)' }}>
+                          Locked on: {formatDateTime(String((u as any)?.lockedAt))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </DataTable.Td>
                   <DataTable.Td>{formatDate(u.createdAt)}</DataTable.Td>
                   <DataTable.Td align="right">
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                       <Button
                         size="sm"
                         variant={u.status === 'ACTIVE' ? 'destructive' : 'secondary'}
-                        disabled={!canActOn(u) || !canEditUser}
+                        disabled={!canActOn(u) || !canEditUser || Boolean((u as any)?.isLocked)}
                         title={
                           !canActOn(u)
                             ? 'You cannot change your own status'
                             : !canEditUser
                               ? 'You do not have permission to edit users. Required: USER_EDIT.'
+                              : Boolean((u as any)?.isLocked)
+                                ? 'Locked is a security state. Unlock the account before changing activation status.'
                               : undefined
                         }
                         onClick={() => onToggleStatus(u)}
                       >
                         {u.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                       </Button>
+                      {Boolean((u as any)?.isLocked) && canUnlockUsers ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!canActOn(u)}
+                          onClick={() => {
+                            setUnlockTarget(u);
+                            setError('');
+                            setSuccess('');
+                          }}
+                          style={{ border: '1px solid rgba(245,158,11,0.65)', color: 'rgba(146,64,14,0.95)' }}
+                        >
+                          Unlock
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
                         disabled={!canActOn(u) || !canAssignRoles}
@@ -412,6 +504,36 @@ export function SettingsUsersPage() {
           </DataTable.Body>
         </DataTable>
       </div>
+
+      {unlockTarget ? (
+        <ModalShell
+          title="Unlock User Account"
+          subtitle={unlockTarget.email}
+          onClose={() => {
+            if (unlockSubmitting) return;
+            setUnlockTarget(null);
+          }}
+          width={520}
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button variant="secondary" disabled={unlockSubmitting} onClick={() => setUnlockTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="accent"
+                disabled={unlockSubmitting}
+                onClick={onConfirmUnlock}
+              >
+                {unlockSubmitting ? 'Unlocking…' : 'Unlock Account'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ fontSize: 13, color: 'rgba(11,12,30,0.72)', lineHeight: '18px' }}>
+            Are you sure you want to unlock this account? This will reset failed login attempts.
+          </div>
+        </ModalShell>
+      ) : null}
 
       {showCreate ? (
         <ModalShell

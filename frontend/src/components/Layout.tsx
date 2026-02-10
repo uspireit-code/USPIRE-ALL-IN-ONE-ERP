@@ -6,7 +6,7 @@ import { PERMISSIONS } from '../auth/permission-catalog';
 import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
 import { AuthBootstrapGate } from './AuthBootstrapGate';
 import { globalSearch, type GlobalSearchResponse, type GlobalSearchResultItem } from '../services/search';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, pingSession } from '../services/api';
 import { changeMyPassword, updateMyProfile, uploadMyAvatar } from '../services/users';
 
 export function Layout() {
@@ -45,9 +45,126 @@ export function Layout() {
 
   const { state, logout, hasPermission, refreshMe } = useAuth();
 
+  const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+  const WARNING_AT_MS = 14 * 60 * 1000;
+
+  const [sessionWarningOpen, setSessionWarningOpen] = useState(false);
+  const [sessionCountdown, setSessionCountdown] = useState(60);
+  const lastActivityAtRef = useRef<number>(Date.now());
+  const sessionWarningOpenRef = useRef(false);
+  const idleIntervalRef = useRef<number | null>(null);
+  const logoutInProgressRef = useRef(false);
+
+  const isGatewayRoute = location.pathname.startsWith('/login')
+    || location.pathname.startsWith('/forgot-password')
+    || location.pathname.startsWith('/reset-password')
+    || location.pathname.startsWith('/force-password-reset');
+
+  useEffect(() => {
+    sessionWarningOpenRef.current = sessionWarningOpen;
+  }, [sessionWarningOpen]);
+
+  useEffect(() => {
+    if (!state.isAuthenticated || isGatewayRoute) return;
+
+    function bumpActivity() {
+      lastActivityAtRef.current = Date.now();
+      if (sessionWarningOpenRef.current) {
+        setSessionWarningOpen(false);
+        setSessionCountdown(60);
+      }
+    }
+
+    const opts: AddEventListenerOptions = { passive: true };
+    window.addEventListener('keydown', bumpActivity, opts);
+    window.addEventListener('click', bumpActivity, opts);
+    window.addEventListener('scroll', bumpActivity, opts);
+    window.addEventListener('touchstart', bumpActivity, opts);
+
+    return () => {
+      window.removeEventListener('keydown', bumpActivity);
+      window.removeEventListener('click', bumpActivity);
+      window.removeEventListener('scroll', bumpActivity);
+      window.removeEventListener('touchstart', bumpActivity);
+    };
+  }, [isGatewayRoute, state.isAuthenticated]);
+
+  useEffect(() => {
+    if (!state.isAuthenticated || isGatewayRoute) {
+      if (idleIntervalRef.current) {
+        window.clearInterval(idleIntervalRef.current);
+        idleIntervalRef.current = null;
+      }
+      setSessionWarningOpen(false);
+      setSessionCountdown(60);
+      lastActivityAtRef.current = Date.now();
+      logoutInProgressRef.current = false;
+      return;
+    }
+
+    if (idleIntervalRef.current) return;
+    idleIntervalRef.current = window.setInterval(() => {
+      const now = Date.now();
+      const idleMs = Math.max(0, now - lastActivityAtRef.current);
+
+      if (!sessionWarningOpenRef.current && idleMs >= WARNING_AT_MS && idleMs < IDLE_TIMEOUT_MS) {
+        setSessionWarningOpen(true);
+      }
+
+      if (sessionWarningOpenRef.current) {
+        const remainingSeconds = Math.max(0, Math.ceil((IDLE_TIMEOUT_MS - idleMs) / 1000));
+        setSessionCountdown(remainingSeconds);
+      }
+
+      if (idleMs >= IDLE_TIMEOUT_MS && !logoutInProgressRef.current) {
+        logoutInProgressRef.current = true;
+        void (async () => {
+          await logout();
+          navigate('/login?reason=timeout', { replace: true });
+        })();
+      }
+    }, 1000);
+
+    return () => {
+      if (idleIntervalRef.current) {
+        window.clearInterval(idleIntervalRef.current);
+        idleIntervalRef.current = null;
+      }
+    };
+  }, [isGatewayRoute, state.isAuthenticated]);
+
+  async function handleStayLoggedIn() {
+    if (logoutInProgressRef.current) return;
+    try {
+      await pingSession();
+      lastActivityAtRef.current = Date.now();
+      setSessionWarningOpen(false);
+      setSessionCountdown(60);
+    } catch {
+      logoutInProgressRef.current = true;
+      void (async () => {
+        await logout();
+        navigate('/login?reason=timeout', { replace: true });
+      })();
+    }
+  }
+
+  function handleLogoutNow() {
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
+    void (async () => {
+      await logout();
+      navigate('/login?reason=logout', { replace: true });
+    })();
+  }
+
   const tenantName = state.me?.tenant?.name ?? '';
   const userEmail = state.me?.user?.email ?? '';
   const userRoles = Array.isArray(state.me?.user?.roles) ? state.me?.user?.roles : [];
+
+  const isDelegated = Boolean(state.delegation?.delegationId);
+  const actingAsName = state.delegation?.actingAsUserName;
+  const realUserName = state.me?.user?.name ?? userEmail;
 
   const avatarUrl = state.me?.user?.avatarUrl ?? null;
   const avatarSrc = useMemo(() => {
@@ -582,6 +699,7 @@ export function Layout() {
               onClick={() => {
                 setProfileOpen(false);
                 logout();
+                navigate('/login?reason=logout', { replace: true });
               }}
               style={{
                 width: '100%',
@@ -677,7 +795,7 @@ export function Layout() {
     );
   };
 
-  type L1Key = 'finance' | 'settings' | null;
+  type L1Key = 'finance' | null;
   const [openL1, setOpenL1] = useState<L1Key | null>(null);
 
   const [openFinanceL2, setOpenFinanceL2] = useState<{ gl: boolean; ar: boolean; ap: boolean; cash: boolean; imprest: boolean; budgets: boolean; reports: boolean }>({
@@ -699,10 +817,6 @@ export function Layout() {
       path.startsWith('/reports') ||
       path.startsWith('/audit')
     );
-  }, [path]);
-
-  const isSettingsActive = useMemo(() => {
-    return path.startsWith('/settings');
   }, [path]);
 
   const financeActiveL2 = useMemo(() => {
@@ -857,6 +971,122 @@ export function Layout() {
 
   const breadcrumb = useMemo(() => getBreadcrumbForPath(location.pathname), [location.pathname, pageTitle]);
   const breadcrumbDisplay = breadcrumb.sub ? `${breadcrumb.module} \u203a ${breadcrumb.sub}` : breadcrumb.module;
+
+  const sessionWarningModal = sessionWarningOpen ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 90,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(0,0,0,0.55)',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'relative',
+          width: '95%',
+          maxWidth: 520,
+          borderRadius: 14,
+          overflow: 'hidden',
+          background: '#FFFFFF',
+          border: '1px solid rgba(0,0,0,0.12)',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
+        }}
+      >
+        <div
+          style={{
+            background: '#020445',
+            color: '#FCFCFC',
+            padding: '16px 18px',
+            fontWeight: 900,
+            letterSpacing: 0.2,
+            fontSize: 14,
+            textAlign: 'center',
+          }}
+        >
+          Session Expiring Soon
+        </div>
+        <div
+          style={{
+            padding: 22,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(8,10,28,0.92)' }}>
+            You will be logged out in
+          </div>
+          <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: 0.2, color: 'rgba(8,10,28,0.92)', lineHeight: 1.05 }}>
+            {Math.max(0, sessionCountdown)}s
+          </div>
+          <div style={{ fontSize: 12.5, color: 'rgba(8,10,28,0.70)', lineHeight: 1.55 }}>
+            due to inactivity.
+          </div>
+
+          <div
+            style={{
+              marginTop: 6,
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleStayLoggedIn}
+              style={{
+                height: 40,
+                padding: '0 14px',
+                borderRadius: 12,
+                border: 0,
+                background: '#020445',
+                color: '#FCFCFC',
+                fontWeight: 900,
+                cursor: 'pointer',
+                minWidth: 150,
+              }}
+            >
+              Stay Logged In
+            </button>
+            <button
+              type="button"
+              onClick={handleLogoutNow}
+              style={{
+                height: 40,
+                padding: '0 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(183, 28, 28, 0.38)',
+                background: 'rgba(183, 28, 28, 0.06)',
+                color: 'rgba(183, 28, 28, 0.92)',
+                fontWeight: 900,
+                cursor: 'pointer',
+                minWidth: 150,
+              }}
+            >
+              Logout Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const envBadge = useMemo(() => {
     const env = headerEnv;
@@ -1073,10 +1303,8 @@ export function Layout() {
     hasSystemSettingsView ||
     hasFinanceConfigView ||
     hasUserView ||
-    hasRoleView;
-
-  const showSystemConfigurationSettings =
-    hasSystemViewAll || hasSystemConfigView || hasSystemSettingsView || hasFinanceConfigView;
+    hasRoleView ||
+    hasPermission(PERMISSIONS.SECURITY.DELEGATION_MANAGE);
 
   const showFinanceNav =
     hasFinanceViewAll ||
@@ -1236,6 +1464,7 @@ export function Layout() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: COLORS.white }}>
+      {sessionWarningModal}
       <div
         style={{
           width: SIDEBAR_WIDTH,
@@ -1525,27 +1754,14 @@ export function Layout() {
               </>
             ) : null}
 
-            <SidebarToggle
-              label="Settings"
-              icon={<SettingsIcon />}
-              open={openL1 === 'settings'}
-              active={isSettingsActive}
-              level={1}
-              onToggle={() => setOpenL1((v) => (v === 'settings' ? null : 'settings'))}
-            />
-            {openL1 === 'settings' ? (
-              <Indent level={2}>
-                {showSettings ? (
-                  <>
-                    <SidebarLink to="/settings" label="Settings" icon={<SettingsIcon />} level={2} />
-                    {showSystemConfigurationSettings ? (
-                      <SidebarLink to="/settings/system" label="System Configuration" icon={<SettingsIcon />} level={2} />
-                    ) : null}
-                    <SidebarLink to="/settings/users" label="Users" icon={<UsersIcon />} level={2} />
-                    <SidebarLink to="/settings/roles" label="Roles" icon={<ClipboardIcon />} level={2} />
-                  </>
-                ) : null}
-              </Indent>
+            {showSettings ? (
+              <SidebarLink
+                to="/settings"
+                label="Settings"
+                icon={<SettingsIcon />}
+                level={1}
+                activeMatch={(loc) => loc.pathname.startsWith('/settings')}
+              />
             ) : null}
           </Section>
         </nav>
@@ -1607,6 +1823,62 @@ export function Layout() {
           <div style={{ fontWeight: 750, fontSize: 14, letterSpacing: 0.2, whiteSpace: 'nowrap', opacity: 0.98 }}>
             {breadcrumbDisplay}
           </div>
+
+          {isDelegated ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '6px 10px',
+                borderRadius: 999,
+                background: 'rgba(237,186,53,0.10)',
+                border: '1px solid rgba(237,186,53,0.28)',
+                color: 'rgba(255,255,255,0.95)',
+                fontSize: 12,
+                fontWeight: 800,
+                whiteSpace: 'nowrap',
+              }}
+              title={realUserName ? `You are logged in as ${realUserName}` : ''}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  height: 20,
+                  padding: '0 8px',
+                  borderRadius: 999,
+                  background: 'rgba(237,186,53,0.22)',
+                  border: '1px solid rgba(237,186,53,0.34)',
+                  color: 'rgba(255,255,255,0.98)',
+                  alignItems: 'center',
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                }}
+              >
+                Delegated
+              </span>
+              <span style={{ opacity: 0.95 }}>
+                Acting as: {actingAsName ?? 'Delegated User'}
+              </span>
+              <button
+                type="button"
+                onClick={handleLogoutNow}
+                style={{
+                  height: 26,
+                  padding: '0 10px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  background: 'rgba(255,255,255,0.06)',
+                  color: COLORS.white,
+                  cursor: 'pointer',
+                  fontWeight: 850,
+                  fontSize: 11.5,
+                }}
+              >
+                Stop Delegation
+              </button>
+            </div>
+          ) : null}
 
           <div ref={searchWrapRef} style={{ flex: '0 1 520px', padding: '0 18px', position: 'relative' }}>
             <input

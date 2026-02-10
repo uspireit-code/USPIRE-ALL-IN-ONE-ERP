@@ -9,6 +9,9 @@ import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ManagementDashboardPage } from './pages/ManagementDashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { ForcePasswordResetPage } from './pages/ForcePasswordResetPage';
 import { ApHomePage } from './pages/ap/ApHomePage';
 import { BillDetailsPage } from './pages/ap/BillDetailsPage';
 import { BillsListPage } from './pages/ap/BillsListPage';
@@ -100,6 +103,8 @@ import { SettingsUsersPage } from './pages/settings/SettingsUsersPage';
 import { SettingsRolesPage } from './pages/settings/SettingsRolesPage';
 import { SettingsSystemPage } from './pages/settings/SettingsSystemPage';
 import { SettingsMasterDataPage } from './pages/settings/SettingsMasterDataPage';
+import { UnlockRequestsPage } from './pages/settings/UnlockRequestsPage';
+import { DelegationsPage } from './pages/settings/security/DelegationsPage';
 import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPage';
 import { SettingsDepartmentMembersPage } from './pages/settings/SettingsDepartmentMembersPage';
 import { SettingsProjectsPage } from './pages/settings/SettingsProjectsPage';
@@ -192,6 +197,9 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/force-password-reset" element={<ForcePasswordResetPage />} />
 
             <Route
               path="/"
@@ -549,6 +557,15 @@ export default function App() {
                   </PermissionAnyRoute>
                 }
               />
+
+              <Route
+                path="settings/security/delegations"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.SECURITY.DELEGATION_MANAGE}>
+                    <DelegationsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
               <Route
                 path="settings/system"
                 element={
@@ -561,6 +578,30 @@ export default function App() {
                     ]}
                   >
                     <SettingsSystemPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/system-configuration"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.SYSTEM.CONFIG_VIEW,
+                      PERMISSIONS.FINANCE.CONFIG_VIEW,
+                      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+                      PERMISSIONS.SYSTEM.VIEW_ALL,
+                    ]}
+                  >
+                    <SettingsSystemPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="settings/unlock-requests"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
+                    <UnlockRequestsPage />
                   </PermissionAnyRoute>
                 }
               />

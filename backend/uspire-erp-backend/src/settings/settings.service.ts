@@ -666,6 +666,9 @@ export class SettingsService {
         name: true,
         email: true,
         isActive: true,
+        isLocked: true,
+        lockedAt: true,
+        failedLoginAttempts: true,
         createdAt: true,
         userRoles: {
           select: {
@@ -680,6 +683,9 @@ export class SettingsService {
       name: u.name,
       email: u.email,
       status: u.isActive ? ('ACTIVE' as const) : ('INACTIVE' as const),
+      isLocked: Boolean((u as any)?.isLocked),
+      lockedAt: (u as any)?.lockedAt ?? null,
+      failedLoginAttempts: Number((u as any)?.failedLoginAttempts ?? 0),
       roles: u.userRoles.map((ur) => ({ id: ur.role.id, name: ur.role.name })),
       createdAt: u.createdAt,
     }));
@@ -731,6 +737,9 @@ export class SettingsService {
     if (!tenant || !actor)
       throw new BadRequestException('Missing tenant or user context');
 
+    const now = new Date();
+    const passwordExpiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('name is required');
     const email = dto.email.toLowerCase().trim();
@@ -767,6 +776,9 @@ export class SettingsService {
         name,
         email,
         passwordHash,
+        mustChangePassword: true as any,
+        passwordChangedAt: now as any,
+        passwordExpiresAt: passwordExpiresAt as any,
         isActive: true,
       },
       select: {

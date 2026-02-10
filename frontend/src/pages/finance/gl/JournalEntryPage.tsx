@@ -123,7 +123,8 @@ export function JournalEntryPage() {
   const canCreate = hasPermission(PERMISSIONS.GL.CREATE);
   const canApprove = hasPermission(PERMISSIONS.GL.APPROVE);
   const canPost = hasPermission(PERMISSIONS.GL.FINAL_POST);
-  const currentUserId = state.me?.user?.id ?? '';
+  const realUserId = state.me?.user?.id ?? '';
+  const actingUserId = state.me?.delegation?.actingAsUserId ?? undefined;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -249,9 +250,9 @@ export function JournalEntryPage() {
     return (journalDetail?.createdBy?.id ?? journal?.createdById ?? '') || '';
   }, [journal?.createdById, journalDetail?.createdBy?.id]);
 
-  const isCreator = effectivePreparerId === currentUserId;
+  const isCreator = effectivePreparerId === realUserId;
   const submittedById = journalDetail?.submittedBy?.id ?? journal?.submittedById ?? null;
-  const isSubmittedByMe = submittedById ? submittedById === currentUserId : false;
+  const isSubmittedByMe = submittedById ? submittedById === realUserId : false;
 
   const isApproverReviewMode = fromReviewQueue && canApprove;
   const canApproveThis =
@@ -849,11 +850,12 @@ export function JournalEntryPage() {
         </div>
       ) : null}
 
-      {!isNew && journalDetail && currentUserId ? (
+      {!isNew && journalDetail && realUserId ? (
         !forcedReadOnly && !isFinanceOfficerMaker && !isApproverReviewMode ? (
           <JournalActionBar
             journal={journalDetail}
-            currentUserId={currentUserId}
+            realUserId={realUserId}
+            actingUserId={actingUserId}
             canCreate={canCreate}
             canApprove={canApprove}
             canPost={canPost}
@@ -1161,6 +1163,9 @@ export function JournalEntryPage() {
 
           <div>
             Reviewed by: {journalDetail.reviewedBy?.email ?? journalDetail.reviewedBy?.id ?? '—'}
+            {journalDetail.reviewedActedBy?.email || journalDetail.reviewedActedBy?.id
+              ? ` (acted by ${journalDetail.reviewedActedBy?.email ?? journalDetail.reviewedActedBy?.id})`
+              : ''}
             {journalDetail.reviewedAt ? ` • ${new Date(journalDetail.reviewedAt).toLocaleString()}` : ''}
           </div>
 

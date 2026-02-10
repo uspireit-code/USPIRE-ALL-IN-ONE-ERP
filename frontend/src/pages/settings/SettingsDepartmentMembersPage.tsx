@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import type { SettingsUser } from '../../services/settings';
 import { listSettingsUsers } from '../../services/settings';
@@ -20,7 +21,6 @@ function todayIsoDate() {
 export function SettingsDepartmentMembersPage() {
   const { id } = useParams();
   const departmentId = String(id ?? '');
-  const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
   const canManage = hasPermission(PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE);
@@ -131,23 +131,15 @@ export function SettingsDepartmentMembersPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
-        <Link to="/settings/master-data/departments">← Back to Departments</Link>
-        <button type="button" onClick={() => navigate('/settings')}>
-          Settings
-        </button>
-      </div>
-
-      <h2 style={{ margin: 0 }}>Department Members</h2>
-      <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(11,12,30,0.62)' }}>
-        {department ? (
-          <>
-            {department.code} — {department.name}
-          </>
-        ) : (
-          'Select a department to manage members.'
-        )}
-      </div>
+      <SettingsPageHeader
+        title="Department Members"
+        subtitle={department ? `${department.code} - ${department.name}` : 'Manage department membership assignments.'}
+        rightSlot={
+          <Link to="/settings/master-data/departments" style={{ fontSize: 13 }}>
+            ← Back to Departments
+          </Link>
+        }
+      />
 
       {loading ? <div style={{ marginTop: 12 }}>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 12 }}>{error}</div> : null}

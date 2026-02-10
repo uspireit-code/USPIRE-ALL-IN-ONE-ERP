@@ -3,6 +3,7 @@ import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { tokens } from '../../designTokens';
 import { getApiErrorMessage } from '../../services/api';
 import type { TenantSystemConfig } from '../../services/settings';
@@ -582,27 +583,25 @@ export function SettingsSystemPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 750, color: '#0B0C1E' }}>System Configuration</div>
-          <div style={{ marginTop: 10, fontSize: 13, color: tokens.colors.text.secondary, lineHeight: '18px', maxWidth: 820 }}>
-            Changes here affect the entire tenant. Branding previews apply immediately, but only persist after you click Save Changes.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Button variant="secondary" disabled={loading || saving || !system} onClick={() => void onCancel()}>
-            Cancel
-          </Button>
-          <Button
-            variant="accent"
-            disabled={loading || saving || !system || !isDirty || !organisationName.trim() || !canSave}
-            onClick={() => void onSave()}
-            title={!organisationName.trim() ? 'Organisation name is required' : !isDirty ? 'No changes to save' : undefined}
-          >
-            {saving ? 'Saving…' : 'Save Changes'}
-          </Button>
-        </div>
-      </div>
+      <SettingsPageHeader
+        title="System Configuration"
+        subtitle="Changes here affect the entire tenant. Branding previews apply immediately, but only persist after you click Save Changes."
+        rightSlot={
+          <>
+            <Button variant="secondary" disabled={loading || saving || !system} onClick={() => void onCancel()}>
+              Cancel
+            </Button>
+            <Button
+              variant="accent"
+              disabled={loading || saving || !system || !isDirty || !organisationName.trim() || !canSave}
+              onClick={() => void onSave()}
+              title={!organisationName.trim() ? 'Organisation name is required' : !isDirty ? 'No changes to save' : undefined}
+            >
+              {saving ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </>
+        }
+      />
 
       {error ? (
         <div style={{ marginTop: 16 }}>

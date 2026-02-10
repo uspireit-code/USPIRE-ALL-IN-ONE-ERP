@@ -11,7 +11,8 @@ import {
 
 export function JournalActionBar(props: {
   journal: JournalDetailResponse;
-  currentUserId: string;
+  realUserId: string;
+  actingUserId?: string;
   canCreate: boolean;
   canApprove: boolean;
   canPost: boolean;
@@ -28,8 +29,10 @@ export function JournalActionBar(props: {
   const reviewerId = props.journal.reviewedBy?.id ?? null;
   const periodStatus = props.journal.period?.status ?? null;
 
-  const isCreator = creatorId === props.currentUserId;
-  const isReviewer = reviewerId === props.currentUserId;
+  const actorId = props.actingUserId ?? props.realUserId;
+
+  const isCreator = creatorId === props.realUserId;
+  const isReviewer = reviewerId === actorId;
 
   const blockedByClosedPeriod = periodStatus === 'CLOSED';
 

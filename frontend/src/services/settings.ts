@@ -56,6 +56,9 @@ export type SettingsUser = {
   name: string;
   email: string;
   status: 'ACTIVE' | 'INACTIVE';
+  isLocked?: boolean;
+  lockedAt?: string | null;
+  failedLoginAttempts?: number;
   roles: Array<{ id: string; name: string }>;
   createdAt: string;
 };
@@ -221,6 +224,44 @@ export async function updateSettingsUserRoles(params: {
   return apiFetch(`/settings/users/${params.userId}/roles`, {
     method: 'PATCH',
     body: JSON.stringify({ roleIds: params.roleIds }),
+  });
+}
+
+export async function unlockUser(userId: string) {
+  return apiFetch<{ success: true; message?: string }>('/auth/admin/unlock-user', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export type UnlockRequestRow = {
+  id: string;
+  userEmail: string;
+  userId: string | null;
+  requestedAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  status: 'PENDING' | 'RESOLVED';
+  resolvedAt: string | null;
+};
+
+export async function listUnlockRequests() {
+  return apiFetch<{ success: true; data: UnlockRequestRow[] }>('/auth/admin/unlock-requests', {
+    method: 'GET',
+  });
+}
+
+export async function resolveUnlockRequest(unlockRequestId: string) {
+  return apiFetch<{ success: true }>('/auth/admin/resolve-unlock-request', {
+    method: 'POST',
+    body: JSON.stringify({ unlockRequestId }),
+  });
+}
+
+export async function unlockUserFromRequest(unlockRequestId: string) {
+  return apiFetch<{ success: true; message?: string }>('/auth/admin/unlock-user-from-request', {
+    method: 'POST',
+    body: JSON.stringify({ unlockRequestId }),
   });
 }
 

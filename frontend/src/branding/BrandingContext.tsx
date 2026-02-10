@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { TenantSystemConfig } from '../services/settings';
 import { getSystemConfig } from '../services/settings';
 import { getCurrentBranding } from '../services/branding';
+import { API_BASE_URL } from '../services/api';
 
 type BrandingOverrides = Partial<Pick<TenantSystemConfig, 'organisationName' | 'organisationShortName' | 'logoUrl' | 'faviconUrl' | 'primaryColor' | 'secondaryColor' | 'accentColor' | 'secondaryAccentColor'>>;
 
@@ -18,7 +19,7 @@ type BrandingContextValue = {
 const BrandingContext = createContext<BrandingContextValue | null>(null);
 
 function getApiBaseUrl() {
-  return (import.meta as any).env?.VITE_API_BASE_URL ?? 'http://localhost:3000';
+  return API_BASE_URL;
 }
 
 export function resolveBrandAssetUrl(path: string | null | undefined): string | null {
@@ -44,6 +45,12 @@ function applyFavicon(url: string | null) {
 
 function brandingCacheKey(tenantId: string) {
   return `tenantBrandingCache:${tenantId}`;
+}
+
+function getStoredTenantIdForBranding(): string {
+  const tenantId = String(localStorage.getItem('tenantId') ?? '').trim();
+  if (tenantId) return tenantId;
+  return String(localStorage.getItem('lastTenantId') ?? '').trim();
 }
 
 function tryLoadCachedBranding(tenantId: string): TenantSystemConfig | null {
@@ -73,59 +80,9 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
   const lastLoadedTenantKey = useRef<string>('');
 
   const refresh = useCallback(async () => {
-    const tenantId = localStorage.getItem('tenantId') ?? '';
-    const accessToken = localStorage.getItem('accessToken') ?? '';
-
-    if (!tenantId || !accessToken) {
-      if (!tenantId) {
-        setBase(null);
-        return;
-      }
-
-      if (!accessToken) {
-        setIsLoading(true);
-        setError(null);
-        try {
-          const publicBrand = await getCurrentBranding();
-          const mapped: TenantSystemConfig = {
-            id: tenantId,
-            name: '',
-            organisationName: publicBrand.organisationName,
-            organisationShortName: publicBrand.organisationShortName,
-            legalName: null,
-            defaultCurrency: null,
-            country: null,
-            timezone: null,
-            financialYearStartMonth: null,
-            dateFormat: null,
-            numberFormat: null,
-            defaultLandingPage: null,
-            defaultDashboard: null,
-            defaultLanguage: null,
-            demoModeEnabled: null,
-            defaultUserRoleCode: null,
-            logoUrl: publicBrand.logoUrl,
-            faviconUrl: null,
-            primaryColor: publicBrand.primaryColor ?? '#020445',
-            secondaryColor: null,
-            accentColor: null,
-            secondaryAccentColor: null,
-            updatedAt: new Date().toISOString(),
-          };
-          setBase(mapped);
-          saveCachedBranding(tenantId, mapped);
-          lastLoadedTenantKey.current = tenantId;
-        } catch {
-          const cached = tryLoadCachedBranding(tenantId);
-          setBase(cached);
-        } finally {
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      const cached = tryLoadCachedBranding(tenantId);
-      setBase(cached);
+    const tenantId = getStoredTenantIdForBranding();
+    if (!tenantId) {
+      setBase(null);
       return;
     }
 
@@ -144,6 +101,41 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
       saveCachedBranding(tenantId, normalized);
       lastLoadedTenantKey.current = tenantId;
     } catch (e: any) {
+      try {
+        const publicBrand = await getCurrentBranding(tenantId);
+        const mapped: TenantSystemConfig = {
+          id: tenantId,
+          name: '',
+          organisationName: publicBrand.organisationName,
+          organisationShortName: publicBrand.organisationShortName,
+          legalName: null,
+          defaultCurrency: null,
+          country: null,
+          timezone: null,
+          financialYearStartMonth: null,
+          dateFormat: null,
+          numberFormat: null,
+          defaultLandingPage: null,
+          defaultDashboard: null,
+          defaultLanguage: null,
+          demoModeEnabled: null,
+          defaultUserRoleCode: null,
+          logoUrl: publicBrand.logoUrl,
+          faviconUrl: null,
+          primaryColor: publicBrand.primaryColor ?? '#020445',
+          secondaryColor: null,
+          accentColor: null,
+          secondaryAccentColor: null,
+          updatedAt: new Date().toISOString(),
+        };
+        setBase(mapped);
+        saveCachedBranding(tenantId, mapped);
+        lastLoadedTenantKey.current = tenantId;
+      } catch {
+        const cached = tryLoadCachedBranding(tenantId);
+        setBase(cached);
+      }
+
       setError(e?.message || 'Failed to load system configuration');
     } finally {
       setIsLoading(false);
@@ -152,17 +144,10 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
 
   useEffect(() => {
     const tick = async () => {
-      const tenantId = localStorage.getItem('tenantId') ?? '';
-      const accessToken = localStorage.getItem('accessToken') ?? '';
+      const tenantId = getStoredTenantIdForBranding();
 
       if (!tenantId) {
         if (base) setBase(null);
-        return;
-      }
-
-      if (!accessToken) {
-        const cached = tryLoadCachedBranding(tenantId);
-        if (cached) setBase(cached);
         return;
       }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
@@ -66,16 +66,20 @@ export function SettingsFinanceControlAccountsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-        <Link to="/settings">Back to Settings</Link>
-      </div>
-
-      <div>
-        <h2 style={{ margin: 0 }}>Control Accounts</h2>
-        <div style={{ marginTop: 8, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-          This account is used as the Accounts Payable control account when posting supplier bills.
-        </div>
-      </div>
+      <SettingsPageHeader
+        title="Control Accounts"
+        subtitle="This account is used as the Accounts Payable control account when posting supplier bills."
+        rightSlot={
+          <>
+            <button type="button" onClick={() => load()} disabled={saving}>
+              Reload
+            </button>
+            <button type="button" onClick={() => void onSave()} disabled={saving || !apControlAccountId.trim()}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        }
+      />
 
       {loading ? <div style={{ marginTop: 12 }}>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 10 }}>{error}</div> : null}
@@ -93,14 +97,7 @@ export function SettingsFinanceControlAccountsPage() {
           </select>
 
           <div />
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button type="button" onClick={() => load()} disabled={saving}>
-              Reload
-            </button>
-            <button type="button" onClick={() => void onSave()} disabled={saving || !apControlAccountId.trim()}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
+          <div />
         </div>
       ) : null}
     </div>

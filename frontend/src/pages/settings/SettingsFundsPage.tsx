@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import type { Fund, MasterStatus, Project } from '../../services/master-data';
 import { createFund, listFunds, listProjects, updateFund } from '../../services/master-data';
@@ -123,26 +123,17 @@ export function SettingsFundsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10 }}>
-        <Link to="/settings">← Back to Settings</Link>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Funds</h2>
-          <div style={{ marginTop: 8, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-            Restricted or designated funding sources.
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {canCreate ? (
+      <SettingsPageHeader
+        title="Funds"
+        subtitle="Restricted or designated funding sources."
+        rightSlot={
+          canCreate ? (
             <button type="button" onClick={openCreate}>
               New Fund
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? <div>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 10 }}>{error}</div> : null}

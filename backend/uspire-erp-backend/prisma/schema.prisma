@@ -909,20 +909,23 @@ model AccountingPeriodCloseLog {
 
 model AuditEvent {
   id                String          @id @default(uuid())
-  tenantId          String
+  tenantId          String?
   eventType         AuditEventType
   entityType        AuditEntityType
   entityId          String
   action            String
   outcome           AuditOutcome
   reason            String?
-  userId            String
+  userId            String?
+  ipAddress         String?
+  userAgent         String?
+  requestId         String?
   permissionUsed    String?
   createdAt         DateTime        @default(now())
   forecastId        String?
   forecastVersionId String?
-  tenant            Tenant          @relation(fields: [tenantId], references: [id])
-  user              User            @relation(fields: [userId], references: [id])
+  tenant            Tenant?         @relation(fields: [tenantId], references: [id])
+  user              User?           @relation(fields: [userId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
@@ -1064,48 +1067,51 @@ model CustomerInvoiceImportLog {
   id            String   @id @default(uuid())
   tenantId      String
   importId      String
-  processedAt   DateTime @default(now())
-  processedById String?
-  processedBy   User?    @relation("CustomerInvoiceImportProcessedBy", fields: [processedById], references: [id], onDelete: Restrict)
+  processedById String
+  createdAt     DateTime @default(now())
+
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  processedBy   User     @relation("CustomerInvoiceImportProcessedBy", fields: [processedById], references: [id])
 
   @@unique([tenantId, importId])
   @@index([tenantId])
-  @@index([tenantId, processedAt])
   @@index([processedById])
 }
 
 model CustomerReceipt {
-  id               String                @id @default(uuid())
-  tenantId         String
-  receiptNumber    String
-  receiptDate      DateTime
-  customerId       String
-  currency         String
-  totalAmount      Decimal               @db.Decimal(18, 2)
-  paymentMethod    ReceiptPaymentMethod
+  id             String               @id @default(uuid())
+  tenantId       String
+  receiptNumber  String
+  receiptDate    DateTime
+  customerId     String
+  currency       String
+  exchangeRate   Decimal              @default(1.0) @db.Decimal(18, 6)
+  totalAmount    Decimal              @db.Decimal(18, 2)
+  paymentMethod  ReceiptPaymentMethod
   paymentReference String?
-  status           ReceiptStatus         @default(DRAFT)
-  createdById      String
-  createdAt        DateTime              @default(now())
-  postedById       String?
-  postedAt         DateTime?
-  voidedById       String?
-  voidedAt         DateTime?
-  voidReason       String?
-  glJournalId      String?
-  postedByUserId   String?
-  exchangeRate     Decimal               @default(1.0) @db.Decimal(18, 6)
-  createdBy        User                  @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id])
-  customer         Customer              @relation(fields: [customerId], references: [id])
-  glJournal        JournalEntry?         @relation("CustomerReceiptGlJournal", fields: [glJournalId], references: [id], onDelete: Restrict)
-  postedBy         User?                 @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
-  tenant           Tenant                @relation(fields: [tenantId], references: [id])
-  voidedBy         User?                 @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
-  lines            CustomerReceiptLine[]
-  refunds          CustomerRefund[]
+  reference      String?
+  status         ReceiptStatus        @default(DRAFT)
+  createdById    String
+  postedById     String?
+  postedByUserId String?
+  voidedById     String?
+  createdAt      DateTime             @default(now())
+  postedAt       DateTime?
+  voidedAt       DateTime?
+  voidReason     String?
+  glJournalId    String?
+
+  createdBy      User                 @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id])
+  customer       Customer             @relation(fields: [customerId], references: [id])
+  glJournal      JournalEntry?        @relation("CustomerReceiptGlJournal", fields: [glJournalId], references: [id], onDelete: Restrict)
+  postedBy       User?                @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  voidedBy       User?                @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  lines          CustomerReceiptLine[]
+  refunds        CustomerRefund[]
 
   @@unique([tenantId, receiptNumber])
+  @@unique([tenantId, glJournalId])
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([customerId])
@@ -1499,8 +1505,30 @@ model Tenant {
   sequenceCounters               TenantSequenceCounter[]
   taxConfig                      TenantTaxConfig?
   users                          User[]
+  sessions                       UserSession[]
+  passwordResetTokens            PasswordResetToken[]
+  delegations                    UserDelegation[]
+  twoFactorChallenges             TwoFactorChallenge[]
+  unlockRequests                 UnlockRequest[]
 
   @@index([status])
+}
+
+model UnlockRequest {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userEmail   String
+  userId      String?
+  ipAddress   String?
+  userAgent   String?
+  requestedAt DateTime @default(now())
+  status      String   @default("PENDING")
+  resolvedAt  DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([userEmail])
 }
 
 model Entity {
@@ -1667,6 +1695,13 @@ model User {
   tenantId                                String
   email                                   String
   passwordHash                            String
+  passwordChangedAt                       DateTime?
+  passwordExpiresAt                       DateTime?
+  mustChangePassword                      Boolean                         @default(false)
+  passwordResetTokenHash                  String?
+  passwordResetTokenExpiresAt             DateTime?
+  activeSessionId                         String?
+  lastActivityAt                          DateTime?
   isActive                                Boolean                         @default(true)
   createdAt                               DateTime                        @default(now())
   name                                    String
@@ -1676,6 +1711,18 @@ model User {
   language                                String?
   avatarUrl                               String?
   updatedAt                               DateTime                        @default(now()) @updatedAt
+  failedLoginAttempts                     Int                             @default(0)
+  isLocked                                Boolean                         @default(false)
+  lockedAt                                DateTime?
+  passwordFailedAttempts                  Int                             @default(0)
+  passwordLockUntil                       DateTime?
+  twoFactorEnabled                        Boolean                         @default(false)
+  twoFactorMethod                         TwoFactorMethod?
+  twoFactorSecret                         String?
+  twoFactorEmailLastSentAt                DateTime?
+  twoFactorLockUntil                      DateTime?
+  twoFactorFailedAttempts                 Int                             @default(0)
+  sessions                                UserSession[]
   accountsCreated                         Account[]                       @relation("AccountCreatedBy")
   bankStatementsCreated                   BankStatement[]                 @relation("BankStatementCreatedBy")
   bankStatementsReconciled                BankStatement[]                 @relation("BankStatementReconciledBy")
@@ -1758,9 +1805,118 @@ model User {
   imprestCasesSettled                     ImprestCase[]                    @relation("ImprestCaseSettledBy")
   imprestCaseTransitionsActed             ImprestCaseTransitionLog[]        @relation("ImprestCaseTransitionActor")
   imprestSettlementLinesCreated           ImprestSettlementLine[]            @relation("ImprestSettlementLineCreatedBy")
+  twoFactorChallenges                     TwoFactorChallenge[]
+  passwordResetTokens                     PasswordResetToken[]
+  sessionsActingAs                        UserSession[]                    @relation("UserSessionActingAs")
+  sessionsRealUser                        UserSession[]                    @relation("UserSessionRealUser")
+  delegationsGiven                        UserDelegation[]                  @relation("DelegationDelegator")
+  delegationsReceived                     UserDelegation[]                  @relation("DelegationDelegate")
+  delegationsCreated                      UserDelegation[]                  @relation("DelegationCreatedBy")
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+model UserSession {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  sessionId  String
+  delegationId String?
+  actingAsUserId String?
+  realUserId String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ipAddress  String?
+  userAgent  String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delegation UserDelegation? @relation(fields: [delegationId], references: [id], onDelete: SetNull)
+  actingAsUser User? @relation("UserSessionActingAs", fields: [actingAsUserId], references: [id], onDelete: SetNull)
+  realUser User? @relation("UserSessionRealUser", fields: [realUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([sessionId])
+  @@index([delegationId])
+  @@index([actingAsUserId])
+  @@index([realUserId])
+  @@index([expiresAt])
+}
+
+enum DelegationScope {
+  APPROVE
+  POST
+  BOTH
+}
+
+model UserDelegation {
+  id              String           @id @default(uuid())
+  tenantId        String
+  delegatorUserId String
+  delegateUserId  String
+  startsAt        DateTime
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  reason          String?
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
+  scope           DelegationScope
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  delegatorUser User @relation("DelegationDelegator", fields: [delegatorUserId], references: [id], onDelete: Cascade)
+  delegateUser  User @relation("DelegationDelegate", fields: [delegateUserId], references: [id], onDelete: Cascade)
+  createdByUser User? @relation("DelegationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  sessions   UserSession[]
+
+  @@index([tenantId])
+  @@index([tenantId, delegatorUserId])
+  @@index([tenantId, delegateUserId])
+  @@index([tenantId, delegatorUserId, delegateUserId])
+  @@index([tenantId, expiresAt])
+}
+
+model PasswordResetToken {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String?
+  userEmail   String
+  tokenHash   String
+  requestedAt DateTime @default(now())
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  ipAddress   String?
+  userAgent   String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userEmail])
+  @@index([expiresAt])
+}
+
+model TwoFactorChallenge {
+  id        String          @id @default(uuid())
+  tenantId  String
+  userId    String
+  method    TwoFactorMethod
+  otpHash   String
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime        @default(now())
+  ipAddress String?
+  userAgent String?
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([expiresAt])
 }
 
 model Role {
@@ -2477,6 +2633,39 @@ enum ProjectStatus {
 }
 
 enum AuditEventType {
+  AUTH_LOGIN_SUCCESS
+  AUTH_LOGIN_FAILED
+  AUTH_LOGIN_LOCKED
+  ACCOUNT_UNLOCK_REQUESTED
+  ACCOUNT_UNLOCKED
+  ACCOUNT_UNLOCK_REQUEST_RESOLVED
+  AUTH_2FA_CHALLENGE_SENT
+  AUTH_2FA_VERIFY_SUCCESS
+  AUTH_2FA_VERIFY_FAILED
+  AUTH_2FA_LOCKED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_SUCCESS
+  PASSWORD_RESET_FAILED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_CHANGED
+  PASSWORD_EXPIRED_LOGIN_BLOCKED
+  FIRST_LOGIN_PASSWORD_CHANGE_REQUIRED
+  SESSION_CREATED
+  SESSION_REVOKED
+  SESSION_AUTO_REVOKED_STALE
+  SESSION_EXPIRED
+  CONCURRENT_SESSION_BLOCKED
+  SESSION_LOGIN_BLOCKED
+  AUTH_LOGOUT
+  LOGOUT
+  DELEGATION_CREATED
+  DELEGATION_REVOKED
+  DELEGATION_ACTIVATED
+  DELEGATION_EXPIRED
+  DELEGATION_EXPIRED_ACCESS_BLOCKED
+  DELEGATION_ACTION_BLOCKED_SOD
+  OTP_SUCCESS
+  OTP_FAILED
   JOURNAL_POST
   PERIOD_CHECKLIST_COMPLETE
   PERIOD_CLOSE
@@ -2617,6 +2806,7 @@ enum JournalBudgetStatus {
 }
 
 enum AuditEntityType {
+  TWO_FACTOR_CHALLENGE
   JOURNAL_ENTRY
   ACCOUNTING_PERIOD
   ACCOUNTING_PERIOD_CHECKLIST_ITEM
@@ -2658,4 +2848,11 @@ enum DisclosureNoteType {
   TAX_RECONCILIATION
   PROVISIONS
   CONTINGENCIES
+}
+
+enum TwoFactorMethod {
+  EMAIL
+  AUTHENTICATOR
+  TOTP
+  SMS
 }

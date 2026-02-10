@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
@@ -145,26 +145,17 @@ export function SettingsTaxRatesPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-        <Link to="/settings">Back to Settings</Link>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Tax Rates</h2>
-          <div style={{ marginTop: 8, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-            Manage tenant tax / VAT rates used on invoices.
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {canCreate ? (
+      <SettingsPageHeader
+        title="Tax Rates"
+        subtitle="Manage tenant tax / VAT rates used on invoices."
+        rightSlot={
+          canCreate ? (
             <button type="button" onClick={openCreate}>
               New Tax Rate
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? <div>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 10 }}>{error}</div> : null}

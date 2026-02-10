@@ -26,6 +26,12 @@ export function SettingsPage() {
     hasPermission(PERMISSIONS.ROLE.VIEW) ||
     hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
+  const canDelegationManage =
+    hasPermission(PERMISSIONS.SECURITY.DELEGATION_MANAGE) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+
+  const canManageUnlockRequests = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW) || hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+
   const canFinanceConfigEdit =
     hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
     hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
@@ -81,13 +87,46 @@ export function SettingsPage() {
           },
         ]
       : []),
+    ...(canDelegationManage
+      ? [
+          {
+            key: 'security-delegations',
+            title: 'Security: Delegations',
+            description: 'Manage delegated authority assignments (audited).',
+            to: '/settings/security/delegations',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l8 4v6c0 5-3.4 9.4-8 10-4.6-.6-8-5-8-10V6l8-4Z" />
+                <path d="M12 12v4" />
+                <path d="M12 8h.01" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...(canManageUnlockRequests
+      ? [
+          {
+            key: 'unlock-requests',
+            title: 'Unlock Requests',
+            description: 'Review and resolve locked-account unlock requests.',
+            to: '/settings/unlock-requests',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V6l-8-4-8 4v6c0 6 8 10 8 10Z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
     ...((canSystemConfigView || canFinanceConfigView)
       ? [
           {
             key: 'system',
             title: 'System Configuration',
             description: 'System configuration, environment details, and security settings.',
-            to: '/settings/system',
+            to: '/settings/system-configuration',
             icon: (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2v2" />

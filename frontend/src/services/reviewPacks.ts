@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, apiFetchRaw } from './api';
 
 export type ReviewPackRow = {
   id: string;
@@ -22,23 +22,7 @@ export async function generateReviewPack(periodId: string) {
 }
 
 export async function downloadReviewPack(periodId: string, packId: string) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
-  const accessToken = localStorage.getItem('accessToken') ?? '';
-  const tenantId = localStorage.getItem('tenantId') ?? '';
-
-  const headers = new Headers();
-  if (tenantId) headers.set('x-tenant-id', tenantId);
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-
-  const res = await fetch(`${baseUrl}/gl/periods/${periodId}/review-packs/${packId}/download`, {
-    method: 'GET',
-    headers,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw { status: res.status, body: text };
-  }
+  const res = await apiFetchRaw(`/gl/periods/${periodId}/review-packs/${packId}/download`, { method: 'GET' });
 
   const blob = await res.blob();
   const contentDisposition = res.headers.get('Content-Disposition') ?? '';

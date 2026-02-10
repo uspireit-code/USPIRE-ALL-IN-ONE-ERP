@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import type { Department, MasterStatus } from '../../services/master-data';
 import { createDepartment, listDepartments, updateDepartment } from '../../services/master-data';
@@ -104,26 +105,17 @@ export function SettingsDepartmentsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10 }}>
-        <Link to="/settings">← Back to Settings</Link>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Departments</h2>
-          <div style={{ marginTop: 8, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-            Organisational cost and responsibility units used across transactions and reporting.
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {canCreate ? (
+      <SettingsPageHeader
+        title="Departments"
+        subtitle="Organisational cost and responsibility units used across transactions and reporting."
+        rightSlot={
+          canCreate ? (
             <button type="button" onClick={openCreate}>
               New Department
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? <div>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 10 }}>{error}</div> : null}

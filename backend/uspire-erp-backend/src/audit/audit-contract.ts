@@ -24,12 +24,16 @@ export type GenericLifecycleEventType =
   | 'SOD_VIOLATION';
 
 export interface AuditEventPayload {
-  tenantId: string;
+  tenantId: string | null;
   eventType: AuditEventType;
-  actorUserId: string;
+  actorUserId: string | null;
   entityType: AuditEntityType;
   entityId: string;
   timestamp: Date;
+
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
 
   permissionUsed?: string;
   reason?: string;

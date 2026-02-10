@@ -36,29 +36,59 @@ export type ApiConfig = {
   baseUrl: string;
 };
 
+function resolveApiBaseUrl() {
+  const fromApiUrl = (import.meta.env.VITE_API_URL ?? '').toString().trim();
+  const fromBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').toString().trim();
+  const raw = fromApiUrl || fromBaseUrl || '/api';
+  return raw.replace(/\/+$/, '');
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
 const defaultConfig: ApiConfig = {
-  baseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api',
+  baseUrl: API_BASE_URL,
 };
 
 const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase() === 'true';
 
 function getStoredAuth() {
-  const accessToken = localStorage.getItem('accessToken') ?? '';
   const tenantId = (localStorage.getItem('tenantId') ?? '').trim();
-  return { accessToken, tenantId };
+  return { tenantId };
 }
 
 function clearStoredAuth() {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+  try {
+    localStorage.removeItem('tenantId');
+    localStorage.removeItem('delegationId');
+    localStorage.removeItem('actingAsUserId');
+    localStorage.removeItem('actingAsUserName');
+    localStorage.removeItem('realUserId');
+  } catch {
+    return;
+  }
 }
 
 function redirectToLoginIfNeeded(reason: string) {
   if (typeof window === 'undefined') return;
   const path = window.location?.pathname ?? '';
   if (path.startsWith('/login')) return;
+  if (path.startsWith('/forgot-password')) return;
+  if (path.startsWith('/reset-password')) return;
+  if (path.startsWith('/force-password-reset')) return;
   const next = encodeURIComponent(window.location?.pathname ?? '/');
   window.location.assign(`/login?reason=${encodeURIComponent(reason)}&next=${next}`);
+}
+
+function isDelegationExpiredUnauthorized(body: any): boolean {
+  const msg =
+    typeof body?.message === 'string'
+      ? body.message
+      : typeof body?.error === 'string'
+        ? body.error
+        : typeof body === 'string'
+          ? body
+          : '';
+  return String(msg).trim() === 'Delegation has expired. Please login again.';
 }
 
 export async function apiFetch<T>(
@@ -66,7 +96,7 @@ export async function apiFetch<T>(
   init?: RequestInit,
   config: ApiConfig = defaultConfig,
 ): Promise<T> {
-  const { accessToken, tenantId } = getStoredAuth();
+  const { tenantId } = getStoredAuth();
 
   const isAuthEndpoint = inputPath.startsWith('/auth/login') || inputPath.startsWith('/auth/refresh');
 
@@ -77,7 +107,6 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
   if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   if (debugApi) {
     // eslint-disable-next-line no-console
@@ -87,13 +116,14 @@ export async function apiFetch<T>(
       method: init?.method ?? 'GET',
       isAuthEndpoint,
       hasTenantId: Boolean(tenantId),
-      hasAuthorization: Boolean(accessToken),
+      hasAuthorization: false,
     });
   }
 
   const res = await fetch(`${config.baseUrl}${inputPath}`, {
     ...init,
     headers,
+    credentials: init?.credentials ?? 'include',
   });
 
   const text = await res.text();
@@ -102,7 +132,7 @@ export async function apiFetch<T>(
   if (!res.ok) {
     if (res.status === 401) {
       clearStoredAuth();
-      redirectToLoginIfNeeded('unauthorized');
+      redirectToLoginIfNeeded(isDelegationExpiredUnauthorized(body) ? 'delegation_expired' : 'unauthorized');
     }
     const err: ApiError = { status: res.status, body };
     throw err;
@@ -116,7 +146,7 @@ export async function apiFetchRaw(
   init?: RequestInit,
   config: ApiConfig = defaultConfig,
 ): Promise<Response> {
-  const { accessToken, tenantId } = getStoredAuth();
+  const { tenantId } = getStoredAuth();
 
   const isAuthEndpoint = inputPath.startsWith('/auth/login') || inputPath.startsWith('/auth/refresh');
 
@@ -126,8 +156,7 @@ export async function apiFetchRaw(
   if (hasBody && !headers.has('Content-Type') && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
   }
-  if (!accessToken && tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
 
   if (debugApi) {
     // eslint-disable-next-line no-console
@@ -137,19 +166,24 @@ export async function apiFetchRaw(
       method: init?.method ?? 'GET',
       isAuthEndpoint,
       hasTenantId: Boolean(tenantId),
-      hasAuthorization: Boolean(accessToken),
+      hasAuthorization: false,
     });
   }
 
   const res = await fetch(`${config.baseUrl}${inputPath}`, {
     ...init,
     headers,
+    credentials: init?.credentials ?? 'include',
   });
 
   if (!res.ok) {
     if (res.status === 401) {
       clearStoredAuth();
-      redirectToLoginIfNeeded('unauthorized');
+      const text = await res.text();
+      const body = text ? safeJsonParse(text) : null;
+      redirectToLoginIfNeeded(isDelegationExpiredUnauthorized(body) ? 'delegation_expired' : 'unauthorized');
+      const err: ApiError = { status: res.status, body };
+      throw err;
     }
     const text = await res.text();
     const body = text ? safeJsonParse(text) : null;
@@ -166,4 +200,57 @@ function safeJsonParse(text: string) {
   } catch {
     return text;
   }
+}
+
+export async function requestPasswordReset(email: string, tenantId?: string) {
+  const payload: Record<string, unknown> = {
+    email: (email ?? '').trim(),
+    ...(tenantId && tenantId.trim() ? { tenantId: tenantId.trim() } : {}),
+  };
+
+  return apiFetch<{ message?: string }>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    credentials: 'omit',
+  });
+}
+
+export async function pingSession() {
+  return apiFetch<{ success: true }>('/auth/ping', {
+    method: 'POST',
+  });
+}
+
+export async function resetPassword(token: string, newPassword: string, confirmPassword: string) {
+  const payload = {
+    token: (token ?? '').trim(),
+    newPassword,
+    confirmPassword,
+  };
+
+  return apiFetch<{ message?: string; success?: boolean }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    credentials: 'include',
+  });
+}
+
+export async function changeExpiredPassword(payload: {
+  emailOrUsername: string;
+  tenantId?: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  const body = {
+    emailOrUsername: String(payload.emailOrUsername ?? '').trim(),
+    ...(payload.tenantId && payload.tenantId.trim() ? { tenantId: payload.tenantId.trim() } : {}),
+    newPassword: payload.newPassword,
+    confirmPassword: payload.confirmPassword,
+  };
+
+  return apiFetch<{ ok: true }>('/auth/force-change-password', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    credentials: 'omit',
+  });
 }

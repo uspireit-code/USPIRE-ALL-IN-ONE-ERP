@@ -24,3 +24,18 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 .idea/
+# ===============================
+# Windsurf local workspace
+# ===============================
+/.windsurf/
+
+# ===============================
+# TypeScript build cache
+# ===============================
+*.tsbuildinfo
+
+# ===============================
+# Prisma temp SQL files
+# ===============================
+backend/uspire-erp-backend/prisma/tmp*.sql
+backend/uspire-erp-backend/prisma/tmp_*.sql

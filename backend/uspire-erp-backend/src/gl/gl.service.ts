@@ -32,6 +32,7 @@ import {
   requireSoDSeparation,
 } from '../rbac/finance-authz.helpers';
 import { PERMISSIONS } from '../rbac/permission-catalog';
+import { getEffectiveActorContext } from '../auth/actor-context';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { CreateAccountingPeriodDto } from './dto/create-accounting-period.dto';
@@ -1349,6 +1350,9 @@ export class GlService {
   private async getUserAuthz(req: Request): Promise<{
     tenantId: string;
     id: string;
+    realUserId: string;
+    actorUserId: string;
+    delegationId?: string;
     permissionCodes: Set<string>;
   }> {
     const tenant = req.tenant;
@@ -1358,9 +1362,30 @@ export class GlService {
       throw new BadRequestException('Missing tenant or user context');
     }
 
+    const actorCtx = getEffectiveActorContext(req);
+    const permissionUserId = actorCtx.actingAsUserId ?? actorCtx.realUserId;
+
+    const jwtPermissionCodes = Array.isArray((user as any)?.permissions)
+      ? ((user as any).permissions as string[])
+      : [];
+
+    const permissionCodes = new Set<string>();
+
+    if (jwtPermissionCodes.length > 0) {
+      for (const p of jwtPermissionCodes) permissionCodes.add(String(p));
+      return {
+        tenantId: tenant.id,
+        id: permissionUserId,
+        realUserId: actorCtx.realUserId,
+        actorUserId: actorCtx.actingAsUserId ?? actorCtx.realUserId,
+        delegationId: actorCtx.delegationId,
+        permissionCodes,
+      };
+    }
+
     const userRoles = await this.prisma.userRole.findMany({
       where: {
-        userId: user.id,
+        userId: permissionUserId,
         role: { tenantId: tenant.id },
       },
       select: {
@@ -1376,15 +1401,20 @@ export class GlService {
       },
     });
 
-    const permissionCodes = new Set<string>();
-
     for (const ur of userRoles) {
       for (const rp of ur.role.rolePermissions) {
         permissionCodes.add(rp.permission.code);
       }
     }
 
-    return { tenantId: tenant.id, id: user.id, permissionCodes };
+    return {
+      tenantId: tenant.id,
+      id: permissionUserId,
+      realUserId: actorCtx.realUserId,
+      actorUserId: actorCtx.actingAsUserId ?? actorCtx.realUserId,
+      delegationId: actorCtx.delegationId,
+      permissionCodes,
+    };
   }
 
   private formatRecurringPlaceholders(template: string, runDate: Date): string {
@@ -4756,6 +4786,36 @@ export class GlService {
 
     if (!entry) throw new NotFoundException('Journal entry not found');
 
+    let reviewedActedBy: null | { id: string; email: string } = null;
+    if (entry.reviewedById) {
+      try {
+        const reviewAudit = await (this.prisma.auditEvent as any).findFirst({
+          where: {
+            tenantId: tenant.id,
+            entityId: entry.id,
+            eventType: AuditEventType.GL_JOURNAL_REVIEWED,
+            outcome: 'SUCCESS',
+          },
+          orderBy: { timestamp: 'desc' },
+          select: { metadata: true },
+        });
+
+        const realUserId = String((reviewAudit as any)?.metadata?.realUserId ?? '').trim();
+        const actorUserId = String((reviewAudit as any)?.metadata?.actorUserId ?? '').trim();
+        if (realUserId && actorUserId && realUserId !== actorUserId) {
+          const realUser = await this.prisma.user.findFirst({
+            where: { id: realUserId, tenantId: tenant.id },
+            select: { id: true, email: true },
+          });
+          if (realUser) {
+            reviewedActedBy = { id: realUser.id, email: realUser.email };
+          }
+        }
+      } catch {
+        // Best-effort enrichment only; never fail the endpoint.
+      }
+    }
+
     await writeAuditEventWithPrisma(
       {
         tenantId: tenant.id,
@@ -4775,7 +4835,7 @@ export class GlService {
       this.prisma,
     );
 
-    return entry;
+    return { ...(entry as any), reviewedActedBy };
   }
 
   async returnJournalToReview(
@@ -4821,7 +4881,7 @@ export class GlService {
         status: 'SUBMITTED',
         reviewedById: null,
         reviewedAt: null,
-        returnedByPosterId: authz.id,
+        returnedByPosterId: authz.actorUserId,
         returnedByPosterAt: now,
         returnReason: reason,
       },
@@ -4834,7 +4894,7 @@ export class GlService {
         eventType: AuditEventType.GL_JOURNAL_RETURNED_BY_POSTER,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: entry.id,
-        actorUserId: authz.id,
+        actorUserId: authz.actorUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_FINAL_POST',
@@ -4842,10 +4902,13 @@ export class GlService {
         lifecycleType: 'RETURN_TO_REVIEW',
         metadata: {
           journalId: entry.id,
-          returnedByPosterId: authz.id,
+          returnedByPosterId: authz.actorUserId,
           previousReviewerId,
           reason,
           timestamp: now.toISOString(),
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
         },
       },
       this.prisma,
@@ -4942,7 +5005,7 @@ export class GlService {
         reference: dto.reference,
         description: dto.description,
         correctsJournalId: dto.correctsJournalId ?? null,
-        createdById: authz.id,
+        createdById: authz.realUserId,
         lines: {
           create: dto.lines.map((l) => ({
             accountId: l.accountId,
@@ -4966,7 +5029,7 @@ export class GlService {
         eventType: AuditEventType.JOURNAL_CREATE,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: created.id,
-        actorUserId: authz.id,
+        actorUserId: authz.realUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_CREATE',
@@ -4975,6 +5038,9 @@ export class GlService {
         metadata: {
           journalId: created.id,
           journalType: (created as any).journalType ?? null,
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
         },
       },
       this.prisma,
@@ -5022,9 +5088,9 @@ export class GlService {
     const isReversal =
       entry.journalType === 'REVERSING' && !!(entry as any).reversalOfId;
     if (isReversal) {
-      requireOwnership({ createdById: entry.createdById, userId: authz.id });
+      requireOwnership({ createdById: entry.createdById, userId: authz.realUserId });
     } else {
-      requireOwnership({ createdById: entry.createdById, userId: authz.id });
+      requireOwnership({ createdById: entry.createdById, userId: authz.realUserId });
     }
 
     if (isReversal) {
@@ -5247,7 +5313,7 @@ export class GlService {
         eventType: AuditEventType.JOURNAL_PARK,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: parked.id,
-        actorUserId: authz.id,
+        actorUserId: authz.realUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_CREATE',
@@ -5255,6 +5321,9 @@ export class GlService {
         lifecycleType: 'PARK',
         metadata: {
           journalId: parked.id,
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
         },
       },
       this.prisma,
@@ -5281,12 +5350,12 @@ export class GlService {
       );
     }
 
-    if (entry.createdById !== authz.id) {
+    if (entry.createdById !== authz.realUserId) {
       throw new ForbiddenException({
         error: 'Submission blocked',
         message: 'Only the journal creator can submit this journal.',
         createdById: entry.createdById,
-        currentUserId: authz.id,
+        currentUserId: authz.realUserId,
       });
     }
 
@@ -5729,7 +5798,7 @@ export class GlService {
     await this.auditJournalBudgetEvaluated({
       tenantId: authz.tenantId,
       journalId: entry.id,
-      userId: authz.id,
+      userId: authz.realUserId,
       permissionUsed: PERMISSIONS.GL.CREATE,
       stage: 'SUBMIT',
       computedAt: now,
@@ -5763,7 +5832,7 @@ export class GlService {
       where: { id: entry.id },
       data: {
         status: 'SUBMITTED',
-        submittedById: authz.id,
+        submittedById: authz.realUserId,
         submittedAt: now,
         reviewedById: null,
         reviewedAt: null,
@@ -5827,7 +5896,7 @@ export class GlService {
       score: submitRisk.score,
       flags: submitRisk.flags,
       stage: 'SUBMIT',
-      userId: authz.id,
+      userId: authz.realUserId,
       permissionUsed: PERMISSIONS.GL.CREATE,
     });
 
@@ -5837,7 +5906,7 @@ export class GlService {
         eventType: AuditEventType.GL_JOURNAL_SUBMITTED,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: submitted.id,
-        actorUserId: authz.id,
+        actorUserId: authz.realUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_CREATE',
@@ -5845,6 +5914,9 @@ export class GlService {
         lifecycleType: 'SUBMIT',
         metadata: {
           journalId: submitted.id,
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
         },
       },
       this.prisma,
@@ -5965,7 +6037,7 @@ export class GlService {
     await this.auditJournalBudgetEvaluated({
       tenantId: authz.tenantId,
       journalId: entry.id,
-      userId: authz.id,
+      userId: authz.actorUserId,
       permissionUsed: PERMISSIONS.GL.APPROVE,
       stage: 'REVIEW',
       computedAt: now,
@@ -5999,7 +6071,7 @@ export class GlService {
       where: { id: entry.id },
       data: {
         status: 'REVIEWED',
-        reviewedById: authz.id,
+        reviewedById: authz.actorUserId,
         reviewedAt: now,
       },
       include: { lines: true },
@@ -6058,7 +6130,7 @@ export class GlService {
       score: reviewRisk.score,
       flags: reviewRisk.flags,
       stage: 'REVIEW',
-      userId: authz.id,
+      userId: authz.actorUserId,
       permissionUsed: PERMISSIONS.GL.APPROVE,
     });
 
@@ -6068,7 +6140,7 @@ export class GlService {
         eventType: AuditEventType.GL_JOURNAL_REVIEWED,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: reviewed.id,
-        actorUserId: authz.id,
+        actorUserId: authz.actorUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_APPROVE',
@@ -6076,6 +6148,9 @@ export class GlService {
         lifecycleType: 'REVIEW',
         metadata: {
           journalId: reviewed.id,
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
         },
       },
       this.prisma,
@@ -6088,17 +6163,20 @@ export class GlService {
           eventType: AuditEventType.GL_JOURNAL_REVERSAL_APPROVED,
           entityType: AuditEntityType.JOURNAL_ENTRY,
           entityId: reviewed.id,
-          actorUserId: authz.id,
+          actorUserId: authz.actorUserId,
           timestamp: new Date(),
           outcome: 'SUCCESS' as any,
           action: 'FINANCE_GL_APPROVE',
           permissionUsed: PERMISSIONS.GL.APPROVE,
-          lifecycleType: 'APPROVE_REVERSAL',
+          lifecycleType: 'REVIEW',
           metadata: {
             reversalJournalId: reviewed.id,
             reversalOfId: (reviewed as any).reversalOfId ?? null,
-            reviewedById: authz.id,
+            reviewedById: authz.actorUserId,
             reviewedAt: now.toISOString(),
+            realUserId: authz.realUserId,
+            actorUserId: authz.actorUserId,
+            delegationId: authz.delegationId ?? null,
           },
         },
         this.prisma,
@@ -6151,7 +6229,7 @@ export class GlService {
       where: { id: entry.id },
       data: {
         status: 'REJECTED',
-        rejectedById: authz.id,
+        rejectedById: authz.actorUserId,
         rejectedAt: now,
         rejectionReason: reason,
         reviewedById: null,
@@ -6166,7 +6244,7 @@ export class GlService {
         eventType: AuditEventType.GL_JOURNAL_REJECTED,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: updated.id,
-        actorUserId: authz.id,
+        actorUserId: authz.actorUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_APPROVE',
@@ -6175,6 +6253,9 @@ export class GlService {
         reason,
         metadata: {
           journalId: updated.id,
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
         },
       },
       this.prisma,

@@ -1,8 +1,9 @@
 import type React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
 import { Card } from '../../components/Card';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 
 export function SettingsMasterDataPage() {
   const { hasPermission } = useAuth();
@@ -82,24 +83,10 @@ export function SettingsMasterDataPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10 }}>
-        <Link to="/settings">← Back to Settings</Link>
-      </div>
-
-      <div
-        style={{
-          background: '#FFFFFF',
-          padding: 24,
-          borderRadius: 16,
-          boxShadow: '0 1px 2px rgba(11,12,30,0.04)',
-          border: '1px solid rgba(11,12,30,0.06)',
-        }}
-      >
-        <div style={{ fontSize: 26, fontWeight: 750, lineHeight: '32px', color: '#0B0C1E' }}>Master Data</div>
-        <div style={{ marginTop: 10, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-          Manage tenant-owned dimensions used across journals, invoices, and reporting.
-        </div>
-      </div>
+      <SettingsPageHeader
+        title="Master Data"
+        subtitle="Manage tenant-owned dimensions used across journals, invoices, and reporting."
+      />
 
       <div
         style={{

@@ -7,6 +7,8 @@ export type PublicBranding = {
   primaryColor: string | null;
 };
 
-export async function getCurrentBranding() {
-  return apiFetch<PublicBranding>('/branding/current', { method: 'GET' });
+export async function getCurrentBranding(tenantId?: string) {
+  const tid = String(tenantId ?? '').trim();
+  const suffix = tid ? `?tenantId=${encodeURIComponent(tid)}` : '';
+  return apiFetch<PublicBranding>(`/branding/current${suffix}`, { method: 'GET' });
 }

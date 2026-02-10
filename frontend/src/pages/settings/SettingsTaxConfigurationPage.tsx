@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
@@ -76,16 +76,22 @@ export function SettingsTaxConfigurationPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-        <Link to="/settings">Back to Settings</Link>
-      </div>
-
-      <div>
-        <h2 style={{ margin: 0 }}>Tax Configuration</h2>
-        <div style={{ marginTop: 8, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-          Configure tenant VAT control accounts. Taxable invoices cannot be posted until Output VAT is set.
-        </div>
-      </div>
+      <SettingsPageHeader
+        title="Tax Configuration"
+        subtitle="Configure tenant VAT control accounts. Taxable invoices cannot be posted until Output VAT is set."
+        rightSlot={
+          <>
+            <button type="button" onClick={() => load()} disabled={saving}>
+              Reload
+            </button>
+            {canUpdate ? (
+              <button type="button" onClick={() => void onSave()} disabled={saving || !outputVatAccountId.trim()}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            ) : null}
+          </>
+        }
+      />
 
       {loading ? <div style={{ marginTop: 12 }}>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 10 }}>{error}</div> : null}
@@ -113,16 +119,7 @@ export function SettingsTaxConfigurationPage() {
           </select>
 
           <div />
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button type="button" onClick={() => load()} disabled={saving}>
-              Reload
-            </button>
-            {canUpdate ? (
-              <button type="button" onClick={() => void onSave()} disabled={saving || !outputVatAccountId.trim()}>
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            ) : null}
-          </div>
+          <div />
 
           <div />
           <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.62)' }}>

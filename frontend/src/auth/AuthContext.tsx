@@ -1,19 +1,36 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../services/api';
-import type { AuthMeResponse, LoginResponse } from './auth.types';
+import type {
+  AuthMeResponse,
+  AvailableDelegation,
+  LoginResponse,
+  LoginRequires2faResponse,
+  LoginRequiresPasswordResetResponse,
+  LoginRequiresTenantResponse,
+} from './auth.types';
 
 type AuthState = {
   isAuthenticated: boolean;
+  isBootstrapping: boolean;
   tenantId: string;
-  accessToken: string;
-  refreshToken: string;
   me: null | AuthMeResponse;
+  availableDelegations: AvailableDelegation[];
+  delegation: {
+    isDelegated: boolean;
+    delegationId?: string;
+    actingAsUserId?: string;
+    actingAsUserName?: string;
+    realUserId?: string;
+  };
 };
 
-type AuthContextValue = {
+export type AuthContextValue = {
   state: AuthState;
-  login: (params: { tenantId?: string; tenantName?: string; email: string; password: string }) => Promise<void>;
-  logout: () => void;
+  login: (params: { emailOrUsername: string; password: string; tenantId?: string; tenantName?: string }) => Promise<LoginResponse>;
+  verify2fa: (params: { challengeId: string; otp: string }) => Promise<void>;
+  activateDelegation: (params: { delegationId: string; actingAsUserName?: string }) => Promise<void>;
+  clearDelegationChoice: () => void;
+  logout: () => Promise<void>;
   hasPermission: (code: string) => boolean;
   refreshMe: () => Promise<void>;
 };
@@ -21,16 +38,25 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function getInitialState(): AuthState {
-  const accessToken = localStorage.getItem('accessToken') ?? '';
-  const refreshToken = localStorage.getItem('refreshToken') ?? '';
   const tenantId = localStorage.getItem('tenantId') ?? '';
+  const delegationId = (localStorage.getItem('delegationId') ?? '').trim();
+  const actingAsUserId = (localStorage.getItem('actingAsUserId') ?? '').trim();
+  const actingAsUserName = (localStorage.getItem('actingAsUserName') ?? '').trim();
+  const realUserId = (localStorage.getItem('realUserId') ?? '').trim();
 
   return {
-    isAuthenticated: Boolean(accessToken),
+    isAuthenticated: false,
+    isBootstrapping: true,
     tenantId,
-    accessToken,
-    refreshToken,
     me: null,
+    availableDelegations: [],
+    delegation: {
+      isDelegated: Boolean(delegationId),
+      delegationId: delegationId || undefined,
+      actingAsUserId: actingAsUserId || undefined,
+      actingAsUserName: actingAsUserName || undefined,
+      realUserId: realUserId || undefined,
+    },
   };
 }
 
@@ -38,8 +64,26 @@ export function AuthProvider(props: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(() => getInitialState());
 
   const refreshMe = useCallback(async () => {
-    if (!state.accessToken) return;
     const me = await apiFetch<AuthMeResponse>('/auth/me', { method: 'GET' });
+
+    const resolvedTenantId = String(me?.tenant?.id ?? '').trim();
+    if (resolvedTenantId) {
+      try {
+        localStorage.setItem('tenantId', resolvedTenantId);
+        localStorage.setItem('lastTenantId', resolvedTenantId);
+      } catch {
+        // ignore
+      }
+    }
+
+    const availableDelegations = Array.isArray((me as any)?.availableDelegations)
+      ? (((me as any).availableDelegations ?? []) as AvailableDelegation[])
+      : [];
+
+    const delegationRaw = (me as any)?.delegation;
+    const delegationId = typeof delegationRaw?.delegationId === 'string' ? delegationRaw.delegationId : '';
+    const actingAsUserId = typeof delegationRaw?.actingAsUserId === 'string' ? delegationRaw.actingAsUserId : '';
+    const realUserId = typeof delegationRaw?.realUserId === 'string' ? delegationRaw.realUserId : '';
 
     if (import.meta.env.DEV) {
       const perms = me?.permissions ?? [];
@@ -74,67 +118,198 @@ export function AuthProvider(props: { children: React.ReactNode }) {
       ...s,
       me,
       tenantId: me?.tenant?.id ?? s.tenantId,
+      isAuthenticated: true,
+      availableDelegations,
+      delegation: {
+        ...s.delegation,
+        isDelegated: Boolean(delegationId || s.delegation.delegationId),
+        delegationId: (delegationId || s.delegation.delegationId) || undefined,
+        actingAsUserId: (actingAsUserId || s.delegation.actingAsUserId) || undefined,
+        realUserId: (realUserId || s.delegation.realUserId) || undefined,
+      },
     }));
-  }, [state.accessToken, state.tenantId]);
+  }, [state.tenantId]);
 
   useEffect(() => {
-    if (state.isAuthenticated && !state.me) {
-      refreshMe().catch((e: any) => {
+    if (!state.isBootstrapping) return;
+
+    refreshMe()
+      .catch((e: any) => {
         const status = typeof e?.status === 'number' ? e.status : undefined;
         if (status === 401) {
-          setState((s) => ({ ...s, me: null, isAuthenticated: false, accessToken: '', refreshToken: '' }));
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
+          setState((s) => ({ ...s, me: null, isAuthenticated: false }));
         }
+      })
+      .finally(() => {
+        setState((s) => ({ ...s, isBootstrapping: false }));
       });
-    }
-  }, [refreshMe, state.isAuthenticated, state.me]);
+  }, [refreshMe, state.isBootstrapping]);
 
-  const login = useCallback(async (params: { tenantId?: string; tenantName?: string; email: string; password: string }) => {
+  const login = useCallback(async (params: { tenantId?: string; tenantName?: string; emailOrUsername: string; password: string }) => {
     const tenantIdTrimmed = (params.tenantId ?? '').trim();
     const tenantNameTrimmed = (params.tenantName ?? '').trim();
+    const idTrimmed = (params.emailOrUsername ?? '').trim();
+
+    if (tenantIdTrimmed) {
+      try {
+        localStorage.setItem('lastTenantId', tenantIdTrimmed);
+      } catch {
+        // ignore
+      }
+    }
 
     const payload: Record<string, unknown> = {
-      email: params.email,
+      emailOrUsername: idTrimmed,
       password: params.password,
       ...(tenantIdTrimmed ? { tenantId: tenantIdTrimmed } : {}),
       ...(tenantNameTrimmed ? { tenantName: tenantNameTrimmed } : {}),
     };
 
-    const resp = await apiFetch<LoginResponse>('/auth/login', {
+    let resp: LoginResponse;
+    try {
+      resp = await apiFetch<LoginResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch (e: any) {
+      const body = (e as any)?.body;
+      if (body && (body as LoginRequiresTenantResponse).requiresTenant) {
+        return body as LoginRequiresTenantResponse;
+      }
+      throw e;
+    }
+
+    if ((resp as LoginRequiresTenantResponse)?.requiresTenant) {
+      return resp;
+    }
+    if ((resp as LoginRequires2faResponse)?.requires2fa) {
+      return resp;
+    }
+
+    if ((resp as LoginRequiresPasswordResetResponse)?.requiresPasswordReset) {
+      return resp;
+    }
+
+    const availableDelegations = Array.isArray((resp as any)?.availableDelegations)
+      ? ((resp as any).availableDelegations as AvailableDelegation[])
+      : [];
+
+    setState((s) => ({
+      ...s,
+      availableDelegations,
+    }));
+
+    if (availableDelegations.length > 0) {
+      localStorage.removeItem('delegationChoice');
+      localStorage.removeItem('delegationId');
+      localStorage.removeItem('actingAsUserId');
+      localStorage.removeItem('actingAsUserName');
+      localStorage.removeItem('realUserId');
+
+      setState((s) => ({
+        ...s,
+        delegation: { isDelegated: false },
+      }));
+
+      return resp as any;
+    }
+
+    await refreshMe();
+    return resp as any;
+  }, [refreshMe]);
+
+  const verify2fa = useCallback(async (params: { challengeId: string; otp: string }) => {
+    const payload = {
+      challengeId: (params.challengeId ?? '').trim(),
+      otp: (params.otp ?? '').trim(),
+    };
+
+    await apiFetch<{ success: true }>('/auth/2fa/verify', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
 
-    if (resp.tenant?.id) {
-      localStorage.setItem('tenantId', resp.tenant.id);
-    } else {
-      localStorage.removeItem('tenantId');
-    }
+    await refreshMe();
+  }, [refreshMe]);
 
-    localStorage.setItem('accessToken', resp.accessToken);
-    localStorage.setItem('refreshToken', resp.refreshToken);
+  const activateDelegation = useCallback(
+    async (params: { delegationId: string; actingAsUserName?: string }) => {
+      const delegationId = String(params.delegationId ?? '').trim();
+      if (!delegationId) {
+        throw new Error('delegationId is required');
+      }
 
-    setState({
-      isAuthenticated: true,
-      tenantId: resp.tenant?.id ?? '',
-      accessToken: resp.accessToken,
-      refreshToken: resp.refreshToken,
-      me: null,
-    });
+      const resp: any = await apiFetch('/auth/activate-delegation', {
+        method: 'POST',
+        body: JSON.stringify({ delegationId }),
+      });
+
+      const actingAsUserId = typeof resp?.delegation?.actingAsUserId === 'string' ? resp.delegation.actingAsUserId : undefined;
+      const realUserId = typeof resp?.delegation?.realUserId === 'string' ? resp.delegation.realUserId : undefined;
+
+      localStorage.setItem('delegationId', delegationId);
+      if (actingAsUserId) localStorage.setItem('actingAsUserId', actingAsUserId);
+      if (realUserId) localStorage.setItem('realUserId', realUserId);
+      if (params.actingAsUserName) {
+        localStorage.setItem('actingAsUserName', String(params.actingAsUserName));
+      }
+
+      setState((s) => ({
+        ...s,
+        availableDelegations: [],
+        delegation: {
+          ...s.delegation,
+          isDelegated: true,
+          delegationId,
+          actingAsUserId: actingAsUserId ?? s.delegation.actingAsUserId,
+          realUserId: realUserId ?? s.delegation.realUserId,
+          actingAsUserName: params.actingAsUserName ?? s.delegation.actingAsUserName,
+        },
+      }));
+
+      await refreshMe();
+    },
+    [refreshMe],
+  );
+
+  const clearDelegationChoice = useCallback(() => {
+    localStorage.removeItem('delegationId');
+    localStorage.removeItem('actingAsUserId');
+    localStorage.removeItem('actingAsUserName');
+    localStorage.removeItem('realUserId');
+
+    setState((s) => ({
+      ...s,
+      availableDelegations: [],
+      delegation: {
+        isDelegated: false,
+      },
+    }));
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+  const logout = useCallback(async () => {
+    try {
+      await apiFetch('/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+
+    localStorage.removeItem('tenantId');
+    // Keep lastTenantId so public pages (login/forgot/reset) can still load tenant branding.
+    localStorage.removeItem('delegationChoice');
+    localStorage.removeItem('delegationId');
+    localStorage.removeItem('actingAsUserId');
+    localStorage.removeItem('actingAsUserName');
+    localStorage.removeItem('realUserId');
     setState({
       isAuthenticated: false,
-      tenantId: state.tenantId,
-      accessToken: '',
-      refreshToken: '',
+      isBootstrapping: false,
+      tenantId: '',
       me: null,
+      availableDelegations: [],
+      delegation: { isDelegated: false },
     });
-  }, [state.tenantId]);
+  }, []);
 
   const hasPermission = useCallback(
     (code: string) => {
@@ -147,8 +322,8 @@ export function AuthProvider(props: { children: React.ReactNode }) {
   );
 
   const value = useMemo<AuthContextValue>(
-    () => ({ state, login, logout, hasPermission, refreshMe }),
-    [hasPermission, login, logout, refreshMe, state],
+    () => ({ state, login, verify2fa, activateDelegation, clearDelegationChoice, logout, hasPermission, refreshMe }),
+    [activateDelegation, clearDelegationChoice, hasPermission, login, logout, refreshMe, state, verify2fa],
   );
 
   return <AuthContext.Provider value={value}>{props.children}</AuthContext.Provider>;

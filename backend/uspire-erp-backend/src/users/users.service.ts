@@ -35,6 +35,43 @@ export class UsersService {
     return user as { id: string };
   }
 
+  async listAdminUsers(req: Request) {
+    const tenant = this.ensureTenant(req);
+
+    const rows = await this.prisma.user.findMany({
+      where: {
+        tenantId: tenant.id,
+      },
+      orderBy: { name: 'asc' },
+      take: 500,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        userRoles: {
+          select: {
+            role: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      users: rows.map((u) => ({
+        id: u.id,
+        fullName: u.name,
+        email: u.email,
+        roleName: (u.userRoles?.[0] as any)?.role?.name ?? null,
+        isActive: Boolean(u.isActive),
+      })),
+    };
+  }
+
   private async hashPassword(password: string): Promise<string> {
     const roundsRaw = this.config.get<string>('BCRYPT_SALT_ROUNDS') ?? '12';
     const rounds = Number(roundsRaw);
@@ -216,7 +253,17 @@ export class UsersService {
     if (!ok) throw new BadRequestException('Current password is incorrect');
 
     const passwordHash = await this.hashPassword(newPassword);
-    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    const now = new Date();
+    const passwordExpiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordChangedAt: now as any,
+        passwordExpiresAt: passwordExpiresAt as any,
+        mustChangePassword: false as any,
+      } as any,
+    });
 
     return { ok: true };
   }

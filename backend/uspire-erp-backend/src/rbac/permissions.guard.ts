@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
+import { getEffectiveActorContext } from '../auth/actor-context';
 import { PrismaService } from '../prisma/prisma.service';
+import { SoDService } from '../sod/sod.service';
 import { PERMISSIONS } from './permission-catalog';
 import { PERMISSIONS_KEY } from './permissions.decorator';
 import { evaluateSoD, type SoDCheckContext } from './sod-policy';
@@ -87,6 +89,7 @@ export class PermissionsGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly sod: SoDService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -112,32 +115,42 @@ export class PermissionsGuard implements CanActivate {
     const tenant = req.tenant;
     const user = req.user;
 
+    const actorCtx = getEffectiveActorContext(req);
+    const permissionUserId = actorCtx.actingAsUserId ?? actorCtx.realUserId;
+
     if (!tenant || !user) {
       throw new ForbiddenException('Missing tenant or user context');
     }
 
-    const userRoles = await this.prisma.userRole.findMany({
-      where: {
-        userId: user.id,
-        role: { tenantId: tenant.id },
-      },
-      select: {
-        role: {
-          select: {
-            rolePermissions: {
-              select: {
-                permission: { select: { code: true } },
+    const codes = new Set<string>();
+    const jwtPermissionCodes = Array.isArray((user as any)?.permissions)
+      ? ((user as any).permissions as string[])
+      : [];
+    if (jwtPermissionCodes.length > 0) {
+      for (const p of jwtPermissionCodes) codes.add(String(p));
+    } else {
+      const userRoles = await this.prisma.userRole.findMany({
+        where: {
+          userId: permissionUserId,
+          role: { tenantId: tenant.id },
+        },
+        select: {
+          role: {
+            select: {
+              rolePermissions: {
+                select: {
+                  permission: { select: { code: true } },
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    const codes = new Set<string>();
-    for (const ur of userRoles) {
-      for (const rp of ur.role.rolePermissions) {
-        codes.add(rp.permission.code);
+      for (const ur of userRoles) {
+        for (const rp of ur.role.rolePermissions) {
+          codes.add(rp.permission.code);
+        }
       }
     }
 
@@ -194,7 +207,9 @@ export class PermissionsGuard implements CanActivate {
     await this.enforceLifecycleSoD({
       req,
       tenantId: tenant.id,
-      actorUserId: user.id,
+      realUserId: actorCtx.realUserId,
+      actingAsUserId: actorCtx.actingAsUserId,
+      delegationId: actorCtx.delegationId,
       requiredPermissions: requiredForSoD,
     });
 
@@ -294,7 +309,9 @@ export class PermissionsGuard implements CanActivate {
   private async enforceLifecycleSoD(params: {
     req: Request;
     tenantId: string;
-    actorUserId: string;
+    realUserId: string;
+    actingAsUserId?: string;
+    delegationId?: string;
     requiredPermissions: string[];
   }) {
     const id = String((params.req as any)?.params?.id ?? '').trim();
@@ -327,31 +344,19 @@ export class PermissionsGuard implements CanActivate {
 
       if (!postedInOriginalRange) return;
 
-      const ctx: SoDCheckContext = {
-        action: 'PERIOD_CORRECT_POSTED',
-        actorUserId: params.actorUserId,
-        entityType: 'ACCOUNTING_PERIOD',
+      await this.sod.assertNoLifecycleConflict({
+        req: params.req,
+        tenantId: params.tenantId,
+        realUserId: params.realUserId,
+        actingAsUserId: params.actingAsUserId,
+        delegationId: params.delegationId,
+        actionType: 'PERIOD_CORRECT',
+        soDAction: 'PERIOD_CORRECT_POSTED',
+        entityType: 'ACCOUNTING_PERIOD' as any,
         entityId: period.id,
-        createdById: period.createdById ?? undefined,
-      };
-
-      const res = evaluateSoD(ctx);
-      if (!res.allowed) {
-        await this.logSoDBlocked({
-          tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission: PERMISSIONS.PERIOD.CREATE,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
-        });
-      }
+        createdByUserId: period.createdById ?? undefined,
+        permissionUsed: attemptedPermission,
+      });
       return;
     }
 
@@ -369,32 +374,20 @@ export class PermissionsGuard implements CanActivate {
         select: { allowSelfPosting: true },
       });
 
-      const ctx: SoDCheckContext = {
-        action: 'AR_RECEIPT_POST',
-        actorUserId: params.actorUserId,
-        entityType: 'CUSTOMER_RECEIPT',
+      await this.sod.assertNoLifecycleConflict({
+        req: params.req,
+        tenantId: params.tenantId,
+        realUserId: params.realUserId,
+        actingAsUserId: params.actingAsUserId,
+        delegationId: params.delegationId,
+        actionType: 'POST',
+        soDAction: 'AR_RECEIPT_POST',
+        entityType: 'CUSTOMER_RECEIPT' as any,
         entityId: receipt.id,
-        createdById: receipt.createdById ?? undefined,
+        createdByUserId: receipt.createdById ?? undefined,
         allowSelfPosting: (tenantControls as any)?.allowSelfPosting ?? undefined,
-      };
-
-      const res = evaluateSoD(ctx);
-      if (!res.allowed) {
-        await this.logSoDBlocked({
-          tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission: PERMISSIONS.AR.RECEIPT_CREATE,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
-        });
-      }
+        permissionUsed: attemptedPermission,
+      });
       return;
     }
 
@@ -410,7 +403,7 @@ export class PermissionsGuard implements CanActivate {
 
       const ctx: SoDCheckContext = {
         action: 'PERIOD_CLOSE_APPROVE',
-        actorUserId: params.actorUserId,
+        actorUserId: params.realUserId,
         entityType: 'ACCOUNTING_PERIOD',
         entityId: id,
         checklistCompletedByIds: completedByIds,
@@ -423,7 +416,7 @@ export class PermissionsGuard implements CanActivate {
             data: {
               tenantId: params.tenantId,
               periodId: id,
-              userId: params.actorUserId,
+              userId: params.realUserId,
               action: 'PERIOD_CLOSE',
               outcome: 'DENIED_SOD',
               message: res.reason,
@@ -431,19 +424,18 @@ export class PermissionsGuard implements CanActivate {
           })
           .catch(() => undefined);
 
-        await this.logSoDBlocked({
+        await this.sod.assertNoLifecycleConflict({
+          req: params.req,
           tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
+          realUserId: params.realUserId,
+          actingAsUserId: params.actingAsUserId,
+          delegationId: params.delegationId,
+          actionType: 'APPROVE',
+          soDAction: 'PERIOD_CLOSE_APPROVE',
+          entityType: 'ACCOUNTING_PERIOD' as any,
+          entityId: id,
+          checklistCompletedByIds: completedByIds,
+          permissionUsed: attemptedPermission,
         });
       }
       return;
@@ -471,31 +463,19 @@ export class PermissionsGuard implements CanActivate {
       if (!entry) return;
 
       if (requestSoDAction === 'GL_JOURNAL_REVERSE') {
-        const ctx: SoDCheckContext = {
-          action: 'GL_JOURNAL_REVERSE',
-          actorUserId: params.actorUserId,
-          entityType: 'JOURNAL_ENTRY',
+        await this.sod.assertNoLifecycleConflict({
+          req: params.req,
+          tenantId: params.tenantId,
+          realUserId: params.realUserId,
+          actingAsUserId: params.actingAsUserId,
+          delegationId: params.delegationId,
+          actionType: 'REVERSE',
+          soDAction: 'GL_JOURNAL_REVERSE',
+          entityType: 'JOURNAL_ENTRY' as any,
           entityId: entry.id,
-          createdById: entry.createdById ?? undefined,
-        };
-
-        const res = evaluateSoD(ctx);
-        if (!res.allowed) {
-          await this.logSoDBlocked({
-            tenantId: params.tenantId,
-            userId: params.actorUserId,
-            ctx,
-            permissionAttempted: attemptedPermission,
-            conflictingPermission: PERMISSIONS.GL.CREATE,
-            ruleCode: res.ruleCode,
-            reason: res.reason,
-          });
-          throw new ForbiddenException({
-            error: 'Action blocked by Segregation of Duties (SoD)',
-            reason: res.reason,
-            ruleCode: res.ruleCode,
-          });
-        }
+          createdByUserId: entry.createdById ?? undefined,
+          permissionUsed: attemptedPermission,
+        });
         return;
       }
 
@@ -504,39 +484,33 @@ export class PermissionsGuard implements CanActivate {
           ? ((entry as any).reversalInitiatedById ?? entry.createdById ?? null)
           : null;
 
-      const ctx: SoDCheckContext = {
-        action: requestSoDAction,
-        actorUserId: params.actorUserId,
-        entityType: 'JOURNAL_ENTRY',
+      const actionType =
+        requestSoDAction === 'GL_JOURNAL_POST'
+          ? 'POST'
+          : requestSoDAction === 'GL_JOURNAL_REVIEW'
+            ? 'REVIEW'
+            : requestSoDAction === 'GL_JOURNAL_REJECT'
+              ? 'REJECT'
+              : requestSoDAction === 'GL_JOURNAL_RETURN_TO_REVIEW'
+                ? 'RETURN_TO_REVIEW'
+                : 'POST';
+
+      await this.sod.assertNoLifecycleConflict({
+        req: params.req,
+        tenantId: params.tenantId,
+        realUserId: params.realUserId,
+        actingAsUserId: params.actingAsUserId,
+        delegationId: params.delegationId,
+        actionType: actionType as any,
+        soDAction: requestSoDAction,
+        entityType: 'JOURNAL_ENTRY' as any,
         entityId: entry.id,
-        createdById: (entry as any).createdById ?? undefined,
-        submittedById: (entry as any).submittedById ?? undefined,
-        reviewedById: (entry as any).reviewedById ?? undefined,
-        reversalInitiatedById: reversalInitiatedById ? String(reversalInitiatedById) : undefined,
-      };
-
-      const res = evaluateSoD(ctx);
-      if (!res.allowed) {
-        const conflictingPermission =
-          requestSoDAction === 'GL_JOURNAL_POST' || requestSoDAction === 'GL_JOURNAL_RETURN_TO_REVIEW'
-            ? PERMISSIONS.GL.VIEW
-            : PERMISSIONS.GL.CREATE;
-
-        await this.logSoDBlocked({
-          tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
-        });
-      }
+        createdByUserId: (entry as any).createdById ?? undefined,
+        submittedByUserId: (entry as any).submittedById ?? undefined,
+        reviewedByUserId: (entry as any).reviewedById ?? undefined,
+        reversalInitiatedByUserId: reversalInitiatedById ? String(reversalInitiatedById) : undefined,
+        permissionUsed: attemptedPermission,
+      });
       return;
     }
 
@@ -553,37 +527,20 @@ export class PermissionsGuard implements CanActivate {
       });
       if (!inv) return;
 
-      const ctx: SoDCheckContext = {
-        action: lifecycleAction,
-        actorUserId: params.actorUserId,
-        entityType: 'SUPPLIER_INVOICE',
+      await this.sod.assertNoLifecycleConflict({
+        req: params.req,
+        tenantId: params.tenantId,
+        realUserId: params.realUserId,
+        actingAsUserId: params.actingAsUserId,
+        delegationId: params.delegationId,
+        actionType: lifecycleAction,
+        soDAction: lifecycleAction,
+        entityType: 'SUPPLIER_INVOICE' as any,
         entityId: inv.id,
-        createdById: inv.createdById ?? undefined,
-        approvedById: inv.approvedById ?? undefined,
-      };
-
-      const res = evaluateSoD(ctx);
-      if (!res.allowed) {
-        const conflictingPermission =
-          res.ruleCode === 'SOD_APPROVER_CANNOT_POST'
-            ? PERMISSIONS.AP.INVOICE_APPROVE
-            : PERMISSIONS.AP.INVOICE_CREATE;
-
-        await this.logSoDBlocked({
-          tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
-        });
-      }
+        createdByUserId: inv.createdById ?? undefined,
+        approvedByUserId: inv.approvedById ?? undefined,
+        permissionUsed: attemptedPermission,
+      });
       return;
     }
 
@@ -594,37 +551,20 @@ export class PermissionsGuard implements CanActivate {
       });
       if (!p) return;
 
-      const ctx: SoDCheckContext = {
-        action: lifecycleAction,
-        actorUserId: params.actorUserId,
-        entityType: 'PAYMENT',
+      await this.sod.assertNoLifecycleConflict({
+        req: params.req,
+        tenantId: params.tenantId,
+        realUserId: params.realUserId,
+        actingAsUserId: params.actingAsUserId,
+        delegationId: params.delegationId,
+        actionType: lifecycleAction,
+        soDAction: lifecycleAction,
+        entityType: 'PAYMENT' as any,
         entityId: p.id,
-        createdById: p.createdById ?? undefined,
-        approvedById: p.approvedById ?? undefined,
-      };
-
-      const res = evaluateSoD(ctx);
-      if (!res.allowed) {
-        const conflictingPermission =
-          res.ruleCode === 'SOD_APPROVER_CANNOT_POST'
-            ? PERMISSIONS.PAYMENT.APPROVE
-            : PERMISSIONS.PAYMENT.CREATE;
-
-        await this.logSoDBlocked({
-          tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
-        });
-      }
+        createdByUserId: p.createdById ?? undefined,
+        approvedByUserId: p.approvedById ?? undefined,
+        permissionUsed: attemptedPermission,
+      });
       return;
     }
 
@@ -639,40 +579,21 @@ export class PermissionsGuard implements CanActivate {
       });
       if (!cn) return;
 
-      const ctx: SoDCheckContext = {
-        action: lifecycleAction,
-        actorUserId: params.actorUserId,
-        entityType: 'CUSTOMER_CREDIT_NOTE',
+      await this.sod.assertNoLifecycleConflict({
+        req: params.req,
+        tenantId: params.tenantId,
+        realUserId: params.realUserId,
+        actingAsUserId: params.actingAsUserId,
+        delegationId: params.delegationId,
+        actionType: lifecycleAction,
+        soDAction: lifecycleAction,
+        entityType: 'CUSTOMER_CREDIT_NOTE' as any,
         entityId: cn.id,
-        createdById: cn.createdById ?? undefined,
-        approvedById: cn.approvedById ?? undefined,
-        postedById: cn.postedById ?? undefined,
-      };
-
-      const res = evaluateSoD(ctx);
-      if (!res.allowed) {
-        const conflictingPermission =
-          res.ruleCode === 'SOD_APPROVER_CANNOT_POST'
-            ? PERMISSIONS.AR.CREDIT_NOTE_APPROVE
-            : res.ruleCode === 'SOD_POSTER_CANNOT_VOID'
-              ? PERMISSIONS.AR.CREDIT_NOTE_POST
-              : PERMISSIONS.AR.CREDIT_NOTE_CREATE;
-
-        await this.logSoDBlocked({
-          tenantId: params.tenantId,
-          userId: params.actorUserId,
-          ctx,
-          permissionAttempted: attemptedPermission,
-          conflictingPermission,
-          ruleCode: res.ruleCode,
-          reason: res.reason,
-        });
-        throw new ForbiddenException({
-          error: 'Action blocked by Segregation of Duties (SoD)',
-          reason: res.reason,
-          ruleCode: res.ruleCode,
-        });
-      }
+        createdByUserId: cn.createdById ?? undefined,
+        approvedByUserId: cn.approvedById ?? undefined,
+        postedByUserId: cn.postedById ?? undefined,
+        permissionUsed: attemptedPermission,
+      });
       return;
     }
   }

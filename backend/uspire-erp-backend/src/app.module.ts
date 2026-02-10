@@ -38,6 +38,7 @@ import { BankReconModule } from './bank-recon/bank-recon.module';
 import { SearchModule } from './search/search.module';
 import { UsersModule } from './users/users.module';
 import { BrandingModule } from './branding/branding.module';
+import { DelegationsModule } from './delegations/delegations.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { BrandingModule } from './branding/branding.module';
     SearchModule,
     UsersModule,
     BrandingModule,
+    DelegationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

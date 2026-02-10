@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '../../components/Alert';
 import { Card } from '../../components/Card';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
+import { useBranding } from '../../branding/BrandingContext';
 import {
   fetchOrganisationLogoBlob,
   getOrganisationSettings,
@@ -11,6 +13,7 @@ import {
 } from '../../services/settings';
 
 export function SettingsOrganisationPage() {
+  const brand = useBranding();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -112,6 +115,7 @@ export function SettingsOrganisationPage() {
     try {
       await uploadOrganisationLogo(file);
       await refresh();
+      await brand.refresh();
       setSuccess('Logo uploaded successfully.');
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to upload logo'));
@@ -122,10 +126,10 @@ export function SettingsOrganisationPage() {
 
   return (
     <div>
-      <div style={{ fontSize: 22, fontWeight: 750, color: '#0B0C1E' }}>Organisation & Branding</div>
-      <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(11,12,30,0.62)' }}>
-        Manage your organisation identity and branding across the system.
-      </div>
+      <SettingsPageHeader
+        title="Organisation & Branding"
+        subtitle="Manage your organisation identity and branding across the system."
+      />
 
       {error ? (
         <div style={{ marginTop: 16 }}>

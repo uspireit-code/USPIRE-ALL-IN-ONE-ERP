@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { DelegationSelectorModal } from './DelegationSelectorModal';
 
 export function AuthBootstrapGate(props: { children: React.ReactNode }) {
-  const { state, logout } = useAuth();
+  const { state, logout, activateDelegation } = useAuth();
   const [timedOut, setTimedOut] = useState(false);
+
+  const delegationChoice = (localStorage.getItem('delegationChoice') ?? '').trim();
+  const hasAvailableDelegations = (state.availableDelegations ?? []).length > 0;
+  const isDelegationActive = Boolean(state.delegation?.delegationId);
+  const mustChooseDelegation =
+    Boolean(state.isAuthenticated && state.me) &&
+    hasAvailableDelegations &&
+    !isDelegationActive &&
+    delegationChoice !== 'self';
 
   useEffect(() => {
     if (!state.isAuthenticated) return;
@@ -14,6 +24,8 @@ export function AuthBootstrapGate(props: { children: React.ReactNode }) {
     const t = window.setTimeout(() => setTimedOut(true), 10_000);
     return () => window.clearTimeout(t);
   }, [state.isAuthenticated, state.me]);
+
+  if (state.isBootstrapping) return <div>Loading...</div>;
 
   if (!state.isAuthenticated) return <Navigate to="/login" replace />;
 
@@ -28,8 +40,10 @@ export function AuthBootstrapGate(props: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => {
-              logout();
-              window.location.href = '/login?reason=session';
+              void (async () => {
+                await logout();
+                window.location.href = '/login?reason=session';
+              })();
             }}
             style={{
               border: '1px solid rgba(0,0,0,0.14)',
@@ -44,6 +58,25 @@ export function AuthBootstrapGate(props: { children: React.ReactNode }) {
           </button>
         </div>
       </div>
+    );
+  }
+
+  if (mustChooseDelegation) {
+    return (
+      <>
+        <DelegationSelectorModal
+          open
+          delegations={(state.availableDelegations ?? []) as any}
+          onContinueSelf={() => {
+            localStorage.setItem('delegationChoice', 'self');
+          }}
+          onActivate={async (params) => {
+            localStorage.removeItem('delegationChoice');
+            await activateDelegation(params);
+          }}
+        />
+        <div />
+      </>
     );
   }
 

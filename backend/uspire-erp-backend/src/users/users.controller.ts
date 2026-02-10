@@ -15,6 +15,9 @@ import { diskStorage } from 'multer';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
+import { Permissions } from '../rbac/permissions.decorator';
+import { PermissionsGuard } from '../rbac/permissions.guard';
+import { PERMISSIONS } from '../rbac/permission-catalog';
 import { AllowedAvatarMimeTypes, ChangePasswordDto, UpdateMyProfileDto } from './users.dto';
 import { UsersService } from './users.service';
 
@@ -22,6 +25,13 @@ import { UsersService } from './users.service';
 @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly users: UsersService) {}
+
+  @Get('admin/users')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(PERMISSIONS.SECURITY.DELEGATION_MANAGE)
+  async listAdminUsers(@Req() req: Request) {
+    return this.users.listAdminUsers(req);
+  }
 
   @Get('me')
   async me(@Req() req: Request) {

@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { BadRequestException, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'node:path';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './internal/http-exception.filter';
 import { validateEnvOrExit } from './internal/env-validation';
@@ -25,14 +26,20 @@ async function bootstrap() {
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), { prefix: '/uploads' });
 
+  app.use(cookieParser());
+
+  const frontendUrl = (process.env.FRONTEND_URL ?? '').trim();
+  const allowedOrigins = [
+    ...(frontendUrl ? [frontendUrl] : []),
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'https://erptest.uspireservices.com',
+  ];
+
   app.enableCors({
-    origin: [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://localhost:5174',
-      'http://127.0.0.1:5174',
-      'https://erptest.uspireservices.com',
-    ],
+    origin: allowedOrigins,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
     exposedHeaders: ['Content-Disposition'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',

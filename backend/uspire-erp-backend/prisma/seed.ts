@@ -514,6 +514,7 @@ async function main() {
     PERMISSIONS.MASTER_DATA.DEPARTMENT.MEMBERS_MANAGE,
     PERMISSIONS.AR.CREDIT_NOTE_VIEW,
     PERMISSIONS.AR.CREDIT_NOTE_VOID,
+    PERMISSIONS.SECURITY.DELEGATION_MANAGE,
   ]);
 
   await assignPermissionsByCode(systemAdminRole.id, [
@@ -525,6 +526,7 @@ async function main() {
     PERMISSIONS.USER.EDIT,
     PERMISSIONS.ROLE.VIEW,
     PERMISSIONS.ROLE.ASSIGN,
+    PERMISSIONS.SECURITY.DELEGATION_MANAGE,
   ]);
 
   // USER (view-only) RBAC backfill (idempotent):

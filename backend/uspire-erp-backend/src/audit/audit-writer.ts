@@ -8,6 +8,13 @@ function assertNonEmptyString(value: unknown, label: string): asserts value is s
   }
 }
 
+function assertNullableString(value: unknown, label: string): asserts value is string | null {
+  if (value === null) return;
+  if (typeof value !== 'string') {
+    throw new Error(`writeAuditEvent validation failed: ${label} must be a string or null`);
+  }
+}
+
 function safeJsonStringify(value: any) {
   try {
     return JSON.stringify(value);
@@ -28,8 +35,8 @@ export async function writeAuditEventWithPrisma(
     throw new Error('writeAuditEvent validation failed: payload is required');
   }
 
-  assertNonEmptyString(payload.tenantId, 'tenantId');
-  assertNonEmptyString(payload.actorUserId, 'actorUserId');
+  assertNullableString(payload.tenantId, 'tenantId');
+  assertNullableString(payload.actorUserId, 'actorUserId');
   assertNonEmptyString(payload.entityId, 'entityId');
 
   if (!payload.entityType) {
@@ -64,14 +71,17 @@ export async function writeAuditEventWithPrisma(
   await prisma.auditEvent
     .create({
       data: {
-        tenantId: payload.tenantId,
+        tenantId: payload.tenantId ?? undefined,
         eventType: payload.eventType,
         entityType: payload.entityType,
         entityId: payload.entityId,
         action: payload.action ?? payload.permissionUsed ?? String(payload.eventType),
         outcome,
         reason: reason ?? null,
-        userId: payload.actorUserId,
+        userId: payload.actorUserId ?? undefined,
+        ipAddress: payload.ipAddress ?? null,
+        userAgent: payload.userAgent ?? null,
+        requestId: payload.requestId ?? null,
         permissionUsed: payload.permissionUsed ?? null,
       },
     })

@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
+import type { InvoiceCategory } from '../../services/ar';
+import { createInvoiceCategory, listInvoiceCategories, setInvoiceCategoryActive, updateInvoiceCategory } from '../../services/ar';
 import type { CoaAccount } from '../../services/coa';
 import { listCoa } from '../../services/coa';
-import type { InvoiceCategory } from '../../services/ar';
-import {
-  createInvoiceCategory,
-  listInvoiceCategories,
-  setInvoiceCategoryActive,
-  updateInvoiceCategory,
-} from '../../services/ar';
 
 export function SettingsInvoiceCategoriesPage() {
   const { hasPermission } = useAuth();
@@ -141,26 +136,17 @@ export function SettingsInvoiceCategoriesPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
-        <Link to="/settings">Back to Settings</Link>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Invoice Categories</h2>
-          <div style={{ marginTop: 8, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
-            Configure tenant-specific invoice categories and posting rules.
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {canCreate ? (
+      <SettingsPageHeader
+        title="Invoice Categories"
+        subtitle="Configure tenant-specific invoice categories and posting rules."
+        rightSlot={
+          canCreate ? (
             <button type="button" onClick={openCreate}>
               Create Category
             </button>
-          ) : null}
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? <div>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 10 }}>{error}</div> : null}
