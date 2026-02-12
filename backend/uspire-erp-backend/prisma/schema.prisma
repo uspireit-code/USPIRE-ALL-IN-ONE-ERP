@@ -1403,6 +1403,8 @@ model Tenant {
   organisationShortName          String?
   primaryColor                   String                          @default("#020445")
   secondaryColor                 String?
+  loginPageTitle                 String                          @default("Enterprise Resource Planning System")
+  loginPageBackgroundUrl         String?
   updatedAt                      DateTime                        @default(now()) @updatedAt
   accentColor                    String?
   country                        String?

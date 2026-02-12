@@ -1,5 +1,5 @@
 :root {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -22,6 +22,13 @@ body {
   background: #FCFCFC;
 }
 
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
 a {
   color: rgba(11, 12, 30, 0.92);
   text-decoration: none;
@@ -30,6 +37,21 @@ a {
 a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.auth-link {
+  color: #1d67be;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-input::placeholder {
+  color: rgba(0, 0, 0, 0.35);
 }
 
 code {

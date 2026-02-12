@@ -7,6 +7,8 @@ export type OrganisationSettings = {
   logoUrl: string | null;
   primaryColor: string;
   secondaryColor: string | null;
+  loginPageTitle?: string;
+  loginPageBackgroundUrl?: string | null;
   updatedAt: string;
 };
 
@@ -140,6 +142,28 @@ export async function fetchOrganisationLogoBlob() {
   const res = await apiFetchRaw('/settings/organisation/logo', { method: 'GET' });
   const blob = await res.blob();
   return blob;
+}
+
+export async function updateLoginBranding(params: { loginPageTitle: string }) {
+  return apiFetch<{ loginPageTitle: string; loginPageBackgroundUrl: string | null }>(
+    '/settings/organisation/branding/login',
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ loginPageTitle: params.loginPageTitle }),
+    },
+  );
+}
+
+export async function uploadLoginBackground(file: File) {
+  const fd = new FormData();
+  fd.append('file', file);
+  return apiFetch<{ loginPageBackgroundUrl: string | null }>(
+    '/settings/organisation/branding/login-background',
+    {
+      method: 'POST',
+      body: fd,
+    },
+  );
 }
 
 export async function getSystemConfig() {

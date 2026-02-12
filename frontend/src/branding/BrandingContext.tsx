@@ -3,12 +3,16 @@ import type { TenantSystemConfig } from '../services/settings';
 import { getSystemConfig } from '../services/settings';
 import { getCurrentBranding } from '../services/branding';
 import { API_BASE_URL } from '../services/api';
+import { getPublicLoginBranding } from '../services/loginBranding';
+import { useAuth } from '../auth/AuthContext';
 
 type BrandingOverrides = Partial<Pick<TenantSystemConfig, 'organisationName' | 'organisationShortName' | 'logoUrl' | 'faviconUrl' | 'primaryColor' | 'secondaryColor' | 'accentColor' | 'secondaryAccentColor'>>;
 
 type BrandingContextValue = {
   base: TenantSystemConfig | null;
   effective: TenantSystemConfig | null;
+  loginPageTitle: string;
+  loginPageBackgroundUrl: string | null;
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -22,12 +26,39 @@ function getApiBaseUrl() {
   return API_BASE_URL;
 }
 
-export function resolveBrandAssetUrl(path: string | null | undefined): string | null {
-  if (!path) return null;
-  if (path.startsWith('blob:') || path.startsWith('data:')) return path;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+function getBackendOrigin(): string {
   const base = getApiBaseUrl();
-  return `${base}${path}`;
+  if (base.startsWith('http://') || base.startsWith('https://')) {
+    try {
+      return new URL(base).origin;
+    } catch {
+      return base.replace(/\/+$/, '');
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol;
+    const host = window.location.hostname;
+    return `${protocol}//${host}:3000`;
+  }
+
+  return '';
+}
+
+export function normalizeAssetUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) {
+    const origin = getBackendOrigin();
+    return origin ? `${origin}${url}` : url;
+  }
+  const base = getApiBaseUrl();
+  return `${base}${url}`;
+}
+
+export function resolveBrandAssetUrl(path: string | null | undefined): string | null {
+  return normalizeAssetUrl(path);
 }
 
 function applyFavicon(url: string | null) {
@@ -53,6 +84,23 @@ function getStoredTenantIdForBranding(): string {
   return String(localStorage.getItem('lastTenantId') ?? '').trim();
 }
 
+function resolveTenantIdForBranding(authTenantId: string): string {
+  const tid = String(authTenantId ?? '').trim();
+  if (tid) return tid;
+  return getStoredTenantIdForBranding().trim() || 'default';
+}
+
+function isPublicAuthRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = String(window.location?.pathname ?? '');
+  return (
+    path.startsWith('/login') ||
+    path.startsWith('/forgot-password') ||
+    path.startsWith('/reset-password') ||
+    path.startsWith('/force-password-reset')
+  );
+}
+
 function tryLoadCachedBranding(tenantId: string): TenantSystemConfig | null {
   try {
     const raw = localStorage.getItem(brandingCacheKey(tenantId));
@@ -72,17 +120,72 @@ function saveCachedBranding(tenantId: string, cfg: TenantSystemConfig) {
 }
 
 export function BrandingProvider(props: { children: React.ReactNode }) {
+  const auth = useAuth();
   const [base, setBase] = useState<TenantSystemConfig | null>(null);
   const [preview, setPreview] = useState<BrandingOverrides>({});
+  const [loginPageTitle, setLoginPageTitle] = useState('Enterprise Resource Planning System');
+  const [loginPageBackgroundUrl, setLoginPageBackgroundUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const lastLoadedTenantKey = useRef<string>('');
 
   const refresh = useCallback(async () => {
-    const tenantId = getStoredTenantIdForBranding();
-    if (!tenantId) {
-      setBase(null);
+    const tenantId = resolveTenantIdForBranding(auth.state.tenantId);
+
+    let resolvedPublicLogoUrl: string | null = null;
+
+    try {
+      const lb = await getPublicLoginBranding(tenantId);
+      const t = String(lb?.loginPageTitle ?? '').trim();
+      setLoginPageTitle(t || 'Enterprise Resource Planning System');
+      setLoginPageBackgroundUrl(lb?.loginPageBackgroundUrl ?? null);
+      resolvedPublicLogoUrl = lb?.logoUrl ?? null;
+    } catch {
+      setLoginPageTitle('Enterprise Resource Planning System');
+      setLoginPageBackgroundUrl(null);
+      resolvedPublicLogoUrl = null;
+    }
+
+    if (isPublicAuthRoute()) {
+      setBase((prev) => {
+        if (!tenantId || tenantId === 'default') {
+          return prev?.id ? prev : null;
+        }
+
+        const next: TenantSystemConfig = {
+          ...(prev ?? {
+            id: tenantId,
+            name: '',
+            organisationName: '',
+            organisationShortName: '',
+            legalName: null,
+            defaultCurrency: null,
+            country: null,
+            timezone: null,
+            financialYearStartMonth: null,
+            dateFormat: null,
+            numberFormat: null,
+            defaultLandingPage: null,
+            defaultDashboard: null,
+            defaultLanguage: null,
+            demoModeEnabled: null,
+            defaultUserRoleCode: null,
+            logoUrl: null,
+            faviconUrl: null,
+            primaryColor: '#020445',
+            secondaryColor: null,
+            accentColor: null,
+            secondaryAccentColor: null,
+            updatedAt: new Date().toISOString(),
+          }),
+          id: tenantId,
+          logoUrl: resolvedPublicLogoUrl,
+        };
+
+        return next;
+      });
+      lastLoadedTenantKey.current = tenantId;
       return;
     }
 
@@ -140,14 +243,21 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [auth.state.tenantId]);
 
   useEffect(() => {
     const tick = async () => {
-      const tenantId = getStoredTenantIdForBranding();
+      const tenantId = resolveTenantIdForBranding(auth.state.tenantId);
 
       if (!tenantId) {
         if (base) setBase(null);
+        return;
+      }
+
+      if (isPublicAuthRoute()) {
+        if (lastLoadedTenantKey.current !== tenantId) {
+          await refresh();
+        }
         return;
       }
 
@@ -157,7 +267,7 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
     };
 
     void tick();
-  }, [base, refresh]);
+  }, [auth.state.tenantId, base, refresh]);
 
   const setPreviewOverrides = useCallback((overrides: BrandingOverrides) => {
     setPreview((prev) => ({ ...prev, ...overrides }));
@@ -180,13 +290,25 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
     () => ({
       base,
       effective,
+      loginPageTitle,
+      loginPageBackgroundUrl,
       isLoading,
       error,
       refresh,
       setPreviewOverrides,
       clearPreviewOverrides,
     }),
-    [base, clearPreviewOverrides, effective, error, isLoading, refresh, setPreviewOverrides],
+    [
+      base,
+      clearPreviewOverrides,
+      effective,
+      error,
+      isLoading,
+      loginPageBackgroundUrl,
+      loginPageTitle,
+      refresh,
+      setPreviewOverrides,
+    ],
   );
 
   return <BrandingContext.Provider value={value}>{props.children}</BrandingContext.Provider>;

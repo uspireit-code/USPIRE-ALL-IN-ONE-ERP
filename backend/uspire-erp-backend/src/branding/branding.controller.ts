@@ -11,6 +11,11 @@ export class BrandingController {
     return this.branding.getCurrent(req);
   }
 
+  @Get('login')
+  async getLoginBranding(@Req() req: Request) {
+    return this.branding.getLoginBranding(req);
+  }
+
   @Get('logo')
   async getLogo(@Req() req: Request, @Res() res: Response) {
     const out = await this.branding.getLogo(req);

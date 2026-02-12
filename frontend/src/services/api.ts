@@ -68,7 +68,7 @@ function clearStoredAuth() {
   }
 }
 
-function redirectToLoginIfNeeded(reason: string) {
+function redirectToLoginIfNeeded() {
   if (typeof window === 'undefined') return;
   const path = window.location?.pathname ?? '';
   if (path.startsWith('/login')) return;
@@ -76,19 +76,7 @@ function redirectToLoginIfNeeded(reason: string) {
   if (path.startsWith('/reset-password')) return;
   if (path.startsWith('/force-password-reset')) return;
   const next = encodeURIComponent(window.location?.pathname ?? '/');
-  window.location.assign(`/login?reason=${encodeURIComponent(reason)}&next=${next}`);
-}
-
-function isDelegationExpiredUnauthorized(body: any): boolean {
-  const msg =
-    typeof body?.message === 'string'
-      ? body.message
-      : typeof body?.error === 'string'
-        ? body.error
-        : typeof body === 'string'
-          ? body
-          : '';
-  return String(msg).trim() === 'Delegation has expired. Please login again.';
+  window.location.assign(`/login?next=${next}`);
 }
 
 export async function apiFetch<T>(
@@ -132,7 +120,7 @@ export async function apiFetch<T>(
   if (!res.ok) {
     if (res.status === 401) {
       clearStoredAuth();
-      redirectToLoginIfNeeded(isDelegationExpiredUnauthorized(body) ? 'delegation_expired' : 'unauthorized');
+      redirectToLoginIfNeeded();
     }
     const err: ApiError = { status: res.status, body };
     throw err;
@@ -181,7 +169,7 @@ export async function apiFetchRaw(
       clearStoredAuth();
       const text = await res.text();
       const body = text ? safeJsonParse(text) : null;
-      redirectToLoginIfNeeded(isDelegationExpiredUnauthorized(body) ? 'delegation_expired' : 'unauthorized');
+      redirectToLoginIfNeeded();
       const err: ApiError = { status: res.status, body };
       throw err;
     }

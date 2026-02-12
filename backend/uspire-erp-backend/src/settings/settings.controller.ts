@@ -27,6 +27,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UpdateUserRolesDto } from './dto/update-user-roles.dto';
 import { ValidateUserRolesDto } from './dto/validate-user-roles.dto';
+import { UpdateLoginBrandingDto } from './dto/update-login-branding.dto';
 
 @Controller('settings')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -46,6 +47,24 @@ export class SettingsController {
     @Body() dto: UpdateOrganisationDto,
   ) {
     return this.settings.updateOrganisation(req, dto);
+  }
+
+  @Patch('organisation/branding/login')
+  @Permissions(PERMISSIONS.SYSTEM.CONFIG_UPDATE)
+  async updateLoginBranding(@Req() req: Request, @Body() dto: UpdateLoginBrandingDto) {
+    return this.settings.updateLoginBranding(req, dto);
+  }
+
+  @Post('organisation/branding/login-background')
+  @Permissions(PERMISSIONS.SYSTEM.CONFIG_UPDATE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 8 * 1024 * 1024 },
+    }),
+  )
+  async uploadLoginBackground(@Req() req: Request, @UploadedFile() file: any) {
+    return this.settings.uploadLoginBackground(req, file);
   }
 
   @Post('organisation/logo')

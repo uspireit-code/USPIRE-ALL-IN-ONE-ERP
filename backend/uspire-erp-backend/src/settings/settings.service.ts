@@ -15,13 +15,17 @@ import { UpdateOrganisationDto } from './dto/update-organisation.dto';
 import { UpdateApControlAccountDto } from './dto/update-ap-control-account.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
 import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UpdateUserRolesDto } from './dto/update-user-roles.dto';
 import { ValidateUserRolesDto } from './dto/validate-user-roles.dto';
+import { UpdateLoginBrandingDto } from './dto/update-login-branding.dto';
 
 const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml']);
+const ALLOWED_LOGIN_BG_MIME = new Set(['image/png', 'image/jpeg']);
 const ALLOWED_FAVICON_MIME = new Set([
   'image/png',
   'image/svg+xml',
@@ -1090,6 +1094,8 @@ export class SettingsService {
         logoUrl: true,
         primaryColor: true,
         secondaryColor: true,
+        loginPageTitle: true,
+        loginPageBackgroundUrl: true,
         updatedAt: true,
       },
     });
@@ -1100,6 +1106,116 @@ export class SettingsService {
       ...row,
       logoUrl: row.logoUrl ? '/settings/organisation/logo' : null,
     };
+  }
+
+  async updateLoginBranding(req: Request, dto: UpdateLoginBrandingDto) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user)
+      throw new BadRequestException('Missing tenant or user context');
+
+    const before = await this.prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: { loginPageTitle: true, loginPageBackgroundUrl: true },
+    });
+    if (!before) throw new NotFoundException('Tenant not found');
+
+    const nextTitleRaw = dto.loginPageTitle;
+    const nextTitle =
+      nextTitleRaw === undefined
+        ? undefined
+        : String(nextTitleRaw ?? '').trim();
+
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        loginPageTitle: nextTitle === undefined ? undefined : nextTitle || 'Enterprise Resource Planning System',
+      },
+      select: { loginPageTitle: true, loginPageBackgroundUrl: true },
+    });
+
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'ORGANISATION_UPDATE',
+          entityType: 'TENANT',
+          entityId: tenant.id,
+          action: 'LOGIN_BRANDING_UPDATE',
+          outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            before,
+            after: {
+              loginPageTitle: updated.loginPageTitle,
+              loginPageBackgroundUrl: updated.loginPageBackgroundUrl,
+            },
+          }),
+          userId: (user as any).id,
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+        },
+      })
+      .catch(() => undefined);
+
+    return {
+      loginPageTitle: updated.loginPageTitle,
+      loginPageBackgroundUrl: updated.loginPageBackgroundUrl ?? null,
+    };
+  }
+
+  async uploadLoginBackground(req: Request, file?: any) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user)
+      throw new BadRequestException('Missing tenant or user context');
+
+    if (!file) throw new BadRequestException('Missing file');
+    if (!file.originalname) throw new BadRequestException('Missing fileName');
+
+    const mimeType = (file.mimetype || '').toLowerCase();
+    if (!ALLOWED_LOGIN_BG_MIME.has(mimeType)) {
+      throw new BadRequestException('Invalid file type. Allowed: png, jpg');
+    }
+
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const uploadId = randomUUID();
+    const relativePath = path.join('login-backgrounds', tenant.id, `${uploadId}_${safeName}`);
+    const absolutePath = path.join(process.cwd(), 'uploads', relativePath);
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, file.buffer);
+
+    const publicUrl = `/${path.posix.join('uploads', relativePath.replace(/\\/g, '/'))}`;
+
+    const before = await this.prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: { loginPageBackgroundUrl: true },
+    });
+
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { loginPageBackgroundUrl: publicUrl },
+      select: { loginPageBackgroundUrl: true },
+    });
+
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'ORGANISATION_UPDATE',
+          entityType: 'TENANT',
+          entityId: tenant.id,
+          action: 'LOGIN_BACKGROUND_UPLOAD',
+          outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            before: { loginPageBackgroundUrl: before?.loginPageBackgroundUrl ?? null },
+            after: { loginPageBackgroundUrl: updated.loginPageBackgroundUrl },
+          }),
+          userId: (user as any).id,
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+        },
+      })
+      .catch(() => undefined);
+
+    return { loginPageBackgroundUrl: updated.loginPageBackgroundUrl ?? null };
   }
 
   async getSystemConfig(req: Request) {

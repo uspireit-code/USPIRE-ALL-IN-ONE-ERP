@@ -2,6 +2,7 @@
 # Runtime storage (DO NOT COMMIT)
 # ===============================
 backend/uspire-erp-backend/storage/
+backend/uspire-erp-backend/uploads/
 
 # ===============================
 # Build outputs

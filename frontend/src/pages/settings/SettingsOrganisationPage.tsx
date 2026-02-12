@@ -7,7 +7,9 @@ import { useBranding } from '../../branding/BrandingContext';
 import {
   fetchOrganisationLogoBlob,
   getOrganisationSettings,
+  updateLoginBranding,
   updateOrganisationSettings,
+  uploadLoginBackground,
   uploadOrganisationLogo,
   type OrganisationSettings,
 } from '../../services/settings';
@@ -24,8 +26,19 @@ export function SettingsOrganisationPage() {
   const [organisationName, setOrganisationName] = useState('');
   const [organisationShortName, setOrganisationShortName] = useState('');
 
+  const [loginPageTitle, setLoginPageTitle] = useState('');
+  const [savingLoginBranding, setSavingLoginBranding] = useState(false);
+  const [uploadingLoginBackground, setUploadingLoginBackground] = useState(false);
+
+  const [loginBackgroundPreviewUrl, setLoginBackgroundPreviewUrl] = useState<string | undefined>(undefined);
+  const loginBackgroundInputRef = useRef<HTMLInputElement | null>(null);
+
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const originalOrganisationNameRef = useRef('');
+  const originalOrganisationShortNameRef = useRef('');
+  const originalLoginPageTitleRef = useRef('');
 
   const NAVY = '#020445';
 
@@ -41,6 +54,17 @@ export function SettingsOrganisationPage() {
       setSettings(s);
       setOrganisationName(s.organisationName ?? '');
       setOrganisationShortName(s.organisationShortName ?? '');
+      setLoginPageTitle(String(s.loginPageTitle ?? 'Enterprise Resource Planning System'));
+
+      originalOrganisationNameRef.current = String(s.organisationName ?? '');
+      originalOrganisationShortNameRef.current = String(s.organisationShortName ?? '');
+      originalLoginPageTitleRef.current = String(s.loginPageTitle ?? 'Enterprise Resource Planning System');
+
+      if (s.loginPageBackgroundUrl) {
+        setLoginBackgroundPreviewUrl(s.loginPageBackgroundUrl);
+      } else {
+        setLoginBackgroundPreviewUrl(undefined);
+      }
 
       if (s.logoUrl) {
         const blob = await fetchOrganisationLogoBlob();
@@ -62,6 +86,82 @@ export function SettingsOrganisationPage() {
     }
   }
 
+  async function onSaveLoginBranding() {
+    if (!settings) return;
+    setError(null);
+    setSuccess(null);
+    setSavingLoginBranding(true);
+    try {
+      const out = await updateLoginBranding({
+        loginPageTitle:
+          loginPageTitle.trim() || 'Enterprise Resource Planning System',
+      });
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              loginPageTitle: out.loginPageTitle,
+              loginPageBackgroundUrl: out.loginPageBackgroundUrl,
+            }
+          : prev,
+      );
+      setLoginPageTitle(out.loginPageTitle);
+
+      originalLoginPageTitleRef.current = String(out.loginPageTitle ?? 'Enterprise Resource Planning System');
+
+      setSuccess('Login branding saved.');
+    } catch (e) {
+      const status = typeof (e as any)?.status === 'number' ? (e as any).status : undefined;
+      if (status === 403) {
+        setError('Access denied. You do not have permission to update organisation branding.');
+      } else {
+        setError(getApiErrorMessage(e, 'Failed to save login branding'));
+      }
+    } finally {
+      setSavingLoginBranding(false);
+    }
+  }
+
+  async function onPickLoginBackground() {
+    loginBackgroundInputRef.current?.click();
+  }
+
+  async function onLoginBackgroundSelected(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = '';
+    if (!file) return;
+
+    setError(null);
+    setSuccess(null);
+    setUploadingLoginBackground(true);
+    try {
+      const blobUrl = URL.createObjectURL(file);
+      setLoginBackgroundPreviewUrl((prev: string | undefined) => {
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
+
+      const out = await uploadLoginBackground(file);
+      setSettings((prev) =>
+        prev ? { ...prev, loginPageBackgroundUrl: out.loginPageBackgroundUrl } : prev,
+      );
+      if (out.loginPageBackgroundUrl)
+        setLoginBackgroundPreviewUrl(out.loginPageBackgroundUrl);
+      setSuccess('Login background uploaded successfully.');
+    } catch (e) {
+      const status = typeof (e as any)?.status === 'number' ? (e as any).status : undefined;
+      if (status === 403) {
+        setError('Access denied. You do not have permission to update organisation branding.');
+      } else {
+        setError(getApiErrorMessage(e, 'Failed to upload login background'));
+      }
+    } finally {
+      setUploadingLoginBackground(false);
+    }
+  }
+
   useEffect(() => {
     refresh().catch(() => undefined);
     return () => {
@@ -69,15 +169,25 @@ export function SettingsOrganisationPage() {
         if (prev) URL.revokeObjectURL(prev);
         return undefined;
       });
+      setLoginBackgroundPreviewUrl((prev: string | undefined) => {
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        return undefined;
+      });
     };
   }, []);
 
   const isDirty = useMemo(() => {
     if (!settings) return false;
-    const baseName = settings.organisationName ?? '';
-    const baseShort = settings.organisationShortName ?? '';
-    return organisationName.trim() !== baseName || organisationShortName.trim() !== baseShort;
+    const baseName = originalOrganisationNameRef.current;
+    const baseShort = originalOrganisationShortNameRef.current;
+    return organisationName.trim() !== baseName.trim() || organisationShortName.trim() !== baseShort.trim();
   }, [organisationName, organisationShortName, settings]);
+
+  const isLoginBrandingDirty = useMemo(() => {
+    if (!settings) return false;
+    const baseTitle = originalLoginPageTitleRef.current;
+    return loginPageTitle.trim() !== String(baseTitle ?? '').trim();
+  }, [loginPageTitle, settings]);
 
   async function onSave() {
     if (!settings) return;
@@ -92,6 +202,10 @@ export function SettingsOrganisationPage() {
       setSettings(updated);
       setOrganisationName(updated.organisationName ?? '');
       setOrganisationShortName(updated.organisationShortName ?? '');
+
+      originalOrganisationNameRef.current = String(updated.organisationName ?? '');
+      originalOrganisationShortNameRef.current = String(updated.organisationShortName ?? '');
+
       setSuccess('Organisation details saved.');
     } catch (e) {
       setError(getApiErrorMessage(e, 'Failed to save organisation settings'));
@@ -116,9 +230,14 @@ export function SettingsOrganisationPage() {
       await uploadOrganisationLogo(file);
       await refresh();
       await brand.refresh();
-      setSuccess('Logo uploaded successfully.');
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to upload logo'));
+      setSuccess('Organisation logo uploaded successfully.');
+    } catch (e) {
+      const status = typeof (e as any)?.status === 'number' ? (e as any).status : undefined;
+      if (status === 403) {
+        setError('Access denied. You do not have permission to update organisation branding.');
+      } else {
+        setError(getApiErrorMessage(e, 'Failed to upload organisation logo'));
+      }
     } finally {
       setUploading(false);
     }
@@ -310,6 +429,115 @@ export function SettingsOrganisationPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          baseShadow={cardBaseShadow}
+          hoverShadow={cardHoverShadow}
+          interactive
+          style={{ background: '#FFFFFF', borderRadius: 16, padding: 24, border: '1px solid rgba(11,12,30,0.06)' }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 750, color: NAVY }}>Login Page Branding</div>
+
+          <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.62)', fontWeight: 650 }}>Login Page Title</div>
+              <input
+                value={loginPageTitle}
+                onChange={(e) => {
+                  setSuccess(null);
+                  setLoginPageTitle(e.currentTarget.value);
+                }}
+                placeholder="Enterprise Resource Planning System"
+                disabled={loading || !settings}
+                style={{
+                  marginTop: 6,
+                  width: '100%',
+                  height: 40,
+                  borderRadius: 12,
+                  border: '1px solid rgba(11,12,30,0.14)',
+                  padding: '0 12px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.62)', fontWeight: 650 }}>Login Background Image</div>
+              <div
+                style={{
+                  marginTop: 6,
+                  width: '100%',
+                  height: 140,
+                  borderRadius: 14,
+                  border: '1px dashed rgba(11,12,30,0.20)',
+                  background: 'rgba(2,4,69,0.02)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                {loginBackgroundPreviewUrl ? (
+                  <img src={loginBackgroundPreviewUrl} alt="Login background" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 650, color: 'rgba(11,12,30,0.65)' }}>No background uploaded</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(11,12,30,0.52)' }}>PNG or JPG (max 8MB)</div>
+                  </div>
+                )}
+              </div>
+
+              <input
+                ref={loginBackgroundInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={onLoginBackgroundSelected}
+                style={{ display: 'none' }}
+              />
+
+              <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button
+                  onClick={() => onPickLoginBackground().catch(() => undefined)}
+                  disabled={loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings}
+                  style={{
+                    height: 38,
+                    padding: '0 14px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(2,4,69,0.16)',
+                    background: '#FFFFFF',
+                    color: NAVY,
+                    fontWeight: 750,
+                    cursor: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings ? 'not-allowed' : 'pointer',
+                    opacity: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings ? 0.55 : 1,
+                  }}
+                >
+                  {uploadingLoginBackground ? 'Uploading…' : loginBackgroundPreviewUrl ? 'Replace background' : 'Upload background'}
+                </button>
+
+                <button
+                  onClick={() => onSaveLoginBranding().catch(() => undefined)}
+                  disabled={loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings || !isLoginBrandingDirty}
+                  style={{
+                    height: 38,
+                    padding: '0 14px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(2,4,69,0.16)',
+                    background: NAVY,
+                    color: '#FFFFFF',
+                    fontWeight: 750,
+                    cursor: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings || !isLoginBrandingDirty ? 'not-allowed' : 'pointer',
+                    opacity: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings || !isLoginBrandingDirty ? 0.55 : 1,
+                  }}
+                >
+                  {savingLoginBranding ? 'Saving…' : 'Save'}
+                </button>
+
+                {isLoginBrandingDirty && !savingLoginBranding ? <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.60)' }}>Unsaved changes</div> : null}
               </div>
             </div>
           </div>

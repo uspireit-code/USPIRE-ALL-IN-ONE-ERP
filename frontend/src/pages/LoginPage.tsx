@@ -1,22 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ClipboardList, Eye, EyeOff, Lock, ShieldCheck, Smartphone } from 'lucide-react';
+import { Eye, EyeOff, Lock } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import type { LoginRequires2faResponse, LoginRequiresTenantResponse, LoginResponse } from '../auth/auth.types';
 import { DelegationSelectorModal } from '../components/DelegationSelectorModal';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { tokens } from '../designTokens';
-import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
 import { API_BASE_URL } from '../services/api';
-import { SYSTEM_ADMIN_CONTACT } from '../config/support';
+import { AuthLayout } from '../components/AuthLayout';
 
 export function LoginPage() {
   const { login, verify2fa, activateDelegation, clearDelegationChoice, state } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { effective } = useBranding();
-  const [logoOk, setLogoOk] = useState(true);
 
   const [tenantId, setTenantId] = useState('');
   const [advancedLogin, setAdvancedLogin] = useState(false);
@@ -33,21 +30,18 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [reasonBanner, setReasonBanner] = useState<string | null>(null);
   const [delegationModalOpen, setDelegationModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [isCompact, setIsCompact] = useState(false);
-
-  const envLabel = useMemo(() => {
-    const mode = String(import.meta.env.MODE ?? '').toLowerCase();
-    if (mode === 'production') return 'Production Environment';
-    if (mode === 'development') return 'Development Environment';
-    return 'Testing Environment';
-  }, []);
 
   const FORCE_RESET_FLAG_KEY = 'forceResetRequired';
   const FORCE_RESET_EMAIL_KEY = 'forceResetEmail';
   const FORCE_RESET_TENANT_KEY = 'forceResetTenantId';
+
+  function resolveBrandTenantId(): string {
+    const tenantId = String(localStorage.getItem('tenantId') ?? '').trim();
+    if (tenantId) return tenantId;
+    return String(localStorage.getItem('lastTenantId') ?? '').trim() || 'default';
+  }
 
   function resolveLockedMessage(raw: unknown) {
     const text = String(raw ?? '').toLowerCase();
@@ -204,49 +198,15 @@ export function LoginPage() {
   }
 
   useEffect(() => {
-    const sp = new URLSearchParams(location.search);
-    const reason = (sp.get('reason') ?? '').trim().toLowerCase();
-    if (!reason) {
-      setReasonBanner(null);
-      return;
+    const tid = resolveBrandTenantId();
+    if (tid && !localStorage.getItem('lastTenantId')) {
+      try {
+        localStorage.setItem('lastTenantId', tid);
+      } catch {
+        // ignore
+      }
     }
-
-    const msg =
-      reason === 'timeout'
-        ? 'Your session expired due to inactivity. Please sign in again.'
-        : reason === 'logout'
-          ? 'You have been signed out successfully.'
-          : reason === 'delegation_expired'
-            ? 'Your delegated session expired. Please login again.'
-          : reason === 'unauthorized'
-            ? 'Your session is no longer valid. Please sign in again.'
-            : reason === 'session_exists'
-              ? 'Login blocked: This account is already active in another session. Please logout from the other session before trying again.'
-              : reason === 'locked'
-                ? 'Your account has been locked due to multiple failed login attempts. Please contact your System Administrator.'
-                : reason === 'disabled'
-                  ? 'This account has been disabled. Please contact your System Administrator.'
-                  : reason === 'password_reset_success'
-                    ? 'Password reset successful. You may now sign in using your new password.'
-                    : null;
-
-    setReasonBanner(msg);
   }, [location.search]);
-
-  function clearReasonBannerOnInput(nextValue: string) {
-    if (!reasonBanner) return;
-    if (String(nextValue ?? '').trim()) setReasonBanner(null);
-  }
-
-  useEffect(() => {
-    const update = () => setIsCompact(window.innerWidth < 920);
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
-
-  const cardMaxWidth = 640;
-  const currentYear = new Date().getFullYear();
 
   const errorBox = error ? (
     <div
@@ -263,24 +223,6 @@ export function LoginPage() {
     >
       <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Sign in could not be completed</div>
       <div>{error}</div>
-    </div>
-  ) : null;
-
-  const reasonBannerBox = reasonBanner ? (
-    <div
-      role="status"
-      style={{
-        border: '1px solid rgba(2, 68, 133, 0.16)',
-        background: 'rgba(2, 68, 133, 0.06)',
-        borderRadius: 10,
-        padding: '10px 12px',
-        color: tokens.colors.text.primary,
-        fontSize: 12.5,
-        lineHeight: 1.45,
-        textAlign: 'center',
-      }}
-    >
-      {reasonBanner}
     </div>
   ) : null;
 
@@ -303,16 +245,7 @@ export function LoginPage() {
   ) : null;
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: isCompact ? 14 : 22,
-        background: 'rgba(11,12,30,0.02)',
-      }}
-    >
+    <AuthLayout>
       <DelegationSelectorModal
         open={delegationModalOpen}
         delegations={(state.availableDelegations ?? []) as any}
@@ -332,358 +265,225 @@ export function LoginPage() {
         }}
       />
 
-      <div
-        style={{
-          width: '100%',
-          maxWidth: cardMaxWidth,
-          borderRadius: 12,
-          overflow: 'hidden',
-          border: `1px solid ${tokens.colors.border.subtle}`,
-          boxShadow: tokens.shadow.card,
-          background: tokens.colors.white,
-        }}
-      >
-        <div
-          style={{
-            background: '#020445',
-            color: tokens.colors.white,
-            padding: isCompact ? '22px 22px' : '28px 28px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-            {effective?.logoUrl && logoOk ? (
-              <img
-                src={resolveBrandAssetUrl(effective.logoUrl) ?? ''}
-                alt="Organisation logo"
-                style={{ maxHeight: 80, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
-                onError={() => setLogoOk(false)}
-              />
-            ) : (
-              <div
-                aria-label="Organisation logo placeholder"
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 999,
-                  background: 'rgba(255,255,255,0.10)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 900,
-                  letterSpacing: 0.4,
-                  color: 'rgba(255,255,255,0.88)',
-                  userSelect: 'none',
-                }}
-              >
-                U
-              </div>
-            )}
-          </div>
-
-          <div style={{ fontSize: 18, fontWeight: 850, letterSpacing: 0.2 }}>
-            USPIRE Enterprise Resource Planning (ERP)
-          </div>
-          <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.55, color: 'rgba(255,255,255,0.86)' }}>
-            <div>A controlled enterprise system for finance, operations, people, and performance.</div>
-            <div>Built for accountability, compliance, and disciplined decision-making.</div>
-          </div>
-        </div>
-
-        <div style={{ padding: isCompact ? 22 : 28, background: tokens.colors.white }}>
-          <div style={{ marginTop: 2 }}>
-          {phase === 'LOGIN' ? (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 800, color: tokens.colors.text.primary }}>Sign in</div>
-              <form onSubmit={onSubmitLogin} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {reasonBannerBox}
-                {showTenantField ? (
-                  <div>
-                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Tenant ID</div>
-                    <div style={{ marginTop: 6 }}>
-                      <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" />
-                    </div>
-                  </div>
-                ) : null}
-
+      <div style={{ marginTop: 2 }}>
+        {phase === 'LOGIN' ? (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Sign In</div>
+            <form onSubmit={onSubmitLogin} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {showTenantField ? (
                 <div>
-                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Email</div>
+                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Organisation</div>
                   <div style={{ marginTop: 6 }}>
+                    <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" />
+                  </div>
+                </div>
+              ) : null}
+
+              <div>
+                <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.70)', fontWeight: 700 }}>Email</div>
+                <div style={{ marginTop: 6 }}>
+                  <Input
+                    value={emailOrUsername}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEmailOrUsername(v);
+                    }}
+                    placeholder="Email"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Password</div>
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ position: 'relative' }}>
                     <Input
-                      value={emailOrUsername}
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
                       onChange={(e) => {
                         const v = e.target.value;
-                        clearReasonBannerOnInput(v);
-                        setEmailOrUsername(v);
+                        setPassword(v);
                       }}
-                      placeholder="Email"
+                      placeholder="Password"
                       autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="none"
+                      style={{ paddingRight: 40, background: 'rgba(2,4,69,0.02)' }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      style={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 4,
+                        cursor: 'pointer',
+                        color: tokens.colors.text.muted,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
+              </div>
 
-                <div>
-                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Password</div>
-                  <div style={{ marginTop: 6 }}>
-                    <div style={{ position: 'relative' }}>
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          clearReasonBannerOnInput(v);
-                          setPassword(v);
-                        }}
-                        placeholder="Password"
-                        autoComplete="off"
-                        style={{ paddingRight: 40 }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        style={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          border: 'none',
-                          background: 'transparent',
-                          padding: 4,
-                          cursor: 'pointer',
-                          color: tokens.colors.text.muted,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              {errorBox}
 
-                {errorBox}
+              {successBox}
 
-                {successBox}
+              <Button
+                type="submit"
+                disabled={loading}
+                variant="accent"
+                style={{
+                  width: '70%',
+                  justifyContent: 'center',
+                  alignSelf: 'center',
+                  height: 40,
+                  borderRadius: 4,
+                  fontWeight: 900,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <Lock size={16} />
+                {loading ? 'Signing in…' : 'Sign In'}
+              </Button>
 
-                <Button type="submit" disabled={loading} variant="accent" style={{ width: '100%', justifyContent: 'center' }}>
-                  {loading ? 'Signing in…' : 'Sign in'}
-                </Button>
-
+              <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => navigate('/forgot-password')}
+                  className="auth-link"
                   style={{
-                    alignSelf: 'center',
-                    marginTop: 2,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: 700,
-                    color: '#1a5fb4',
                     background: 'transparent',
                     border: 'none',
                     padding: 0,
                     cursor: loading ? 'not-allowed' : 'pointer',
-                    textDecoration: 'underline',
-                    textUnderlineOffset: 2,
                   }}
                 >
-                  Forgot Password?
+                  Forgot Your Password?
                 </button>
-
-                {errorCode === 'ACCOUNT_LOCKED' ? (
-                  <button
-                    type="button"
-                    disabled={loading || !emailOrUsername.trim()}
-                    onClick={handleRequestUnlock}
-                    style={{
-                      alignSelf: 'center',
-                      marginTop: 2,
-                      fontSize: 12,
-                      fontWeight: 750,
-                      color: '#1a5fb4',
-                      background: 'transparent',
-                      border: 'none',
-                      padding: 0,
-                      cursor: loading || !emailOrUsername.trim() ? 'not-allowed' : 'pointer',
-                      textDecoration: 'underline',
-                      textUnderlineOffset: 2,
-                    }}
-                  >
-                    Request Unlock
-                  </button>
-                ) : null}
 
                 {!tenantRequired ? (
                   <button
                     type="button"
                     disabled={loading}
                     onClick={() => setAdvancedLogin((v) => !v)}
+                    className="auth-link"
                     style={{
-                      alignSelf: 'center',
-                      marginTop: 4,
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: 700,
-                      color: '#1a5fb4',
                       background: 'transparent',
                       border: 'none',
                       padding: 0,
                       cursor: loading ? 'not-allowed' : 'pointer',
-                      textDecoration: 'underline',
-                      textUnderlineOffset: 2,
                     }}
                   >
-                    {advancedLogin ? 'Hide Tenant ID' : 'Use Tenant ID'}
+                    Switch Organisation
                   </button>
                 ) : null}
-              </form>
-
-              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-                <div
-                  style={{
-                    border: '1px solid rgba(2, 68, 133, 0.14)',
-                    background: 'rgba(2, 68, 133, 0.04)',
-                    borderRadius: 10,
-                    padding: '10px 12px',
-                    fontSize: 12,
-                    color: tokens.colors.text.secondary,
-                    textAlign: 'center',
-                    lineHeight: 1.45,
-                  }}
-                >
-                  Warning: This system is monitored. Unauthorized access is prohibited and may result in disciplinary and legal action.
-                </div>
-
-                <div
-                  aria-label="Security assurance"
-                  style={{
-                    border: `1px solid ${tokens.colors.border.subtle}`,
-                    borderRadius: 10,
-                    background: 'rgba(11,12,30,0.01)',
-                    padding: '10px 12px',
-                    display: 'grid',
-                    gridTemplateColumns: isCompact ? '1fr 1fr' : 'repeat(4, 1fr)',
-                    gap: 10,
-                    textAlign: 'center',
-                    fontSize: 11.5,
-                    color: tokens.colors.text.secondary,
-                  }}
-                >
-                  <div style={{ display: 'grid', gap: 6, justifyItems: 'center' }}>
-                    <ShieldCheck size={16} color={tokens.colors.text.muted} />
-                    <div>Role-based access control</div>
-                  </div>
-                  <div style={{ display: 'grid', gap: 6, justifyItems: 'center' }}>
-                    <ClipboardList size={16} color={tokens.colors.text.muted} />
-                    <div>Audit logging enabled</div>
-                  </div>
-                  <div style={{ display: 'grid', gap: 6, justifyItems: 'center' }}>
-                    <Lock size={16} color={tokens.colors.text.muted} />
-                    <div>Session protection active</div>
-                  </div>
-                  <div style={{ display: 'grid', gap: 6, justifyItems: 'center' }}>
-                    <Smartphone size={16} color={tokens.colors.text.muted} />
-                    <div>2FA supported</div>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    border: `1px solid ${tokens.colors.border.subtle}`,
-                    borderRadius: 10,
-                    background: tokens.colors.white,
-                    padding: '10px 12px',
-                    fontSize: 12,
-                    color: tokens.colors.text.secondary,
-                    lineHeight: 1.45,
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontWeight: 750, color: tokens.colors.text.primary }}>
-                    Need access or locked out? Contact your System Administrator.
-                  </div>
-                  <div style={{ marginTop: 6 }}>
-                    Email:{' '}
-                    <a href={`mailto:${SYSTEM_ADMIN_CONTACT.email}`} style={{ color: '#1a5fb4', fontWeight: 700 }}>
-                      {SYSTEM_ADMIN_CONTACT.email}
-                    </a>
-                  </div>
-                </div>
               </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 800, color: tokens.colors.text.primary }}>Verify your identity</div>
-              {challenge?.maskedDestination ? (
-                <div style={{ marginTop: 10, fontSize: 12.5, color: tokens.colors.text.secondary }}>
-                  Destination: {challenge.maskedDestination}
-                </div>
-              ) : null}
 
-              <form onSubmit={onSubmit2fa} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Verification code</div>
-                  <div style={{ marginTop: 6 }}>
-                    <Input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="One-time code" autoComplete="off" />
-                  </div>
-                </div>
-
-                {errorBox}
-
-                <Button type="submit" disabled={loading} variant="accent" style={{ width: '100%', justifyContent: 'center' }}>
-                  {loading ? 'Verifying…' : 'Verify'}
-                </Button>
-
+              {errorCode === 'ACCOUNT_LOCKED' ? (
                 <button
                   type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setPhase('LOGIN');
-                    setChallenge(null);
-                    setOtp('');
-                    setError(null);
-                  }}
+                  disabled={loading || !emailOrUsername.trim()}
+                  onClick={handleRequestUnlock}
+                  className="auth-link"
                   style={{
-                    alignSelf: 'flex-start',
+                    alignSelf: 'center',
+                    marginTop: 2,
                     fontSize: 12,
-                    fontWeight: 650,
-                    color: '#1a5fb4',
+                    fontWeight: 750,
                     background: 'transparent',
                     border: 'none',
                     padding: 0,
-                    cursor: loading ? 'not-allowed' : 'pointer',
+                    cursor: loading || !emailOrUsername.trim() ? 'not-allowed' : 'pointer',
                     textDecoration: 'underline',
                     textUnderlineOffset: 2,
                   }}
                 >
-                  Back to sign in
+                  Request Unlock
                 </button>
-              </form>
-            </>
-          )}
-          </div>
+              ) : null}
+            </form>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Verify</div>
+            <form onSubmit={onSubmit2fa} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {showTenantField ? (
+                <div>
+                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Organisation</div>
+                  <div style={{ marginTop: 6 }}>
+                    <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" />
+                  </div>
+                </div>
+              ) : null}
 
-          <div
-            style={{
-              marginTop: 18,
-              paddingTop: 14,
-              borderTop: `1px solid ${tokens.colors.border.subtle}`,
-              display: 'grid',
-              gridTemplateColumns: '1fr',
-              gap: 6,
-            }}
-          >
-            <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>USPIRE ERP v1.0 | {envLabel}</div>
-            <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>
-              © {currentYear} USPIRE Professional Services Limited. All rights reserved.
-            </div>
-          </div>
+              <div>
+                <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Verification code</div>
+                <div style={{ marginTop: 6 }}>
+                  <Input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="One-time code" autoComplete="off" />
+                </div>
+              </div>
+
+              {errorBox}
+
+              <Button type="submit" disabled={loading} variant="accent" style={{ width: '100%', justifyContent: 'center' }}>
+                {loading ? 'Verifying…' : 'Verify'}
+              </Button>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setPhase('LOGIN');
+                  setChallenge(null);
+                  setOtp('');
+                  setError(null);
+                }}
+                className="auth-link"
+                style={{
+                  alignSelf: 'flex-start',
+                  fontSize: 12,
+                  fontWeight: 650,
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Back to sign in
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+
+      <div style={{ marginTop: 18, borderTop: '1px solid rgba(11,12,30,0.10)' }}>
+        <div style={{ padding: '14px 18px', fontSize: 11.5, color: 'rgba(11,12,30,0.68)', textAlign: 'center', lineHeight: 1.35 }}>
+          If you are unable to access your account, please contact your System Administrator at{' '}
+          <a href="mailto:support@uspireservices.com" className="auth-link" style={{ fontWeight: 750 }}>
+            support@uspireservices.com
+          </a>
         </div>
       </div>
-    </div>
-  );
+</AuthLayout>
+);
+
 }

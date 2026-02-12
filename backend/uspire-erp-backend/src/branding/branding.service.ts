@@ -40,8 +40,29 @@ export class BrandingService {
     return {
       organisationName: row.organisationName,
       organisationShortName: row.organisationShortName,
-      logoUrl: row.logoUrl ? `/branding/logo?tenantId=${encodeURIComponent(tenant.id)}` : null,
+      logoUrl: row.logoUrl ? `/api/branding/logo?tenantId=${encodeURIComponent(tenant.id)}` : null,
       primaryColor: row.primaryColor,
+    };
+  }
+
+  async getLoginBranding(req: Request) {
+    const tenant = this.ensureTenant(req);
+
+    const row = await this.prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        loginPageTitle: true,
+        loginPageBackgroundUrl: true,
+        logoUrl: true,
+      },
+    });
+
+    if (!row) throw new NotFoundException('Tenant not found');
+
+    return {
+      loginPageTitle: row.loginPageTitle,
+      loginPageBackgroundUrl: row.loginPageBackgroundUrl ?? null,
+      logoUrl: row.logoUrl ? `/api/branding/logo?tenantId=${encodeURIComponent(tenant.id)}` : null,
     };
   }
 

@@ -8,6 +8,7 @@ export function Input(props: {
   type?: string;
   disabled?: boolean;
   placeholder?: string;
+  className?: string;
   name?: string;
   autoComplete?: string;
   autoCorrect?: React.InputHTMLAttributes<HTMLInputElement>['autoCorrect'];
@@ -39,6 +40,7 @@ export function Input(props: {
       onChange={props.onChange}
       disabled={props.disabled}
       placeholder={props.placeholder}
+      className={props.className}
       name={props.name}
       autoComplete={props.autoComplete}
       autoCorrect={props.autoCorrect}
