@@ -36,10 +36,15 @@ function getBackendOrigin(): string {
     }
   }
 
+  if (base.startsWith('/')) {
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return '';
+  }
+
   if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol;
-    const host = window.location.hostname;
-    return `${protocol}//${host}:3000`;
+    return window.location.origin;
   }
 
   return '';
