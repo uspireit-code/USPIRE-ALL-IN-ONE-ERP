@@ -20,6 +20,25 @@ export class BrandingService {
     return tenant as { id: string };
   }
 
+  private async ensureTenantForLoginBranding(
+    req: Request,
+    options?: { allowDefaultTenant?: boolean },
+  ) {
+    const queryTenantId = String((req.query as any)?.tenantId ?? '').trim();
+
+    if (options?.allowDefaultTenant && (!queryTenantId || queryTenantId === 'default')) {
+      const firstTenant = await this.prisma.tenant.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+
+      if (!firstTenant?.id) throw new NotFoundException('Tenant not found');
+      return { id: firstTenant.id };
+    }
+
+    return this.ensureTenant(req);
+  }
+
   async getCurrent(req: Request) {
     const tenant = this.ensureTenant(req);
 
@@ -45,8 +64,8 @@ export class BrandingService {
     };
   }
 
-  async getLoginBranding(req: Request) {
-    const tenant = this.ensureTenant(req);
+  async getLoginBranding(req: Request, options?: { allowDefaultTenant?: boolean }) {
+    const tenant = await this.ensureTenantForLoginBranding(req, options);
 
     const row = await this.prisma.tenant.findUnique({
       where: { id: tenant.id },

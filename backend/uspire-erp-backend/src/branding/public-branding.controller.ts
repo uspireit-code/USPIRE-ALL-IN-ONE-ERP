@@ -8,6 +8,6 @@ export class PublicBrandingController {
 
   @Get('login')
   async getLoginBranding(@Req() req: Request) {
-    return this.branding.getLoginBranding(req);
+    return this.branding.getLoginBranding(req, { allowDefaultTenant: true });
   }
 }
