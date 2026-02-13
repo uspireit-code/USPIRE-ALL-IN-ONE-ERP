@@ -9,8 +9,15 @@ export class LocalStorageProvider implements StorageProvider {
   private readonly rootDir: string;
 
   constructor() {
-    const base = getFirstEnv(['STORAGE_LOCAL_PATH']) ?? './storage';
-    this.rootDir = path.join(process.cwd(), base, 'evidence');
+    const rawBase = String(getFirstEnv(['STORAGE_LOCAL_PATH']) ?? './storage').trim();
+    const normalizedBase = rawBase.replace(/\\/g, '/').replace(/^\.\//, '');
+
+    // In docker we often run with process.cwd() === '/app'. If STORAGE_LOCAL_PATH is set
+    // to 'app/uploads', joining would produce '/app/app/uploads'. Normalize to 'uploads'.
+    const safeBase = normalizedBase.startsWith('app/') ? normalizedBase.slice('app/'.length) : normalizedBase;
+
+    const baseDir = path.isAbsolute(safeBase) ? safeBase : path.join(process.cwd(), safeBase);
+    this.rootDir = path.join(baseDir, 'evidence');
   }
 
   private resolvePath(key: string) {

@@ -95,7 +95,15 @@ export class BrandingService {
 
     if (!row?.logoUrl) throw new NotFoundException('No logo uploaded');
 
-    const buf = await this.storage.get(row.logoUrl);
+    const exists = await this.storage.exists(row.logoUrl);
+    if (!exists) throw new NotFoundException('Logo file not found');
+
+    let buf: Buffer;
+    try {
+      buf = await this.storage.get(row.logoUrl);
+    } catch {
+      throw new NotFoundException('Logo file not found');
+    }
     const fileName = row.logoUrl.split('/').pop() ?? 'logo';
 
     const mimeType = fileName.toLowerCase().endsWith('.svg')
