@@ -12,6 +12,10 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const redirectTimerRef = useRef<number | null>(null);
 
+  const tokenRef = useRef<HTMLInputElement | null>(null);
+  const newPasswordRef = useRef<HTMLInputElement | null>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement | null>(null);
+
   const [token, setToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,8 +23,35 @@ export function ResetPasswordPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [touched, setTouched] = useState<{ token: boolean; newPassword: boolean; confirmPassword: boolean }>({
+    token: false,
+    newPassword: false,
+    confirmPassword: false,
+  });
+  const [fieldErrors, setFieldErrors] = useState<{ token?: string; newPassword?: string; confirmPassword?: string }>({});
+
+  function validate(next: { token: string; newPassword: string; confirmPassword: string }) {
+    const errs: { token?: string; newPassword?: string; confirmPassword?: string } = {};
+    const trimmedToken = String(next.token ?? '').trim();
+    if (!trimmedToken) errs.token = 'This field is required';
+
+    if (!String(next.newPassword ?? '')) errs.newPassword = 'This field is required';
+    else if (!isPasswordValid(next.newPassword)) {
+      errs.newPassword =
+        'Password must be at least 10 characters and include uppercase, lowercase, number, and special character.';
+    }
+
+    if (!String(next.confirmPassword ?? '')) errs.confirmPassword = 'This field is required';
+    else if (next.newPassword && next.confirmPassword && next.newPassword !== next.confirmPassword) {
+      errs.confirmPassword = 'Passwords do not match';
+    }
+
+    return errs;
+  }
 
   useEffect(() => {
     const sp = new URLSearchParams(location.search);
@@ -30,7 +61,10 @@ export function ResetPasswordPage() {
     setNewPassword('');
     setConfirmPassword('');
     setError(null);
+    setValidationError(null);
     setSuccess(null);
+    setTouched({ token: false, newPassword: false, confirmPassword: false });
+    setFieldErrors({});
   }, [location.key, location.search]);
 
   useEffect(() => {
@@ -54,34 +88,21 @@ export function ResetPasswordPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setValidationError(null);
     setSuccess(null);
 
+    setTouched({ token: true, newPassword: true, confirmPassword: true });
+    const errs = validate({ token, newPassword, confirmPassword });
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setValidationError('Please fix the highlighted fields and try again.');
+      if (errs.token) tokenRef.current?.focus();
+      else if (errs.newPassword) newPasswordRef.current?.focus();
+      else confirmPasswordRef.current?.focus();
+      return;
+    }
+
     const trimmedToken = token.trim();
-
-    if (!trimmedToken) {
-      setError('Reset token is required. Please request a new password reset link.');
-      return;
-    }
-
-    if (!newPassword) {
-      setError('New password is required.');
-      return;
-    }
-
-    if (!confirmPassword) {
-      setError('Please confirm your new password.');
-      return;
-    }
-
-    if (!isPasswordValid(newPassword)) {
-      setError('Password must be at least 10 characters and include uppercase, lowercase, number, and special character.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
 
     setLoading(true);
     try {
@@ -125,6 +146,24 @@ export function ResetPasswordPage() {
     </div>
   ) : null;
 
+  const validationBox = validationError ? (
+    <div
+      role="alert"
+      style={{
+        border: '1px solid rgba(183, 28, 28, 0.35)',
+        background: 'rgba(183, 28, 28, 0.06)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        color: tokens.colors.text.primary,
+        fontSize: 12.5,
+        lineHeight: 1.45,
+      }}
+    >
+      <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Please review the form</div>
+      <div>{validationError}</div>
+    </div>
+  ) : null;
+
   const successBox = success ? (
     <div
       role="status"
@@ -150,16 +189,26 @@ export function ResetPasswordPage() {
         Password must be at least 10 characters and include uppercase, lowercase, number, and special character.
       </div>
 
-      <form onSubmit={onSubmit} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <form noValidate onSubmit={onSubmit} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
           <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Reset Token</div>
           <div style={{ marginTop: 6 }}>
             <Input
               className="auth-input"
+              ref={tokenRef}
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => {
+                setToken(e.target.value);
+                setValidationError(null);
+                if (touched.token) {
+                  setFieldErrors((prev) => ({ ...prev, ...validate({ token: e.target.value, newPassword, confirmPassword }) }));
+                }
+              }}
               placeholder="Paste reset token"
               name="resetToken"
+              required
+              touched={touched.token}
+              error={fieldErrors.token}
               autoComplete="one-time-code"
               autoCorrect="off"
               autoCapitalize="none"
@@ -173,11 +222,21 @@ export function ResetPasswordPage() {
             <div style={{ position: 'relative' }}>
               <Input
                 className="auth-input"
+                ref={newPasswordRef}
                 type={showNewPassword ? 'text' : 'password'}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  setValidationError(null);
+                  if (touched.newPassword || touched.confirmPassword || touched.token) {
+                    setFieldErrors(validate({ token, newPassword: e.target.value, confirmPassword }));
+                  }
+                }}
                 placeholder="New Password"
                 name="newPassword"
+                required
+                touched={touched.newPassword}
+                error={fieldErrors.newPassword}
                 autoComplete="new-password"
                 style={{ paddingRight: 40 }}
               />
@@ -212,11 +271,21 @@ export function ResetPasswordPage() {
             <div style={{ position: 'relative' }}>
               <Input
                 className="auth-input"
+                ref={confirmPasswordRef}
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setValidationError(null);
+                  if (touched.confirmPassword || touched.newPassword) {
+                    setFieldErrors(validate({ token, newPassword, confirmPassword: e.target.value }));
+                  }
+                }}
                 placeholder="Confirm Password"
                 name="confirmPassword"
+                required
+                touched={touched.confirmPassword}
+                error={fieldErrors.confirmPassword}
                 autoComplete="new-password"
                 style={{ paddingRight: 40 }}
               />
@@ -244,6 +313,8 @@ export function ResetPasswordPage() {
             </div>
           </div>
         </div>
+
+        {validationBox}
 
         {errorBox}
 

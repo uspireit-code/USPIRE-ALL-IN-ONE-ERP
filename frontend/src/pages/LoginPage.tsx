@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -15,6 +15,11 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const tenantIdRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+  const otpRef = useRef<HTMLInputElement | null>(null);
+
   const [tenantId, setTenantId] = useState('');
   const [advancedLogin, setAdvancedLogin] = useState(false);
   const [tenantRequired, setTenantRequired] = useState(false);
@@ -30,8 +35,18 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [delegationModalOpen, setDelegationModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const [touched, setTouched] = useState<{ tenantId: boolean; email: boolean; password: boolean; otp: boolean }>({
+    tenantId: false,
+    email: false,
+    password: false,
+    otp: false,
+  });
+
+  const [fieldErrors, setFieldErrors] = useState<{ tenantId?: string; email?: string; password?: string; otp?: string }>({});
 
   const FORCE_RESET_FLAG_KEY = 'forceResetRequired';
   const FORCE_RESET_EMAIL_KEY = 'forceResetEmail';
@@ -55,6 +70,29 @@ export function LoginPage() {
   }
 
   const showTenantField = tenantRequired || advancedLogin;
+
+  function validateLogin(next: { tenantId: string; emailOrUsername: string; password: string }) {
+    const errs: { tenantId?: string; email?: string; password?: string } = {};
+    const email = String(next.emailOrUsername ?? '').trim();
+
+    if (showTenantField && !String(next.tenantId ?? '').trim()) {
+      errs.tenantId = 'This field is required';
+    }
+
+    if (!email) errs.email = 'This field is required';
+    else if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = 'Please enter a valid email address';
+
+    if (!String(next.password ?? '')) errs.password = 'Password is required';
+    return errs;
+  }
+
+  function validateOtp(nextOtp: string) {
+    const errs: { otp?: string } = {};
+    const raw = String(nextOtp ?? '').trim();
+    if (!raw) errs.otp = 'This field is required';
+    else if (!/^\d{6}$/.test(raw)) errs.otp = 'Enter a valid verification code';
+    return errs;
+  }
 
   function resolveLoginErrorMessage(err: any) {
     const body = err?.body;
@@ -88,6 +126,26 @@ export function LoginPage() {
     setError(null);
     setErrorCode(null);
     setSuccess(null);
+    setValidationError(null);
+
+    const nextTouched = {
+      tenantId: showTenantField,
+      email: true,
+      password: true,
+      otp: false,
+    };
+    setTouched((prev) => ({ ...prev, ...nextTouched }));
+
+    const errs = validateLogin({ tenantId, emailOrUsername, password });
+    setFieldErrors((prev) => ({ ...prev, ...errs }));
+    if (Object.keys(errs).length > 0) {
+      setValidationError('Please fix the highlighted fields and try again.');
+      if (errs.tenantId) tenantIdRef.current?.focus();
+      else if (errs.email) emailRef.current?.focus();
+      else passwordRef.current?.focus();
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -150,11 +208,19 @@ export function LoginPage() {
 
   async function handleRequestUnlock() {
     const email = emailOrUsername.trim();
-    if (!email) return;
+    setValidationError(null);
+    setTouched((prev) => ({ ...prev, email: true }));
+
+    const nextErrors = validateLogin({ tenantId, emailOrUsername, password: password || 'x' });
+    setFieldErrors((prev) => ({ ...prev, ...nextErrors }));
+    if (nextErrors.email) {
+      emailRef.current?.focus();
+      return;
+    }
 
     setLoading(true);
     setError(null);
-    setSuccess(null);
+    setErrorCode(null);
 
     try {
       const url = `${API_BASE_URL}/auth/request-unlock`;
@@ -183,6 +249,22 @@ export function LoginPage() {
     e.preventDefault();
     if (!challenge?.challengeId) return;
     setError(null);
+    setValidationError(null);
+
+    const nextTouched = { otp: true, tenantId: showTenantField };
+    setTouched((prev) => ({ ...prev, ...nextTouched }));
+
+    const tenantErrs = showTenantField && !tenantId.trim() ? { tenantId: 'This field is required' } : {};
+    const otpErrs = validateOtp(otp);
+    const errs = { ...tenantErrs, ...otpErrs };
+    setFieldErrors((prev) => ({ ...prev, ...errs }));
+    if (Object.keys(errs).length > 0) {
+      setValidationError('Please fix the highlighted fields and try again.');
+      if ((errs as any).tenantId) tenantIdRef.current?.focus();
+      else otpRef.current?.focus();
+      return;
+    }
+
     setLoading(true);
     try {
       await verify2fa({ challengeId: challenge.challengeId, otp });
@@ -223,6 +305,24 @@ export function LoginPage() {
     >
       <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Sign in could not be completed</div>
       <div>{error}</div>
+    </div>
+  ) : null;
+
+  const validationBox = validationError ? (
+    <div
+      role="alert"
+      style={{
+        border: '1px solid rgba(183, 28, 28, 0.35)',
+        background: 'rgba(183, 28, 28, 0.06)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        color: tokens.colors.text.primary,
+        fontSize: 12.5,
+        lineHeight: 1.45,
+      }}
+    >
+      <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Please review the form</div>
+      <div>{validationError}</div>
     </div>
   ) : null;
 
@@ -269,12 +369,28 @@ export function LoginPage() {
         {phase === 'LOGIN' ? (
           <>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Sign In</div>
-            <form onSubmit={onSubmitLogin} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form noValidate onSubmit={onSubmitLogin} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {showTenantField ? (
                 <div>
                   <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Organisation</div>
                   <div style={{ marginTop: 6 }}>
-                    <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" />
+                    <Input
+                      ref={tenantIdRef}
+                      value={tenantId}
+                      onChange={(e) => {
+                        setTenantId(e.target.value);
+                        setValidationError(null);
+                        if (touched.tenantId) {
+                          setFieldErrors((prev) => ({ ...prev, ...validateLogin({ tenantId: e.target.value, emailOrUsername, password }) }));
+                        }
+                      }}
+                      placeholder="Tenant ID"
+                      autoComplete="off"
+                      name="tenantId"
+                      required={showTenantField}
+                      touched={touched.tenantId}
+                      error={fieldErrors.tenantId}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -283,12 +399,21 @@ export function LoginPage() {
                 <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.70)', fontWeight: 700 }}>Email</div>
                 <div style={{ marginTop: 6 }}>
                   <Input
+                    ref={emailRef}
                     value={emailOrUsername}
                     onChange={(e) => {
                       const v = e.target.value;
                       setEmailOrUsername(v);
+                      setValidationError(null);
+                      if (touched.email) {
+                        setFieldErrors((prev) => ({ ...prev, ...validateLogin({ tenantId, emailOrUsername: v, password }) }));
+                      }
                     }}
                     placeholder="Email"
+                    name="email"
+                    required
+                    touched={touched.email}
+                    error={fieldErrors.email}
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="none"
@@ -301,13 +426,22 @@ export function LoginPage() {
                 <div style={{ marginTop: 6 }}>
                   <div style={{ position: 'relative' }}>
                     <Input
+                      ref={passwordRef}
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => {
                         const v = e.target.value;
                         setPassword(v);
+                        setValidationError(null);
+                        if (touched.password) {
+                          setFieldErrors((prev) => ({ ...prev, ...validateLogin({ tenantId, emailOrUsername, password: v }) }));
+                        }
                       }}
                       placeholder="Password"
+                      name="password"
+                      required
+                      touched={touched.password}
+                      error={fieldErrors.password}
                       autoComplete="off"
                       style={{ paddingRight: 40, background: 'rgba(2,4,69,0.02)' }}
                     />
@@ -336,6 +470,7 @@ export function LoginPage() {
                 </div>
               </div>
 
+              {validationBox}
               {errorBox}
 
               {successBox}
@@ -425,12 +560,31 @@ export function LoginPage() {
         ) : (
           <>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Verify</div>
-            <form onSubmit={onSubmit2fa} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form noValidate onSubmit={onSubmit2fa} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {showTenantField ? (
                 <div>
                   <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Organisation</div>
                   <div style={{ marginTop: 6 }}>
-                    <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="Tenant ID" autoComplete="off" />
+                    <Input
+                      ref={tenantIdRef}
+                      value={tenantId}
+                      onChange={(e) => {
+                        setTenantId(e.target.value);
+                        setValidationError(null);
+                        if (touched.tenantId) {
+                          setFieldErrors((prev) => ({
+                            ...prev,
+                            ...validateLogin({ tenantId: e.target.value, emailOrUsername, password }),
+                          }));
+                        }
+                      }}
+                      placeholder="Tenant ID"
+                      autoComplete="off"
+                      name="tenantId"
+                      required={showTenantField}
+                      touched={touched.tenantId}
+                      error={fieldErrors.tenantId}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -438,7 +592,24 @@ export function LoginPage() {
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Verification code</div>
                 <div style={{ marginTop: 6 }}>
-                  <Input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="One-time code" autoComplete="off" />
+                  <Input
+                    ref={otpRef}
+                    value={otp}
+                    onChange={(e) => {
+                      setOtp(e.target.value);
+                      setValidationError(null);
+                      if (touched.otp) {
+                        setFieldErrors((prev) => ({ ...prev, ...validateOtp(e.target.value) }));
+                      }
+                    }}
+                    placeholder="One-time code"
+                    autoComplete="off"
+                    name="otp"
+                    required
+                    touched={touched.otp}
+                    error={fieldErrors.otp}
+                    inputMode="numeric"
+                  />
                 </div>
               </div>
 
@@ -456,6 +627,9 @@ export function LoginPage() {
                   setChallenge(null);
                   setOtp('');
                   setError(null);
+                  setValidationError(null);
+                  setTouched((prev) => ({ ...prev, otp: false }));
+                  setFieldErrors((prev) => ({ ...prev, otp: undefined }));
                 }}
                 className="auth-link"
                 style={{

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '../components/Button';
@@ -15,15 +15,35 @@ export function ForcePasswordResetPage() {
   const { effective } = useBranding();
   const [logoOk, setLogoOk] = useState(true);
 
+  const newPasswordRef = useRef<HTMLInputElement | null>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement | null>(null);
+
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
+
+  const [touched, setTouched] = useState<{ newPassword: boolean; confirmPassword: boolean }>({
+    newPassword: false,
+    confirmPassword: false,
+  });
+  const [fieldErrors, setFieldErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
+
+  function validate(next: { newPassword: string; confirmPassword: string }) {
+    const errs: { newPassword?: string; confirmPassword?: string } = {};
+    if (!String(next.newPassword ?? '')) errs.newPassword = 'This field is required';
+    else if (String(next.newPassword).length < 8) errs.newPassword = 'Password must be at least 8 characters';
+
+    if (!String(next.confirmPassword ?? '')) errs.confirmPassword = 'This field is required';
+    else if (next.newPassword !== next.confirmPassword) errs.confirmPassword = 'Passwords do not match';
+    return errs;
+  }
 
   const envLabel = useMemo(() => {
     const mode = String(import.meta.env.MODE ?? '').toLowerCase();
@@ -74,10 +94,16 @@ export function ForcePasswordResetPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setValidationError(null);
     setSuccess(null);
 
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
+    setTouched({ newPassword: true, confirmPassword: true });
+    const errs = validate({ newPassword, confirmPassword });
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setValidationError('Please fix the highlighted fields and try again.');
+      if (errs.newPassword) newPasswordRef.current?.focus();
+      else confirmPasswordRef.current?.focus();
       return;
     }
 
@@ -128,6 +154,24 @@ export function ForcePasswordResetPage() {
     >
       <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Password update could not be completed</div>
       <div>{error}</div>
+    </div>
+  ) : null;
+
+  const validationErrorBox = validationError ? (
+    <div
+      role="alert"
+      style={{
+        border: '1px solid rgba(183, 28, 28, 0.35)',
+        background: 'rgba(183, 28, 28, 0.06)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        color: tokens.colors.text.primary,
+        fontSize: 12.5,
+        lineHeight: 1.45,
+      }}
+    >
+      <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Please review the form</div>
+      <div>{validationError}</div>
     </div>
   ) : null;
 
@@ -226,16 +270,27 @@ export function ForcePasswordResetPage() {
               Password must be at least 10 characters and include uppercase, lowercase, number, and special character.
             </div>
 
-            <form onSubmit={onSubmit} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <form noValidate onSubmit={onSubmit} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>New Password</div>
                 <div style={{ marginTop: 6 }}>
                   <div style={{ position: 'relative' }}>
                     <Input
+                      ref={newPasswordRef}
                       type={showNewPassword ? 'text' : 'password'}
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        setValidationError(null);
+                        if (touched.newPassword) {
+                          setFieldErrors((prev) => ({ ...prev, ...validate({ newPassword: e.target.value, confirmPassword }) }));
+                        }
+                      }}
                       placeholder="New Password"
+                      name="newPassword"
+                      required
+                      touched={touched.newPassword}
+                      error={fieldErrors.newPassword}
                       autoComplete="off"
                       style={{ paddingRight: 40 }}
                     />
@@ -269,10 +324,21 @@ export function ForcePasswordResetPage() {
                 <div style={{ marginTop: 6 }}>
                   <div style={{ position: 'relative' }}>
                     <Input
+                      ref={confirmPasswordRef}
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        setValidationError(null);
+                        if (touched.confirmPassword || touched.newPassword) {
+                          setFieldErrors(validate({ newPassword, confirmPassword: e.target.value }));
+                        }
+                      }}
                       placeholder="Confirm Password"
+                      name="confirmPassword"
+                      required
+                      touched={touched.confirmPassword}
+                      error={fieldErrors.confirmPassword}
                       autoComplete="off"
                       style={{ paddingRight: 40 }}
                     />
@@ -301,6 +367,7 @@ export function ForcePasswordResetPage() {
                 </div>
               </div>
 
+              {validationErrorBox}
               {errorBox}
               {successBox}
 

@@ -9,12 +9,25 @@ import { AuthLayout } from '../components/AuthLayout';
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
   const redirectTimerRef = useRef<number | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
 
   const [email, setEmail] = useState('');
 
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [touched, setTouched] = useState<{ email: boolean }>({ email: false });
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({});
+
+  function validate(nextEmail: string) {
+    const e = String(nextEmail ?? '').trim();
+    const next: { email?: string } = {};
+    if (!e) next.email = 'This field is required';
+    else if (!/^\S+@\S+\.\S+$/.test(e)) next.email = 'Please enter a valid email address';
+    return next;
+  }
 
   useEffect(() => {
     return () => {
@@ -28,7 +41,19 @@ export function ForgotPasswordPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setValidationError(null);
     setSuccess(null);
+
+    const nextTouched = { email: true };
+    setTouched(nextTouched);
+    const nextErrors = validate(email);
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setValidationError('Please fix the highlighted fields and try again.');
+      emailRef.current?.focus();
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -62,6 +87,24 @@ export function ForgotPasswordPage() {
     </div>
   ) : null;
 
+  const validationBox = validationError ? (
+    <div
+      role="alert"
+      style={{
+        border: '1px solid rgba(183, 28, 28, 0.35)',
+        background: 'rgba(183, 28, 28, 0.06)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        color: tokens.colors.text.primary,
+        fontSize: 12.5,
+        lineHeight: 1.45,
+      }}
+    >
+      <div style={{ fontWeight: 750, marginBottom: 4, color: 'rgba(183, 28, 28, 0.92)' }}>Please review the form</div>
+      <div>{validationError}</div>
+    </div>
+  ) : null;
+
   const successBox = success ? (
     <div
       role="status"
@@ -87,20 +130,33 @@ export function ForgotPasswordPage() {
         Enter the email address associated with your account. We'll send you instructions to reset your password.
       </div>
 
-      <form onSubmit={onSubmit} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <form noValidate onSubmit={onSubmit} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Email</div>
           <div style={{ marginTop: 6 }}>
             <Input
+              ref={emailRef}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setValidationError(null);
+                if (touched.email) {
+                  setFieldErrors(validate(e.target.value));
+                }
+              }}
               placeholder="Email"
+              name="email"
+              required
+              touched={touched.email}
+              error={fieldErrors.email}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="none"
             />
           </div>
         </div>
+
+        {validationBox}
 
         {errorBox}
 
