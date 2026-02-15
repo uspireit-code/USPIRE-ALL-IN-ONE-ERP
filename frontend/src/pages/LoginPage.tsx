@@ -424,49 +424,36 @@ export function LoginPage() {
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Password</div>
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ position: 'relative' }}>
-                    <Input
-                      ref={passwordRef}
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setPassword(v);
-                        setValidationError(null);
-                        if (touched.password) {
-                          setFieldErrors((prev) => ({ ...prev, ...validateLogin({ tenantId, emailOrUsername, password: v }) }));
-                        }
-                      }}
-                      placeholder="Password"
-                      name="password"
-                      required
-                      touched={touched.password}
-                      error={fieldErrors.password}
-                      autoComplete="off"
-                      style={{ paddingRight: 40, background: 'rgba(2,4,69,0.02)' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      style={{
-                        position: 'absolute',
-                        right: 10,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 4,
-                        cursor: 'pointer',
-                        color: tokens.colors.text.muted,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+                  <Input
+                    ref={passwordRef}
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPassword(v);
+                      setValidationError(null);
+                      if (touched.password) {
+                        setFieldErrors((prev) => ({ ...prev, ...validateLogin({ tenantId, emailOrUsername, password: v }) }));
+                      }
+                    }}
+                    placeholder="Password"
+                    name="password"
+                    required
+                    touched={touched.password}
+                    error={fieldErrors.password}
+                    autoComplete="off"
+                    style={{ background: 'rgba(2,4,69,0.02)' }}
+                    rightAdornment={
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className="p-1 text-slate-500 hover:text-slate-700 focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
+                  />
                 </div>
               </div>
 

@@ -274,96 +274,68 @@ export function ForcePasswordResetPage() {
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>New Password</div>
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ position: 'relative' }}>
-                    <Input
-                      ref={newPasswordRef}
-                      type={showNewPassword ? 'text' : 'password'}
-                      value={newPassword}
-                      onChange={(e) => {
-                        setNewPassword(e.target.value);
-                        setValidationError(null);
-                        if (touched.newPassword) {
-                          setFieldErrors((prev) => ({ ...prev, ...validate({ newPassword: e.target.value, confirmPassword }) }));
-                        }
-                      }}
-                      placeholder="New Password"
-                      name="newPassword"
-                      required
-                      touched={touched.newPassword}
-                      error={fieldErrors.newPassword}
-                      autoComplete="off"
-                      style={{ paddingRight: 40 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword((v) => !v)}
-                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
-                      style={{
-                        position: 'absolute',
-                        right: 10,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 4,
-                        cursor: 'pointer',
-                        color: tokens.colors.text.muted,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+                  <Input
+                    ref={newPasswordRef}
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setValidationError(null);
+                      if (touched.newPassword) {
+                        setFieldErrors((prev) => ({ ...prev, ...validate({ newPassword: e.target.value, confirmPassword }) }));
+                      }
+                    }}
+                    placeholder="New Password"
+                    name="newPassword"
+                    required
+                    touched={touched.newPassword}
+                    error={fieldErrors.newPassword}
+                    autoComplete="off"
+                    rightAdornment={
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                        aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                        className="p-1 text-slate-500 hover:text-slate-700 focus:outline-none"
+                      >
+                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
+                  />
                 </div>
               </div>
 
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 700 }}>Confirm Password</div>
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ position: 'relative' }}>
-                    <Input
-                      ref={confirmPasswordRef}
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={confirmPassword}
-                      onChange={(e) => {
-                        setConfirmPassword(e.target.value);
-                        setValidationError(null);
-                        if (touched.confirmPassword || touched.newPassword) {
-                          setFieldErrors(validate({ newPassword, confirmPassword: e.target.value }));
-                        }
-                      }}
-                      placeholder="Confirm Password"
-                      name="confirmPassword"
-                      required
-                      touched={touched.confirmPassword}
-                      error={fieldErrors.confirmPassword}
-                      autoComplete="off"
-                      style={{ paddingRight: 40 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword((v) => !v)}
-                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                      style={{
-                        position: 'absolute',
-                        right: 10,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 4,
-                        cursor: 'pointer',
-                        color: tokens.colors.text.muted,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+                  <Input
+                    ref={confirmPasswordRef}
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setValidationError(null);
+                      if (touched.confirmPassword || touched.newPassword) {
+                        setFieldErrors(validate({ newPassword, confirmPassword: e.target.value }));
+                      }
+                    }}
+                    placeholder="Confirm Password"
+                    name="confirmPassword"
+                    required
+                    touched={touched.confirmPassword}
+                    error={fieldErrors.confirmPassword}
+                    autoComplete="off"
+                    rightAdornment={
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                        className="p-1 text-slate-500 hover:text-slate-700 focus:outline-none"
+                      >
+                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
+                  />
                 </div>
               </div>
 
