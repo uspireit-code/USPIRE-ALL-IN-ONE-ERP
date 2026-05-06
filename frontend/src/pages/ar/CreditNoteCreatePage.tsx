@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageLayout } from '../../components/PageLayout';
 import { PERMISSIONS } from '@/security/permissionCatalog';
 import { formatMoney } from '../../money';
 import { getApiErrorMessage } from '../../services/api';
-import { createCreditNote, getInvoiceById, listEligibleCreditNoteCustomers, listEligibleCreditNoteInvoices, type CustomerInvoice, type EligibleCreditNoteCustomerRow, type EligibleCreditNoteInvoiceRow } from '../../services/ar';
+import { createCreditNote, getInvoiceById, listEligibleAccounts, listEligibleCreditNoteCustomers, listEligibleCreditNoteInvoices, type AccountLookup, type CustomerInvoice, type EligibleCreditNoteCustomerRow, type EligibleCreditNoteInvoiceRow } from '../../services/ar';
+import { listProjects, type ProjectLookup } from '../../services/gl';
+import { LineSegmentFields } from '../../finance/segments/LineSegmentFields';
+import { validateLineSegments } from '../../finance/segments/lineSegmentValidation';
 
 function round2(n: number) {
   return Math.round(Number(n ?? 0) * 100) / 100;
@@ -16,6 +19,9 @@ type DraftLine = {
   quantity: string;
   unitPrice: string;
   revenueAccountId: string;
+  departmentId?: string;
+  projectId?: string;
+  fundId?: string;
 };
 
 export function CreditNoteCreatePage() {
@@ -43,11 +49,46 @@ export function CreditNoteCreatePage() {
 
   const [lines, setLines] = useState<DraftLine[]>([{ description: '', quantity: '1', unitPrice: '0', revenueAccountId: '' }]);
 
+  const [accounts, setAccounts] = useState<AccountLookup[]>([]);
+  const [projects, setProjects] = useState<ProjectLookup[]>([]);
+  const [lookupsLoading, setLookupsLoading] = useState(false);
+  const [lineErrors, setLineErrors] = useState<Record<number, { department?: string; project?: string; fund?: string }>>({});
+
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setLookupsLoading(true);
+    Promise.all([listEligibleAccounts(), listProjects()])
+      .then(([accs, projs]) => {
+        if (!mounted) return;
+        setAccounts(accs);
+        setProjects(projs);
+      })
+      .catch(() => {
+        // best-effort lookups; server-side validation remains authoritative
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLookupsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const accountById = useMemo(() => {
+    return new Map((accounts ?? []).map((a) => [a.id, a] as const));
+  }, [accounts]);
+
+  const projectById = useMemo(() => {
+    return new Map((projects ?? []).map((p) => [p.id, p] as const));
+  }, [projects]);
 
   useEffect(() => {
     let mounted = true;
@@ -133,9 +174,13 @@ export function CreditNoteCreatePage() {
             return String(Number(l.unitPrice ?? 0));
           })(),
           revenueAccountId: String(l.accountId ?? '').trim(),
+          departmentId: l.departmentId ?? undefined,
+          projectId: l.projectId ?? undefined,
+          fundId: l.fundId ?? undefined,
         }));
         if (defaultLines.length > 0) {
           setLines(defaultLines);
+          setLineErrors({});
         }
       })
       .catch((e: any) => {
@@ -198,6 +243,7 @@ export function CreditNoteCreatePage() {
     }
 
     setError(null);
+    setLineErrors({});
 
     if (!customerId) {
       setError('Customer is required');
@@ -226,6 +272,9 @@ export function CreditNoteCreatePage() {
         quantity: Number(l.quantity || 0),
         unitPrice: Number(l.unitPrice || 0),
         revenueAccountId: String(l.revenueAccountId ?? '').trim(),
+        departmentId: String(l.departmentId ?? '').trim() || undefined,
+        projectId: String(l.projectId ?? '').trim() || undefined,
+        fundId: String(l.fundId ?? '').trim() || undefined,
       }))
       .filter((l) => l.description || l.unitPrice > 0 || l.quantity > 0);
 
@@ -234,23 +283,58 @@ export function CreditNoteCreatePage() {
       return;
     }
 
-    for (const l of cleanLines) {
+    const nextFormErrors: string[] = [];
+    const nextLineErrors: Record<number, { department?: string; project?: string; fund?: string }> = {};
+
+    for (let idx = 0; idx < cleanLines.length; idx++) {
+      const l = cleanLines[idx];
       if (!l.description) {
-        setError('Line description is required');
-        return;
+        nextFormErrors.push(`Line ${idx + 1}: Description is required.`);
       }
       if (!(l.quantity >= 0)) {
-        setError('Line quantity must be >= 0');
-        return;
+        nextFormErrors.push(`Line ${idx + 1}: Quantity must be >= 0.`);
       }
       if (!(l.unitPrice >= 0)) {
-        setError('Line unit price must be >= 0');
-        return;
+        nextFormErrors.push(`Line ${idx + 1}: Unit price must be >= 0.`);
       }
       if (!l.revenueAccountId) {
-        setError('Line revenue account is required');
-        return;
+        nextFormErrors.push(`Line ${idx + 1}: Revenue account is required.`);
+        continue;
       }
+
+      const acct = accountById.get(l.revenueAccountId) ?? null;
+      if (!acct) continue;
+
+      const project = l.projectId ? projectById.get(l.projectId) ?? null : null;
+      const seg = validateLineSegments({
+        line: {
+          accountId: l.revenueAccountId,
+          departmentId: l.departmentId ?? null,
+          projectId: l.projectId ?? null,
+          fundId: l.fundId ?? null,
+        },
+        account: acct,
+        project,
+        legalEntityRequired: false,
+      });
+
+      const mapped: { department?: string; project?: string; fund?: string } = {};
+      if (seg.department) mapped.department = seg.department;
+      if (seg.project) mapped.project = seg.project;
+      if (seg.fund) mapped.fund = seg.fund;
+      if (mapped.department || mapped.project || mapped.fund) {
+        nextLineErrors[idx] = mapped;
+      }
+    }
+
+    if (nextFormErrors.length > 0 || Object.keys(nextLineErrors).length > 0) {
+      setLineErrors(nextLineErrors);
+      setError(
+        nextFormErrors.length > 0
+          ? nextFormErrors[0]
+          : 'Please fix the highlighted segment errors before saving.',
+      );
+      return;
     }
 
     setSaving(true);
@@ -370,7 +454,20 @@ export function CreditNoteCreatePage() {
           <div style={{ fontWeight: 700 }}>Lines</div>
           <button
             type="button"
-            onClick={() => setLines((s) => [...s, { description: '', quantity: '1', unitPrice: '0', revenueAccountId: '' }])}
+            onClick={() =>
+              setLines((s) => [
+                ...s,
+                {
+                  description: '',
+                  quantity: '1',
+                  unitPrice: '0',
+                  revenueAccountId: '',
+                  departmentId: undefined,
+                  projectId: undefined,
+                  fundId: undefined,
+                },
+              ])
+            }
           >
             Add Line
           </button>
@@ -390,53 +487,103 @@ export function CreditNoteCreatePage() {
           <tbody>
             {lines.map((l, idx) => {
               const amount = round2(Number(l.quantity || 0) * Number(l.unitPrice || 0));
+              const acct = l.revenueAccountId ? accountById.get(l.revenueAccountId) ?? null : null;
+              const segErr = lineErrors[idx];
               return (
-                <tr key={idx}>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                    <input
-                      value={l.description}
-                      onChange={(e) =>
-                        setLines((s) => s.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))
-                      }
-                      style={{ width: '100%' }}
-                    />
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                    <input
-                      value={l.quantity}
-                      onChange={(e) => setLines((s) => s.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
-                      style={{ width: 80, textAlign: 'right' }}
-                    />
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
-                    <input
-                      value={l.unitPrice}
-                      onChange={(e) => setLines((s) => s.map((x, i) => (i === idx ? { ...x, unitPrice: e.target.value } : x)))}
-                      style={{ width: 110, textAlign: 'right' }}
-                    />
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                    <input
-                      value={l.revenueAccountId}
-                      onChange={(e) =>
-                        setLines((s) => s.map((x, i) => (i === idx ? { ...x, revenueAccountId: e.target.value } : x)))
-                      }
-                      placeholder="Revenue account ID"
-                      style={{ width: '100%' }}
-                      disabled
-                    />
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(amount)}</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                    <button
-                      type="button"
-                      disabled={lines.length <= 1}
-                      onClick={() => setLines((s) => s.filter((_, i) => i !== idx))}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={idx}>
+                  <tr>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      <input
+                        value={l.description}
+                        onChange={(e) =>
+                          setLines((s) => s.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))
+                        }
+                        style={{ width: '100%' }}
+                      />
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      <input
+                        value={l.quantity}
+                        onChange={(e) => setLines((s) => s.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
+                        style={{ width: 80, textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                      <input
+                        value={l.unitPrice}
+                        onChange={(e) => setLines((s) => s.map((x, i) => (i === idx ? { ...x, unitPrice: e.target.value } : x)))}
+                        style={{ width: 110, textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      <input
+                        value={l.revenueAccountId}
+                        onChange={(e) =>
+                          setLines((s) => s.map((x, i) => (i === idx ? { ...x, revenueAccountId: e.target.value } : x)))
+                        }
+                        placeholder="Revenue account ID"
+                        style={{ width: '100%' }}
+                        disabled
+                      />
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right' }}>{formatMoney(amount)}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      <button
+                        type="button"
+                        disabled={lines.length <= 1}
+                        onClick={() => setLines((s) => s.filter((_, i) => i !== idx))}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td colSpan={6} style={{ padding: 8, borderBottom: '1px solid #eee' }}>
+                      <LineSegmentFields
+                        effectiveOn="AR Credit Note"
+                        account={acct}
+                        values={{
+                          departmentId: l.departmentId ?? null,
+                          projectId: l.projectId ?? null,
+                          fundId: l.fundId ?? null,
+                        }}
+                        errors={segErr}
+                        disabled={!acct || lookupsLoading}
+                        onChange={(patch) => {
+                          setLines((s) =>
+                            s.map((x, i) =>
+                              i === idx
+                                ? {
+                                    ...x,
+                                    departmentId:
+                                      patch.departmentId === undefined
+                                        ? x.departmentId
+                                        : patch.departmentId || undefined,
+                                    projectId:
+                                      patch.projectId === undefined
+                                        ? x.projectId
+                                        : patch.projectId || undefined,
+                                    fundId:
+                                      patch.fundId === undefined
+                                        ? x.fundId
+                                        : patch.fundId || undefined,
+                                  }
+                                : x,
+                            ),
+                          );
+
+                          setLineErrors((prev) => {
+                            if (!prev[idx]) return prev;
+                            const next = { ...prev };
+                            delete next[idx];
+                            return next;
+                          });
+                        }}
+                      />
+                    </td>
+                  </tr>
+                </Fragment>
               );
             })}
           </tbody>

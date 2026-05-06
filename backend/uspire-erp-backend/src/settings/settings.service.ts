@@ -223,6 +223,11 @@ export class SettingsService {
 
       PERMISSIONS.AP.PAYMENT_RUN_VIEW,
 
+      PERMISSIONS.COA.VIEW,
+      PERMISSIONS.COA.DRAFT_CREATE,
+      PERMISSIONS.COA.DRAFT_EDIT,
+      PERMISSIONS.COA.DRAFT_SUBMIT,
+
       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     ] as const;
 
@@ -267,6 +272,8 @@ export class SettingsService {
       PERMISSIONS.GL.RECURRING_MANAGE,
       PERMISSIONS.GL.RECURRING_GENERATE,
       PERMISSIONS.COA.VIEW,
+      PERMISSIONS.COA.APPROVE,
+      PERMISSIONS.COA.REJECT,
       PERMISSIONS.BUDGET.FINANCE_VIEW,
 
       PERMISSIONS.AP.SUPPLIER_CREATE,
@@ -347,7 +354,8 @@ export class SettingsService {
       PERMISSIONS.PERIOD.CHECKLIST_VIEW,
       PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
       PERMISSIONS.COA.VIEW,
-      PERMISSIONS.COA.UPDATE,
+      PERMISSIONS.COA.UNLOCK,
+      PERMISSIONS.COA.FREEZE,
       PERMISSIONS.BUDGET.FINANCE_VIEW,
 
       PERMISSIONS.FINANCE.CONFIG_VIEW,
@@ -1261,6 +1269,7 @@ export class SettingsService {
         defaultBankClearingAccountId: true,
         cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
+        supplierAdvanceAccountId: true,
         updatedAt: true,
       },
     });
@@ -1380,6 +1389,7 @@ export class SettingsService {
         defaultBankClearingAccountId: true,
         cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
+        supplierAdvanceAccountId: true,
         faviconUrl: true,
         logoUrl: true,
       },
@@ -1406,6 +1416,7 @@ export class SettingsService {
             : dto.organisationName === null
               ? undefined
               : dto.organisationName.trim(),
+
         organisationShortName:
           dto.organisationShortName === undefined
             ? undefined
@@ -1605,6 +1616,13 @@ export class SettingsService {
             : (dto as any).unappliedReceiptsAccountId === null
               ? null
               : String((dto as any).unappliedReceiptsAccountId).trim() || null,
+
+        supplierAdvanceAccountId:
+          (dto as any).supplierAdvanceAccountId === undefined
+            ? undefined
+            : (dto as any).supplierAdvanceAccountId === null
+              ? null
+              : String((dto as any).supplierAdvanceAccountId).trim() || null,
       },
       select: {
         id: true,
@@ -1639,9 +1657,11 @@ export class SettingsService {
         requiresProjectOnInvoices: true,
         requiresFundOnInvoices: true,
         arControlAccountId: true,
+        apControlAccountId: true,
         defaultBankClearingAccountId: true,
         cashClearingAccountId: true,
         unappliedReceiptsAccountId: true,
+        supplierAdvanceAccountId: true,
         updatedAt: true,
       },
     });
@@ -1681,6 +1701,8 @@ export class SettingsService {
       cashClearingAccountId: (updated as any).cashClearingAccountId ?? null,
       unappliedReceiptsAccountId:
         (updated as any).unappliedReceiptsAccountId ?? null,
+      supplierAdvanceAccountId:
+        (updated as any).supplierAdvanceAccountId ?? null,
       faviconUrl: updated.faviconUrl,
       logoUrl: updated.logoUrl,
     };

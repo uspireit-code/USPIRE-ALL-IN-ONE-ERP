@@ -26,8 +26,8 @@ export function Alert(props: {
     warning: {
       bg: tokens.colors.status.warningBg,
       border: tokens.colors.status.warningBorder,
-      accent: 'rgba(237,186,53,0.70)',
-      iconColor: 'rgba(237,186,53,0.85)',
+      accent: 'rgba(231,158,19,0.70)',
+      iconColor: 'rgba(231,158,19,0.85)',
     },
     error: {
       bg: tokens.colors.status.errorBg,

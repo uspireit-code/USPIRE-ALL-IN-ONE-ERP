@@ -178,7 +178,7 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
             defaultUserRoleCode: null,
             logoUrl: null,
             faviconUrl: null,
-            primaryColor: '#020445',
+            primaryColor: '#0b0b47',
             secondaryColor: null,
             accentColor: null,
             secondaryAccentColor: null,
@@ -230,7 +230,7 @@ export function BrandingProvider(props: { children: React.ReactNode }) {
           defaultUserRoleCode: null,
           logoUrl: publicBrand.logoUrl,
           faviconUrl: null,
-          primaryColor: publicBrand.primaryColor ?? '#020445',
+          primaryColor: publicBrand.primaryColor ?? '#0b0b47',
           secondaryColor: null,
           accentColor: null,
           secondaryAccentColor: null,
@@ -328,8 +328,8 @@ export function useBranding() {
 export function useBrandColors() {
   const { effective } = useBranding();
 
-  const navy = effective?.primaryColor || '#020445';
-  const gold = effective?.accentColor || '#EDBA35';
+  const navy = effective?.primaryColor || '#0b0b47';
+  const gold = effective?.accentColor || '#e79e13';
   const white = '#FCFCFC';
 
   return {

@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
 import { Card } from '../../components/Card';
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
+import { tokens } from '../../designTokens';
 
 export function SettingsMasterDataPage() {
   const { hasPermission } = useAuth();
@@ -14,7 +15,6 @@ export function SettingsMasterDataPage() {
   const canFunds = hasPermission(PERMISSIONS.MASTER_DATA.FUND.VIEW);
   const canInvoiceCategories = hasPermission(PERMISSIONS.AR.INVOICE_CATEGORY_VIEW);
 
-  const NAVY = '#020445';
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
 
@@ -89,13 +89,8 @@ export function SettingsMasterDataPage() {
       />
 
       <div
-        style={{
-          marginTop: 16,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 16,
-          alignItems: 'stretch',
-        }}
+        className="cardsGrid"
+        style={{ marginTop: 16 }}
       >
         {cards
           .filter((c) => c.show)
@@ -105,8 +100,8 @@ export function SettingsMasterDataPage() {
                 interactive
                 baseShadow={cardBaseShadow}
                 hoverShadow={cardHoverShadow}
-                baseBorderColor="rgba(2,4,69,0.08)"
-                hoverBorderColor="rgba(237,186,53,0.45)"
+                baseBorderColor={tokens.colors.border.subtle}
+                hoverBorderColor="rgba(231,158,19,0.45)"
                 style={{
                   background: '#FFFFFF',
                   borderRadius: 16,
@@ -123,8 +118,8 @@ export function SettingsMasterDataPage() {
                       width: 40,
                       height: 40,
                       borderRadius: 12,
-                      background: 'rgba(2,4,69,0.06)',
-                      color: NAVY,
+                      background: 'rgba(11,11,71,0.06)',
+                      color: tokens.colors.navy,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -134,7 +129,7 @@ export function SettingsMasterDataPage() {
                     {c.icon}
                   </div>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 750, color: NAVY, lineHeight: '22px' }}>{c.title}</div>
+                    <div style={{ fontSize: 16, fontWeight: 750, color: tokens.colors.navy, lineHeight: '22px' }}>{c.title}</div>
                     <div style={{ marginTop: 6, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>{c.description}</div>
                   </div>
                 </div>

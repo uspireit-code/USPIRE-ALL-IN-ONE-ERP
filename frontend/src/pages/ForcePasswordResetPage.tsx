@@ -217,7 +217,7 @@ export function ForcePasswordResetPage() {
       >
         <div
           style={{
-            background: '#020445',
+            background: tokens.colors.navy,
             color: tokens.colors.white,
             padding: isCompact ? '22px 22px' : '28px 28px',
             textAlign: 'center',

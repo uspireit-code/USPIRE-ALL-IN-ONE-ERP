@@ -27,7 +27,7 @@ export function AuthLayout(props: { children: React.ReactNode }) {
         alignItems: 'center',
         justifyContent: 'center',
         padding: isCompact ? 18 : 26,
-        backgroundColor: '#0a0354',
+        backgroundColor: tokens.colors.navy,
         backgroundImage: bgUrl ? `url(${bgUrl})` : undefined,
         backgroundRepeat: bgUrl ? 'no-repeat' : undefined,
         backgroundSize: bgUrl ? 'cover' : undefined,
@@ -65,7 +65,7 @@ export function AuthLayout(props: { children: React.ReactNode }) {
       >
         <div
           style={{
-            background: '#020445',
+            background: tokens.colors.navy,
             color: tokens.colors.white,
             padding: isCompact ? '20px 22px' : '22px 26px',
             textAlign: 'center',

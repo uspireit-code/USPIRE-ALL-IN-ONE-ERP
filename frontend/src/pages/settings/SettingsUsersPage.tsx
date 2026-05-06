@@ -421,8 +421,8 @@ export function SettingsUsersPage() {
                             style={{
                               padding: '3px 10px',
                               borderRadius: 999,
-                              background: 'rgba(2,4,69,0.06)',
-                              border: '1px solid rgba(2,4,69,0.10)',
+                              background: 'rgba(11,11,71,0.06)',
+                              border: '1px solid rgba(11,11,71,0.10)',
                               fontSize: 12,
                               fontWeight: 750,
                               color: tokens.colors.navy,
@@ -477,7 +477,7 @@ export function SettingsUsersPage() {
                             setError('');
                             setSuccess('');
                           }}
-                          style={{ border: '1px solid rgba(245,158,11,0.65)', color: 'rgba(146,64,14,0.95)' }}
+                          style={{ border: '1px solid rgba(231,158,19,0.65)', color: 'rgba(146,64,14,0.95)' }}
                         >
                           Unlock
                         </Button>
@@ -595,7 +595,7 @@ export function SettingsUsersPage() {
                             padding: 12,
                             borderRadius: 12,
                             border: '1px solid rgba(11,12,30,0.10)',
-                            background: checked ? 'rgba(237,186,53,0.12)' : '#fff',
+                            background: checked ? 'rgba(231,158,19,0.12)' : '#fff',
                             cursor: 'pointer',
                           }}
                         >
@@ -612,7 +612,7 @@ export function SettingsUsersPage() {
                             style={{ marginTop: 2 }}
                           />
                           <div>
-                            <div style={{ fontWeight: 800, color: '#0B0C1E' }}>{info.label}</div>
+                            <div style={{ fontWeight: 800, color: tokens.colors.navy }}>{info.label}</div>
                             <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(11,12,30,0.62)', lineHeight: '16px' }}>{info.description}</div>
                           </div>
                         </label>
@@ -652,7 +652,7 @@ export function SettingsUsersPage() {
                     const info = getRoleDisplayInfo(r.name);
                     const checked = assignRoleIds.includes(r.id);
                     const isConflicting = conflictingRoleIds.has(r.id);
-                    const bg = checked ? 'rgba(237,186,53,0.12)' : '#fff';
+                    const bg = checked ? 'rgba(231,158,19,0.12)' : '#fff';
                     const border = isConflicting ? 'rgba(239,68,68,0.45)' : 'rgba(11,12,30,0.10)';
                     return (
                       <label
@@ -670,7 +670,7 @@ export function SettingsUsersPage() {
                         }}
                         onMouseEnter={(e) => {
                           const el = e.currentTarget;
-                          if (!checked) el.style.background = 'rgba(2,4,69,0.03)';
+                          if (!checked) el.style.background = 'rgba(11,11,71,0.03)';
                         }}
                         onMouseLeave={(e) => {
                           const el = e.currentTarget;
@@ -690,7 +690,7 @@ export function SettingsUsersPage() {
                           style={{ marginTop: 2 }}
                         />
                         <div>
-                          <div style={{ fontWeight: 800, color: '#0B0C1E' }}>{info.label}</div>
+                          <div style={{ fontWeight: 800, color: tokens.colors.navy }}>{info.label}</div>
                           <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(11,12,30,0.62)', lineHeight: '16px' }}>{info.description}</div>
                         </div>
                       </label>

@@ -97,6 +97,9 @@ export type AccountLookup = {
   code: string;
   name: string;
   type: string;
+  requiresDepartment?: boolean;
+  requiresProject?: boolean;
+  requiresFund?: boolean;
 };
 
 export type SupplierInvoiceLine = {

@@ -8,6 +8,7 @@ import { AuthBootstrapGate } from './AuthBootstrapGate';
 import { globalSearch, type GlobalSearchResponse, type GlobalSearchResultItem } from '../services/search';
 import { getApiErrorMessage, pingSession } from '../services/api';
 import { changeMyPassword, updateMyProfile, uploadMyAvatar } from '../services/users';
+import { tokens } from '../designTokens';
 
 export function Layout() {
   const location = useLocation();
@@ -947,6 +948,12 @@ export function Layout() {
   const headerEnvRaw = String((import.meta as any)?.env?.VITE_APP_ENV ?? '').trim();
   const headerEnv = headerEnvRaw ? headerEnvRaw.toUpperCase() : 'DEV';
 
+  const COLORS = {
+    navy: 'var(--uspire-navy)',
+    gold: 'var(--uspire-gold)',
+    white: '#FCFCFC',
+  };
+
   function getBreadcrumbForPath(p: string) {
     const segs = (p ?? '').split('?')[0].split('/').filter(Boolean);
     if (segs.length === 0) return { module: 'Dashboard', sub: '' };
@@ -1008,7 +1015,7 @@ export function Layout() {
       >
         <div
           style={{
-            background: '#020445',
+            background: COLORS.navy,
             color: '#FCFCFC',
             padding: '16px 18px',
             fontWeight: 900,
@@ -1056,7 +1063,7 @@ export function Layout() {
                 padding: '0 14px',
                 borderRadius: 12,
                 border: 0,
-                background: '#020445',
+                background: COLORS.navy,
                 color: '#FCFCFC',
                 fontWeight: 900,
                 cursor: 'pointer',
@@ -1165,12 +1172,6 @@ export function Layout() {
     </svg>
   );
 
-  const COLORS = {
-    navy: '#020445',
-    gold: '#EDBA35',
-    white: '#FCFCFC',
-  };
-
   const TOPBAR_HEIGHT = 60;
 
   const SIDEBAR_WIDTH = 280;
@@ -1215,6 +1216,13 @@ export function Layout() {
   const showGlRegister = showGlView;
   const showGlDrafts = showGlCreate;
   const showCoa = hasPermission(PERMISSIONS.COA.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showCoaSubmissions =
+    hasPermission(PERMISSIONS.COA.DRAFT_CREATE)
+    || hasPermission(PERMISSIONS.COA.DRAFT_EDIT)
+    || hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT)
+    || hasFinanceViewAll
+    || hasSystemViewAll;
+  const showCoaApprovals = hasPermission(PERMISSIONS.COA.APPROVE) || hasFinanceViewAll || hasSystemViewAll;
   const showPeriods =
     hasFinanceViewAll ||
     hasSystemViewAll ||
@@ -1231,6 +1239,17 @@ export function Layout() {
 
   const showFinanceBudgets = showBudgetSetup || showBudgetVsActual;
   const showForecasts = hasPermission(PERMISSIONS.FORECAST.VIEW);
+
+  useEffect(() => {
+    const isDev = Boolean((import.meta as any)?.env?.DEV);
+    if (!isDev) return;
+    if (!showCoaSubmissions) {
+      console.warn(`Sidebar item hidden due to missing permission: ${PERMISSIONS.COA.DRAFT_CREATE} / ${PERMISSIONS.COA.DRAFT_EDIT} / ${PERMISSIONS.COA.DRAFT_SUBMIT} (/finance/coa/submissions)`);
+    }
+    if (!showCoaApprovals) {
+      console.warn(`Sidebar item hidden due to missing permission: ${PERMISSIONS.COA.APPROVE} (/finance/coa/approvals)`);
+    }
+  }, [showCoaSubmissions, showCoaApprovals]);
 
   const showArCustomers =
     hasPermission(PERMISSIONS.CUSTOMERS.VIEW) || hasFinanceViewAll || hasSystemViewAll;
@@ -1463,7 +1482,7 @@ export function Layout() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: COLORS.white }}>
+    <div className="appShell" style={{ background: COLORS.white }}>
       {sessionWarningModal}
       <div
         style={{
@@ -1515,6 +1534,16 @@ export function Layout() {
                 {openL1 === 'finance' ? (
                   <Indent level={2}>
                     {showCoa ? <SidebarLink to="/finance/coa" label="Chart of Accounts" icon={<BookIcon />} level={2} /> : null}
+
+                    {showCoa ? <SidebarLink to="/finance/coa/health" label="COA Health" icon={<BarChartIcon />} level={2} /> : null}
+
+                    {showCoaSubmissions ? (
+                      <SidebarLink to="/finance/coa/submissions" label="My COA Submissions" icon={<FileTextIcon />} level={2} />
+                    ) : null}
+
+                    {showCoaApprovals ? (
+                      <SidebarLink to="/finance/coa/approvals" label="COA Approvals" icon={<ClipboardIcon />} level={2} />
+                    ) : null}
 
                     <SidebarToggle
                       label="General Ledger"
@@ -1816,7 +1845,7 @@ export function Layout() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '0 18px',
-            boxShadow: '0 8px 18px rgba(2,4,69,0.18)',
+            boxShadow: '0 8px 18px rgba(11,11,71,0.18)',
             boxSizing: 'border-box',
           }}
         >
@@ -1832,8 +1861,8 @@ export function Layout() {
                 gap: 10,
                 padding: '6px 10px',
                 borderRadius: 999,
-                background: 'rgba(237,186,53,0.10)',
-                border: '1px solid rgba(237,186,53,0.28)',
+                background: 'rgba(231,158,19,0.10)',
+                border: '1px solid rgba(231,158,19,0.28)',
                 color: 'rgba(255,255,255,0.95)',
                 fontSize: 12,
                 fontWeight: 800,
@@ -1847,8 +1876,8 @@ export function Layout() {
                   height: 20,
                   padding: '0 8px',
                   borderRadius: 999,
-                  background: 'rgba(237,186,53,0.22)',
-                  border: '1px solid rgba(237,186,53,0.34)',
+                  background: 'rgba(231,158,19,0.22)',
+                  border: '1px solid rgba(231,158,19,0.34)',
                   color: 'rgba(255,255,255,0.98)',
                   alignItems: 'center',
                   fontSize: 11,
@@ -1904,8 +1933,8 @@ export function Layout() {
                 }
               }}
               onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(237,186,53,0.60)';
-                e.currentTarget.style.boxShadow = '0 0 0 4px rgba(237,186,53,0.18)';
+                e.currentTarget.style.borderColor = tokens.focusRing.borderColor;
+                e.currentTarget.style.boxShadow = tokens.focusRing.ring;
                 if (searchResults.length > 0 || searchError) setSearchOpen(true);
               }}
               onBlur={(e) => {
@@ -1934,7 +1963,7 @@ export function Layout() {
                   top: 44,
                   left: 18,
                   right: 18,
-                  background: '#0B0C1E',
+                  background: COLORS.navy,
                   border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 12,
                   boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
@@ -2099,17 +2128,15 @@ export function Layout() {
       <ProfileDrawer />
 
       <div
+        className="mainContent"
         style={{
-          flex: 1,
           marginLeft: SIDEBAR_WIDTH,
-          height: '100vh',
-          overflowY: 'auto',
           padding: 24,
           paddingTop: 24 + (showTopBar ? TOPBAR_HEIGHT : 0),
           boxSizing: 'border-box',
         }}
       >
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div className="pageContent" style={{ maxWidth: 1200, margin: '0 auto' }}>
           <AuthBootstrapGate>
             <Outlet />
           </AuthBootstrapGate>

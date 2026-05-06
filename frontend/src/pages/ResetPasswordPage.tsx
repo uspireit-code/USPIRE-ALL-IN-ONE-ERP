@@ -184,7 +184,7 @@ export function ResetPasswordPage() {
 
   return (
     <AuthLayout>
-      <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Reset Password</div>
+      <div style={{ fontSize: 20, fontWeight: 900, color: tokens.colors.navy }}>Reset Password</div>
       <div style={{ marginTop: 10, fontSize: 12.5, color: tokens.colors.text.secondary, lineHeight: 1.55 }}>
         Password must be at least 10 characters and include uppercase, lowercase, number, and special character.
       </div>

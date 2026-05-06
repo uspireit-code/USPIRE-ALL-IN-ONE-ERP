@@ -4,6 +4,7 @@ import { Card } from '../../components/Card';
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader';
 import { getApiErrorMessage } from '../../services/api';
 import { useBranding } from '../../branding/BrandingContext';
+import { tokens } from '../../designTokens';
 import {
   fetchOrganisationLogoBlob,
   getOrganisationSettings,
@@ -39,8 +40,6 @@ export function SettingsOrganisationPage() {
   const originalOrganisationNameRef = useRef('');
   const originalOrganisationShortNameRef = useRef('');
   const originalLoginPageTitleRef = useRef('');
-
-  const NAVY = '#020445';
 
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
@@ -269,7 +268,7 @@ export function SettingsOrganisationPage() {
           interactive
           style={{ background: '#FFFFFF', borderRadius: 16, padding: 24, border: '1px solid rgba(11,12,30,0.06)' }}
         >
-          <div style={{ fontSize: 14, fontWeight: 750, color: NAVY }}>Organisation Information</div>
+          <div style={{ fontSize: 14, fontWeight: 750, color: tokens.colors.navy }}>Organisation Information</div>
           <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
             <div>
               <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.62)', fontWeight: 650 }}>Organisation Name</div>
@@ -327,8 +326,8 @@ export function SettingsOrganisationPage() {
                 height: 38,
                 padding: '0 14px',
                 borderRadius: 10,
-                border: '1px solid rgba(2,4,69,0.16)',
-                background: NAVY,
+                border: '1px solid rgba(11,11,71,0.16)',
+                background: tokens.colors.navy,
                 color: '#FFFFFF',
                 fontWeight: 750,
                 cursor: loading || saving || uploading || !settings || !isDirty || !organisationName.trim() ? 'not-allowed' : 'pointer',
@@ -347,7 +346,7 @@ export function SettingsOrganisationPage() {
           interactive
           style={{ background: '#FFFFFF', borderRadius: 16, padding: 24, border: '1px solid rgba(11,12,30,0.06)' }}
         >
-          <div style={{ fontSize: 14, fontWeight: 750, color: NAVY }}>Branding</div>
+          <div style={{ fontSize: 14, fontWeight: 750, color: tokens.colors.navy }}>Branding</div>
 
           <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
             <div
@@ -356,7 +355,7 @@ export function SettingsOrganisationPage() {
                 height: 140,
                 borderRadius: 14,
                 border: '1px dashed rgba(11,12,30,0.20)',
-                background: 'rgba(2,4,69,0.02)',
+                background: 'rgba(11,11,71,0.02)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -388,9 +387,9 @@ export function SettingsOrganisationPage() {
                   height: 38,
                   padding: '0 14px',
                   borderRadius: 10,
-                  border: '1px solid rgba(2,4,69,0.16)',
+                  border: '1px solid rgba(11,11,71,0.16)',
                   background: '#FFFFFF',
-                  color: NAVY,
+                  color: tokens.colors.navy,
                   fontWeight: 750,
                   cursor: loading || uploading || saving || !settings ? 'not-allowed' : 'pointer',
                   opacity: loading || uploading || saving || !settings ? 0.55 : 1,
@@ -403,13 +402,21 @@ export function SettingsOrganisationPage() {
             <div style={{ height: 1, background: 'rgba(11,12,30,0.06)' }} />
 
             <div>
-              <div style={{ fontSize: 14, fontWeight: 750, color: NAVY }}>Color Settings (read-only)</div>
+              <div style={{ fontSize: 14, fontWeight: 750, color: tokens.colors.navy }}>Color Settings (read-only)</div>
               <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, color: 'rgba(11,12,30,0.62)', fontWeight: 650 }}>Primary</div>
                   <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 6, background: settings?.primaryColor ?? NAVY, border: '1px solid rgba(11,12,30,0.10)' }} />
-                    <div style={{ fontSize: 13, color: 'rgba(11,12,30,0.75)', fontWeight: 650 }}>{settings?.primaryColor ?? '#020445'}</div>
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 6,
+                        background: settings?.primaryColor ?? tokens.brandHex.navy,
+                        border: '1px solid rgba(11,12,30,0.10)',
+                      }}
+                    />
+                    <div style={{ fontSize: 13, color: 'rgba(11,12,30,0.75)', fontWeight: 650 }}>{settings?.primaryColor ?? tokens.brandHex.navy}</div>
                   </div>
                 </div>
                 <div>
@@ -440,7 +447,7 @@ export function SettingsOrganisationPage() {
           interactive
           style={{ background: '#FFFFFF', borderRadius: 16, padding: 24, border: '1px solid rgba(11,12,30,0.06)' }}
         >
-          <div style={{ fontSize: 14, fontWeight: 750, color: NAVY }}>Login Page Branding</div>
+          <div style={{ fontSize: 14, fontWeight: 750, color: tokens.colors.navy }}>Login Page Branding</div>
 
           <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
             <div>
@@ -475,7 +482,7 @@ export function SettingsOrganisationPage() {
                   height: 140,
                   borderRadius: 14,
                   border: '1px dashed rgba(11,12,30,0.20)',
-                  background: 'rgba(2,4,69,0.02)',
+                  background: 'rgba(11,11,71,0.02)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -508,9 +515,9 @@ export function SettingsOrganisationPage() {
                     height: 38,
                     padding: '0 14px',
                     borderRadius: 10,
-                    border: '1px solid rgba(2,4,69,0.16)',
+                    border: '1px solid rgba(11,11,71,0.16)',
                     background: '#FFFFFF',
-                    color: NAVY,
+                    color: tokens.colors.navy,
                     fontWeight: 750,
                     cursor: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings ? 'not-allowed' : 'pointer',
                     opacity: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings ? 0.55 : 1,
@@ -526,8 +533,8 @@ export function SettingsOrganisationPage() {
                     height: 38,
                     padding: '0 14px',
                     borderRadius: 10,
-                    border: '1px solid rgba(2,4,69,0.16)',
-                    background: NAVY,
+                    border: '1px solid rgba(11,11,71,0.16)',
+                    background: tokens.colors.navy,
                     color: '#FFFFFF',
                     fontWeight: 750,
                     cursor: loading || uploading || saving || uploadingLoginBackground || savingLoginBranding || !settings || !isLoginBrandingDirty ? 'not-allowed' : 'pointer',

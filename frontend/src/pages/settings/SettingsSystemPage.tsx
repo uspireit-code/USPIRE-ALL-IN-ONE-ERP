@@ -69,8 +69,8 @@ export function SettingsSystemPage() {
   const [defaultUserRoleCode, setDefaultUserRoleCode] = useState('');
   const [demoModeEnabled, setDemoModeEnabled] = useState(false);
 
-  const [primaryColor, setPrimaryColor] = useState('#020445');
-  const [accentColor, setAccentColor] = useState('#EDBA35');
+  const [primaryColor, setPrimaryColor] = useState<string>(tokens.brandHex.navy);
+  const [accentColor, setAccentColor] = useState<string>(tokens.brandHex.gold);
   const [secondaryColor, setSecondaryColor] = useState('');
   const [secondaryAccentColor, setSecondaryAccentColor] = useState('');
 
@@ -143,8 +143,8 @@ export function SettingsSystemPage() {
       setDefaultUserRoleCode(s.defaultUserRoleCode ?? '');
       setDemoModeEnabled(Boolean(s.demoModeEnabled));
 
-      setPrimaryColor(s.primaryColor || '#020445');
-      setAccentColor(s.accentColor || '#EDBA35');
+      setPrimaryColor(s.primaryColor || tokens.brandHex.navy);
+      setAccentColor(s.accentColor || tokens.brandHex.gold);
       setSecondaryColor(s.secondaryColor ?? '');
       setSecondaryAccentColor(s.secondaryAccentColor ?? '');
 
@@ -333,7 +333,7 @@ export function SettingsSystemPage() {
       defaultLanguage.trim() !== (system.defaultLanguage ?? '') ||
       defaultUserRoleCode.trim() !== (system.defaultUserRoleCode ?? '') ||
       Boolean(demoModeEnabled) !== Boolean(system.demoModeEnabled) ||
-      primaryColor.trim() !== (system.primaryColor ?? '#020445') ||
+      primaryColor.trim() !== (system.primaryColor ?? tokens.brandHex.navy) ||
       (system.accentColor ?? '') !== accentColor.trim() ||
       (system.secondaryColor ?? '') !== secondaryColor.trim() ||
       (system.secondaryAccentColor ?? '') !== secondaryAccentColor.trim() ||
@@ -417,8 +417,8 @@ export function SettingsSystemPage() {
       (system.defaultLanguage ?? '') !== defaultLanguage ||
       (system.defaultUserRoleCode ?? '') !== defaultUserRoleCode ||
       Boolean(system.demoModeEnabled ?? false) !== demoModeEnabled ||
-      (system.primaryColor || '#020445') !== primaryColor ||
-      (system.accentColor || '#EDBA35') !== accentColor ||
+      (system.primaryColor || tokens.brandHex.navy) !== primaryColor ||
+      (system.accentColor || tokens.brandHex.gold) !== accentColor ||
       (system.secondaryColor ?? '') !== secondaryColor ||
       (system.secondaryAccentColor ?? '') !== secondaryAccentColor ||
       Boolean(pendingFaviconFile);

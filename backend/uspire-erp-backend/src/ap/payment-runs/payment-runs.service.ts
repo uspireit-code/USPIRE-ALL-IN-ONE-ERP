@@ -7,8 +7,11 @@ import {
 import type { Request } from 'express';
 import { Prisma, AuditEntityType, AuditEventType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { GlService } from '../../gl/gl.service';
 import { PERMISSIONS } from '../../rbac/permission-catalog';
+import { requirePermission } from '../../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../../audit/audit-writer';
+import { validateAccountPostingEligibility } from '../../finance/common/account-posting-eligibility';
 import { assertCanPost } from '../../periods/period-guard';
 import type {
   ExecutePaymentRunDto,
@@ -19,7 +22,10 @@ import type {
 export class PaymentRunsService {
   private readonly PAYMENT_RUN_NUMBER_SEQUENCE_NAME = 'AP_PAYMENT_RUN_NUMBER';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gl: GlService,
+  ) {}
 
   private round2(n: number) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -330,15 +336,28 @@ export class PaymentRunsService {
           where: {
             tenantId: tenant.id,
             id: tenantRow.apControlAccountId,
+            status: 'ACTIVE' as any,
             isActive: true,
             type: 'LIABILITY',
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            isActive: true,
+            isPostingAllowed: true,
+            isPosting: true,
+            isControlAccount: true,
+          },
         });
 
         if (!apAccount) {
           throw new BadRequestException('AP control account not found or invalid');
         }
+
+        validateAccountPostingEligibility(apAccount as any, {
+          allowControlAccount: true,
+          errorMode: 'BAD_REQUEST',
+        });
 
         const bankAccount = await tx.bankAccount.findFirst({
           where: { tenantId: tenant.id, id: dto.bankAccountId, status: 'ACTIVE' },
@@ -353,15 +372,28 @@ export class PaymentRunsService {
           where: {
             tenantId: tenant.id,
             id: bankAccount.glAccountId,
+            status: 'ACTIVE' as any,
             isActive: true,
             type: 'ASSET',
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            isActive: true,
+            isPostingAllowed: true,
+            isPosting: true,
+            isControlAccount: true,
+          },
         });
 
         if (!bankGl) {
           throw new BadRequestException('Bank GL account not found or invalid');
         }
+
+        validateAccountPostingEligibility(bankGl as any, {
+          allowControlAccount: true,
+          errorMode: 'BAD_REQUEST',
+        });
 
         const totalAmount = this.round2(
           allLines.reduce((s, l) => s + Number(l.proposedPayAmount), 0),
@@ -446,6 +478,9 @@ export class PaymentRunsService {
             reference: `PAYMENT_RUN:${run.id}`,
             description: `AP payment run execution: ${run.runNumber}`,
             createdById: user.id,
+            status: 'REVIEWED',
+            reviewedById: user.id,
+            reviewedAt: now,
             lines: {
               create: [
                 { accountId: apAccount.id, debit: totalAmount, credit: 0 },
@@ -456,14 +491,10 @@ export class PaymentRunsService {
           include: { lines: true },
         });
 
-        const postedJournal = await tx.journalEntry.update({
-          where: { id: journal.id },
-          data: {
-            status: 'POSTED',
-            postedById: user.id,
-            postedAt: now,
-          },
-          include: { lines: true },
+        const postedJournal = await this.gl.postJournalInTx({
+          tx,
+          req,
+          id: journal.id,
         });
 
         await writeAuditEventWithPrisma(

@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RbacModule } from '../rbac/rbac.module';
+import { GlModule } from '../gl/gl.module';
 import { ArController } from './ar.controller';
 import { ArService } from './ar.service';
 import { ArAgingController } from './aging/ar-aging.controller';
@@ -15,7 +16,7 @@ import { ArStatementsController } from './statements/ar-statements.controller';
 import { ArStatementsService } from './statements/ar-statements.service';
 
 @Module({
-  imports: [ConfigModule, JwtModule.register({}), PrismaModule, RbacModule],
+  imports: [ConfigModule, JwtModule.register({}), PrismaModule, RbacModule, GlModule],
   controllers: [ArController, ArAgingController, ArStatementsController, ArRemindersController],
   providers: [ArService, ArAgingService, ArStatementsService, ArRemindersService, JwtAuthGuard, PermissionsGuard],
 })

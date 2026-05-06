@@ -1,0 +1,36 @@
+[
+  {"accountCode":"10000","accountName":"Assets","accountType":"ASSET","parentCode":"","normalBalance":"DEBIT","ifrsNodeName":"","description":"Non-posting category"},
+  {"accountCode":"20000","accountName":"Liabilities","accountType":"LIABILITY","parentCode":"","normalBalance":"CREDIT","ifrsNodeName":"","description":"Non-posting category"},
+  {"accountCode":"30000","accountName":"Equity","accountType":"EQUITY","parentCode":"","normalBalance":"CREDIT","ifrsNodeName":"","description":"Non-posting category"},
+  {"accountCode":"40000","accountName":"Revenue","accountType":"INCOME","parentCode":"","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":"Non-posting category"},
+  {"accountCode":"50000","accountName":"Cost of Sales","accountType":"EXPENSE","parentCode":"","normalBalance":"DEBIT","ifrsNodeName":"Cost of Sales","description":"Non-posting category"},
+  {"accountCode":"60000","accountName":"Operating Expenses","accountType":"EXPENSE","parentCode":"","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":"Non-posting category"},
+
+  {"accountCode":"11000","accountName":"Current Assets","accountType":"ASSET","parentCode":"10000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11100","accountName":"Cash and Bank","accountType":"ASSET","parentCode":"11000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11200","accountName":"Accounts Receivable","accountType":"ASSET","parentCode":"11000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11300","accountName":"Inventory","accountType":"ASSET","parentCode":"11000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11310","accountName":"Raw Materials Inventory","accountType":"ASSET","parentCode":"11300","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11320","accountName":"Work In Process Inventory","accountType":"ASSET","parentCode":"11300","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11330","accountName":"Finished Goods Inventory","accountType":"ASSET","parentCode":"11300","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+
+  {"accountCode":"15000","accountName":"Property, Plant and Equipment","accountType":"ASSET","parentCode":"10000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"15100","accountName":"Plant and Machinery","accountType":"ASSET","parentCode":"15000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"15200","accountName":"Accumulated Depreciation - Plant and Machinery","accountType":"ASSET","parentCode":"15000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+
+  {"accountCode":"21000","accountName":"Current Liabilities","accountType":"LIABILITY","parentCode":"20000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+  {"accountCode":"21100","accountName":"Accounts Payable","accountType":"LIABILITY","parentCode":"21000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+  {"accountCode":"21200","accountName":"Accrued Expenses","accountType":"LIABILITY","parentCode":"21000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+
+  {"accountCode":"40100","accountName":"Finished Goods Sales","accountType":"INCOME","parentCode":"40000","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":"Sale of manufactured goods"},
+  {"accountCode":"40200","accountName":"Other Income","accountType":"INCOME","parentCode":"40000","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":""},
+
+  {"accountCode":"50100","accountName":"Raw Materials","accountType":"EXPENSE","parentCode":"50000","normalBalance":"DEBIT","ifrsNodeName":"Cost of Sales","description":"Raw material consumption"},
+  {"accountCode":"50200","accountName":"Direct Labor","accountType":"EXPENSE","parentCode":"50000","normalBalance":"DEBIT","ifrsNodeName":"Cost of Sales","description":""},
+  {"accountCode":"50300","accountName":"Manufacturing Overhead","accountType":"EXPENSE","parentCode":"50000","normalBalance":"DEBIT","ifrsNodeName":"Cost of Sales","description":""},
+
+  {"accountCode":"60100","accountName":"Salaries and Wages","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""},
+  {"accountCode":"60200","accountName":"Rent","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""},
+  {"accountCode":"60300","accountName":"Utilities","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""},
+  {"accountCode":"60400","accountName":"Repairs and Maintenance","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""}
+]

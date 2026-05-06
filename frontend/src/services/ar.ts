@@ -762,6 +762,9 @@ export async function createCreditNote(params: {
     quantity?: number;
     unitPrice: number;
     revenueAccountId: string;
+    departmentId?: string;
+    projectId?: string;
+    fundId?: string;
   }>;
 }) {
   return apiFetch<CreditNote>('/finance/ar/credit-notes', {

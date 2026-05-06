@@ -1,21 +1,21 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { PERMISSIONS } from '@/security/permissionCatalog';
 import { useBranding } from '../../branding/BrandingContext';
-import type { AccountLookup, Customer, InvoiceCategory } from '../../services/ar';
-import { createInvoice, listEligibleAccounts, listCustomers, listInvoiceCategories } from '../../services/ar';
+import { PERMISSIONS } from '@/security/permissionCatalog';
 import { getApiErrorMessage } from '../../services/api';
+import { createInvoice, listCustomers, listEligibleAccounts, listInvoiceCategories, type AccountLookup, type Customer, type InvoiceCategory } from '../../services/ar';
 import type { TaxRate } from '../../services/tax';
 import { listTaxRates } from '../../services/tax';
 import { formatMoney } from '../../money';
 import { listDepartments, listProjects, listFunds, type DepartmentLookup, type ProjectLookup, type FundLookup } from '../../services/gl';
+import { LineSegmentFields } from '../../finance/segments/LineSegmentFields';
+import { validateLineSegments } from '../../finance/segments/lineSegmentValidation';
 
 type Line = {
   accountId: string;
   accountSearch: string;
   accountPickerOpen: boolean;
-  taxRateId?: string;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -24,6 +24,7 @@ type Line = {
   departmentId?: string;
   projectId?: string;
   fundId?: string;
+  taxRateId?: string;
 };
 
 function todayIsoDate() {
@@ -51,21 +52,15 @@ export function CreateInvoicePage() {
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [lineErrors, setLineErrors] = useState<Record<number, { department?: string; project?: string; fund?: string }>>({});
 
   const [customerId, setCustomerId] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(todayIsoDate());
   const [dueDate, setDueDate] = useState(todayIsoDate());
-  const tenantDefaultCurrency = String(effective?.defaultCurrency ?? '').trim();
-  const currencyOptions = useMemo(() => {
-    const base = String(tenantDefaultCurrency ?? '').trim().toUpperCase();
-    const common = ['USD', 'EUR', 'GBP', 'ZAR', 'KES', 'NGN', 'GHS', 'UGX', 'TZS', 'AED', 'SAR', 'INR', 'AUD', 'CAD'];
-    const all = [...new Set([base, ...common].filter(Boolean))];
-    return all.length > 0 ? all : ['USD'];
-  }, [tenantDefaultCurrency]);
-
-  const [currency, setCurrency] = useState(tenantDefaultCurrency || 'USD');
+  const [currency, setCurrency] = useState('');
   const [exchangeRate, setExchangeRate] = useState('1');
   const [reference, setReference] = useState('');
   const [invoiceNote, setInvoiceNote] = useState('');
@@ -79,7 +74,6 @@ export function CreateInvoicePage() {
       accountId: '',
       accountSearch: '',
       accountPickerOpen: false,
-      taxRateId: '',
       description: '',
       quantity: '1',
       unitPrice: '',
@@ -117,24 +111,6 @@ export function CreateInvoicePage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!tenantDefaultCurrency) return;
-    setCurrency((prev) => prev || tenantDefaultCurrency);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantDefaultCurrency]);
-
-  useEffect(() => {
-    const normalized = String(currency ?? '').trim().toUpperCase();
-    if (!normalized) {
-      setCurrency(currencyOptions[0] ?? 'USD');
-      return;
-    }
-    if (!currencyOptions.includes(normalized)) {
-      setCurrency(currencyOptions[0] ?? 'USD');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currencyOptions]);
-
   const selectedCustomer = useMemo(() => {
     return customers.find((c) => c.id === customerId) ?? null;
   }, [customerId, customers]);
@@ -155,36 +131,42 @@ export function CreateInvoicePage() {
     });
   }, [customerSearch, customers]);
 
-  const normalizedCurrency = useMemo(() => String(currency ?? '').trim().toUpperCase(), [currency]);
-  const normalizedBase = useMemo(() => String(tenantDefaultCurrency ?? '').trim().toUpperCase(), [tenantDefaultCurrency]);
-  const isBaseCurrency = Boolean(normalizedBase && normalizedCurrency && normalizedCurrency === normalizedBase);
-
-  useEffect(() => {
-    if (isBaseCurrency) setExchangeRate('1');
-  }, [isBaseCurrency]);
-
-  const exchangeRateNum = useMemo(() => Number(exchangeRate), [exchangeRate]);
-  const exchangeRateInvalid = useMemo(() => {
-    if (isBaseCurrency) return false;
-    return !(exchangeRateNum > 0);
-  }, [exchangeRateNum, isBaseCurrency]);
-
-  const exchangeRateError = useMemo(() => {
-    if (!exchangeRateInvalid) return null;
-    return 'Exchange rate is required when invoice currency differs from base currency';
-  }, [exchangeRateInvalid]);
-
   const selectedInvoiceCategory = useMemo(() => {
     return invoiceCategories.find((c) => c.id === invoiceCategoryId) ?? null;
   }, [invoiceCategories, invoiceCategoryId]);
 
-  const selectableInvoiceCategories = useMemo(() => {
+  const selectableInvoiceCategories: InvoiceCategory[] = useMemo(() => {
     return (invoiceCategories ?? []).filter((c) => c.isActive);
   }, [invoiceCategories]);
 
-  const requiresHeaderProject = useMemo(() => Boolean(selectedInvoiceCategory?.requiresProject), [selectedInvoiceCategory?.requiresProject]);
-  const requiresHeaderFund = useMemo(() => Boolean(selectedInvoiceCategory?.requiresFund), [selectedInvoiceCategory?.requiresFund]);
-  const requiresHeaderDepartment = useMemo(() => Boolean(selectedInvoiceCategory?.requiresDepartment), [selectedInvoiceCategory?.requiresDepartment]);
+  const requiresHeaderProject = Boolean(selectedInvoiceCategory?.requiresProject);
+  const requiresHeaderFund = Boolean(selectedInvoiceCategory?.requiresFund);
+  const requiresHeaderDepartment = Boolean(selectedInvoiceCategory?.requiresDepartment);
+
+  const normalizedBase = useMemo(() => {
+    return String(effective?.defaultCurrency ?? '').trim().toUpperCase();
+  }, [effective?.defaultCurrency]);
+
+  const normalizedCurrency = useMemo(() => {
+    return String(currency ?? '').trim().toUpperCase();
+  }, [currency]);
+
+  const isBaseCurrency = Boolean(normalizedBase && normalizedCurrency && normalizedBase === normalizedCurrency);
+
+  const currencyOptions = useMemo(() => {
+    const seed = [normalizedBase, normalizedCurrency, 'USD', 'EUR', 'GBP', 'ZAR', 'ZMW'].filter(Boolean);
+    const unique = Array.from(new Set(seed.map((c) => String(c).toUpperCase())));
+    return unique;
+  }, [normalizedBase, normalizedCurrency]);
+
+  const exchangeRateError = useMemo(() => {
+    const xr = Number(exchangeRate);
+    if (isBaseCurrency) return null;
+    if (!(xr > 0)) return 'Exchange rate must be > 0';
+    return null;
+  }, [exchangeRate, isBaseCurrency]);
+
+  const exchangeRateInvalid = Boolean(exchangeRateError);
 
   const isLineValid = useMemo(() => {
     return (l: Line) => {
@@ -198,6 +180,10 @@ export function CreateInvoicePage() {
   const accountById = useMemo(() => {
     return new Map(accounts.map((a) => [a.id, a] as const));
   }, [accounts]);
+
+  const projectById = useMemo(() => {
+    return new Map(projects.map((p) => [p.id, p] as const));
+  }, [projects]);
 
   const hasAnyValidLine = useMemo(() => lines.some((l) => isLineValid(l)), [isLineValid, lines]);
   const allLinesValid = useMemo(() => lines.every((l) => isLineValid(l)), [isLineValid, lines]);
@@ -245,6 +231,12 @@ export function CreateInvoicePage() {
 
   function updateLine(idx: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+    setLineErrors((prev) => {
+      if (!prev[idx]) return prev;
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
   }
 
   function addLine() {
@@ -257,7 +249,6 @@ export function CreateInvoicePage() {
           accountId: '',
           accountSearch: '',
           accountPickerOpen: false,
-          taxRateId: '',
           description: '',
           quantity: '1',
           unitPrice: '',
@@ -272,7 +263,7 @@ export function CreateInvoicePage() {
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!canCreate) {
       setError(`You don’t have permission to create invoices. Required: ${PERMISSIONS.AR.INVOICE.CREATE}.`);
@@ -280,6 +271,8 @@ export function CreateInvoicePage() {
     }
 
     setError(null);
+    setFormErrors([]);
+    setLineErrors({});
 
     if (!customerId || !invoiceDate || !dueDate || !currency) {
       setError('Missing required fields');
@@ -311,13 +304,53 @@ export function CreateInvoicePage() {
       return;
     }
 
-    if (new Date(dueDate) < new Date(invoiceDate)) {
-      setError('Due date cannot be earlier than invoice date');
+    const nextFormErrors: string[] = [];
+    const nextLineErrors: Record<number, { department?: string; project?: string; fund?: string }> = {};
+
+    for (let idx = 0; idx < lines.length; idx++) {
+      const l = lines[idx];
+      const isNonEmpty = Boolean(l.accountId) || Boolean(String(l.description ?? '').trim()) || (Number(l.quantity) || 0) > 0 || (Number(l.unitPrice) || 0) > 0;
+      if (!isNonEmpty) continue;
+
+      const acct = l.accountId ? accountById.get(l.accountId) ?? null : null;
+      if (!acct) {
+        nextFormErrors.push(`Line ${idx + 1}: Account is required.`);
+        continue;
+      }
+
+      const projectId = (l.projectId || headerProjectId) || undefined;
+      const project = projectId ? projectById.get(projectId) ?? null : null;
+
+      const seg = validateLineSegments({
+        line: {
+          accountId: l.accountId,
+          departmentId: l.departmentId || null,
+          projectId: projectId || null,
+          fundId: l.fundId || null,
+        },
+        account: acct,
+        project,
+        legalEntityRequired: false,
+      });
+
+      const mapped: { department?: string; project?: string; fund?: string } = {};
+      if (seg.department) mapped.department = seg.department;
+      if (seg.project) mapped.project = seg.project;
+      if (seg.fund) mapped.fund = seg.fund;
+      if (mapped.department || mapped.project || mapped.fund) {
+        nextLineErrors[idx] = mapped;
+      }
+    }
+
+    if (nextFormErrors.length > 0 || Object.keys(nextLineErrors).length > 0) {
+      setFormErrors(nextFormErrors);
+      setLineErrors(nextLineErrors);
+      setError('Please fix the highlighted segment errors before submitting.');
       return;
     }
 
-    if (exchangeRateInvalid) {
-      setError('Exchange rate is required when invoice currency differs from base currency');
+    if (new Date(dueDate) < new Date(invoiceDate)) {
+      setError('Due date cannot be earlier than invoice date');
       return;
     }
 
@@ -364,7 +397,7 @@ export function CreateInvoicePage() {
         invoiceDate,
         dueDate,
         currency: currency.trim(),
-        exchangeRate: isBaseCurrency ? 1 : Number(exchangeRate),
+        exchangeRate: Number(exchangeRate),
         reference: reference.trim() || undefined,
         invoiceNote: invoiceNote.trim() || undefined,
         invoiceCategoryId: invoiceCategoryId || undefined,
@@ -402,6 +435,13 @@ export function CreateInvoicePage() {
 
       {loadingLookups ? <div>Loading...</div> : null}
       {error ? <div style={{ color: 'crimson', marginTop: 8 }}>{error}</div> : null}
+      {formErrors.length > 0 ? (
+        <div style={{ color: 'crimson', marginTop: 8 }}>
+          {formErrors.map((e, idx) => (
+            <div key={idx}>{e}</div>
+          ))}
+        </div>
+      ) : null}
 
       <form onSubmit={onSubmit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 900 }}>
         <label>
@@ -672,13 +712,6 @@ export function CreateInvoicePage() {
             <tbody>
               {lines.map((l, idx) => {
                 const acct = l.accountId ? accountById.get(l.accountId) : null;
-                const needsDept = Boolean(acct?.requiresDepartment);
-                const needsProj = Boolean(acct?.requiresProject);
-                const needsFund = Boolean(acct?.requiresFund);
-                const fundOptions = l.projectId
-                  ? funds.filter((f) => f.projectId === l.projectId)
-                  : funds;
-
                 const dimColSpan = showDiscountUi ? 9 : 7;
 
                 return (
@@ -832,60 +865,33 @@ export function CreateInvoicePage() {
 
                     <tr key={`${idx}-dims`}>
                       <td colSpan={dimColSpan} style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                          <label style={{ fontSize: 12 }}>
-                            Department{needsDept ? ' *' : ''}
-                            <select
-                              value={l.departmentId ?? ''}
-                              onChange={(e) => updateLine(idx, { departmentId: e.currentTarget.value || undefined })}
-                              style={{ width: '100%', height: 40, marginTop: 6 }}
-                            >
-                              <option value="">(None)</option>
-                              {departments.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                  {d.code} – {d.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label style={{ fontSize: 12 }}>
-                            Project{needsProj ? ' *' : ''}
-                            <select
-                              value={l.projectId ?? ''}
-                              onChange={(e) =>
-                                updateLine(idx, {
-                                  projectId: e.currentTarget.value || undefined,
-                                  fundId: undefined,
-                                })
-                              }
-                              style={{ width: '100%', height: 40, marginTop: 6 }}
-                            >
-                              <option value="">(None)</option>
-                              {projects.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.code} – {p.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label style={{ fontSize: 12 }}>
-                            Fund{needsFund ? ' *' : ''}
-                            <select
-                              value={l.fundId ?? ''}
-                              onChange={(e) => updateLine(idx, { fundId: e.currentTarget.value || undefined })}
-                              style={{ width: '100%', height: 40, marginTop: 6 }}
-                            >
-                              <option value="">(None)</option>
-                              {fundOptions.map((f) => (
-                                <option key={f.id} value={f.id}>
-                                  {f.code} – {f.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
+                        <LineSegmentFields
+                          effectiveOn={invoiceDate}
+                          account={acct ?? null}
+                          values={{
+                            departmentId: l.departmentId ?? null,
+                            projectId: (l.projectId || headerProjectId) ?? null,
+                            fundId: l.fundId ?? null,
+                          }}
+                          errors={lineErrors[idx]}
+                          disabled={saving || loadingLookups}
+                          onChange={(patch) => {
+                            updateLine(idx, {
+                              departmentId:
+                                patch.departmentId === undefined
+                                  ? l.departmentId
+                                  : patch.departmentId || undefined,
+                              projectId:
+                                patch.projectId === undefined
+                                  ? l.projectId
+                                  : patch.projectId || undefined,
+                              fundId:
+                                patch.fundId === undefined
+                                  ? l.fundId
+                                  : patch.fundId || undefined,
+                            });
+                          }}
+                        />
                       </td>
                     </tr>
                   </Fragment>

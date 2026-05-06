@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GlService } from '../gl/gl.service';
+import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { assertCanPost } from '../periods/period-guard';
@@ -920,15 +921,31 @@ export class FaService {
     const unique = [...new Set(params.accountIds.filter(Boolean))];
     const accounts = await this.prisma.account.findMany({
       where: { tenantId: params.tenantId, id: { in: unique } },
-      select: { id: true },
+      select: {
+        id: true,
+        status: true as any,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+      } as any,
     });
+    const byId = new Map(accounts.map((a: any) => [String(a.id), a] as const));
 
-    if (accounts.length !== unique.length) {
-      const found = new Set(accounts.map((a) => a.id));
-      const missing = unique.filter((id) => !found.has(id));
+    const missing = unique.filter((id) => !byId.has(String(id)));
+    if (missing.length > 0) {
       throw new BadRequestException({
-        error: 'Account not found',
-        missingAccountIds: missing,
+        error: 'One or more GL accounts were not found',
+        missing,
+      });
+    }
+
+    for (const id of unique) {
+      const acct = byId.get(String(id));
+      if (!acct) continue;
+      validateAccountPostingEligibility(acct as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
       });
     }
   }

@@ -80,6 +80,11 @@ import { PaymentRunExecutePage } from './pages/finance/ap/PaymentRunExecutePage'
 import { BankCashAccountsListPage } from './pages/finance/cashBank/BankCashAccountsListPage';
 import { BankCashAccountFormPage } from './pages/finance/cashBank/BankCashAccountFormPage';
 import { ChartOfAccountsPage } from './pages/finance/ChartOfAccountsPage';
+import { CoaApprovalsPage } from './pages/finance/CoaApprovalsPage';
+import { CoaImportBatchReviewPage } from './pages/finance/CoaImportBatchReviewPage';
+import { CoaSubmissionsPage } from './pages/finance/CoaSubmissionsPage';
+import { CoaReclassificationsPage } from './pages/finance/CoaReclassificationsPage';
+import { CoaHealthPage } from './pages/finance/CoaHealthPage';
 import { JournalEntryPage } from './pages/finance/gl/JournalEntryPage';
 import { JournalUploadPage } from './pages/finance/gl/JournalUploadPage';
 import { JournalBrowserPage } from './pages/finance/gl/JournalBrowserPage';
@@ -113,6 +118,8 @@ import { SettingsInvoiceCategoriesPage } from './pages/settings/SettingsInvoiceC
 import { SettingsTaxRatesPage } from './pages/settings/SettingsTaxRatesPage';
 import { SettingsTaxConfigurationPage } from './pages/settings/SettingsTaxConfigurationPage';
 import { SettingsFinanceControlAccountsPage } from './pages/settings/SettingsFinanceControlAccountsPage';
+import { SettingsCoaRootCategoriesPage } from './pages/settings/SettingsCoaRootCategoriesPage';
+import { SettingsIfrsReportingStructurePage } from './pages/settings/SettingsIfrsReportingStructurePage';
 
 import { CreditNotesListPage } from './pages/ar/CreditNotesListPage';
 import { CreditNoteCreatePage } from './pages/ar/CreditNoteCreatePage';
@@ -134,6 +141,7 @@ function SettingsVisibleRoute(props: { children: React.ReactNode }) {
     PERMISSIONS.SYSTEM.CONFIG_VIEW,
     PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     PERMISSIONS.FINANCE.CONFIG_VIEW,
+    PERMISSIONS.FINANCE.CONFIG_CHANGE,
     PERMISSIONS.USER.VIEW,
     PERMISSIONS.ROLE.VIEW,
   ]);
@@ -143,6 +151,7 @@ function SettingsVisibleRoute(props: { children: React.ReactNode }) {
         requiredAnyPermissions={[
           PERMISSIONS.SYSTEM.CONFIG_VIEW,
           PERMISSIONS.FINANCE.CONFIG_VIEW,
+          PERMISSIONS.FINANCE.CONFIG_CHANGE,
           PERMISSIONS.USER.VIEW,
           PERMISSIONS.ROLE.VIEW,
           PERMISSIONS.SYSTEM.VIEW_ALL,
@@ -619,6 +628,24 @@ export default function App() {
                   </PermissionAnyRoute>
                 }
               />
+
+              <Route
+                path="settings/finance/coa-root-categories"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.COA.UNLOCK}>
+                    <SettingsCoaRootCategoriesPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+
+              <Route
+                path="settings/finance/ifrs-reporting-structure"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.FINANCE.CONFIG_CHANGE}>
+                    <SettingsIfrsReportingStructurePage />
+                  </PermissionOnlyRoute>
+                }
+              />
               <Route
                 path="settings/tax-rates"
                 element={
@@ -701,6 +728,52 @@ export default function App() {
                 element={
                   <PermissionOnlyRoute permission={PERMISSIONS.COA.VIEW}>
                     <ChartOfAccountsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/coa/health"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.COA.VIEW}>
+                    <CoaHealthPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/coa/submissions"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.COA.DRAFT_CREATE,
+                      PERMISSIONS.COA.DRAFT_EDIT,
+                      PERMISSIONS.COA.DRAFT_SUBMIT,
+                    ]}
+                  >
+                    <CoaSubmissionsPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/coa/approvals"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.COA.APPROVE}>
+                    <CoaApprovalsPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/coa/import-batches/:batchId/review"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.COA.APPROVE}>
+                    <CoaImportBatchReviewPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/coa/reclassifications"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.COA.VIEW}>
+                    <CoaReclassificationsPage />
                   </PermissionOnlyRoute>
                 }
               />

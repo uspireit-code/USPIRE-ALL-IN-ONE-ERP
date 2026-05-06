@@ -6,15 +6,20 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { assertPeriodIsOpen } from '../finance/common/accounting-period.guard';
 import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
+import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateCustomerInvoiceDto } from './dto/create-customer-invoice.dto';
 
 @Injectable()
 export class ArService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gl: GlService,
+  ) {}
 
   private round2(n: number) {
     return Math.round(n * 100) / 100;
@@ -169,7 +174,7 @@ export class ArService {
     return this.prisma.account.findMany({
       where: {
         tenantId: tenant.id,
-        isActive: true,
+        status: 'ACTIVE' as any,
         type: 'INCOME',
       },
       orderBy: [{ code: 'asc' }],
@@ -230,9 +235,10 @@ export class ArService {
       where: {
         tenantId: tenant.id,
         id: { in: dto.lines.map((l) => l.accountId) },
+        status: 'ACTIVE' as any,
         isActive: true,
       },
-      select: { id: true, type: true },
+      select: { id: true, type: true, status: true, isActive: true },
     });
 
     const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
@@ -243,6 +249,10 @@ export class ArService {
         throw new BadRequestException(
           `Account not found or inactive: ${line.accountId}`,
         );
+      }
+      const lifecycle = String((a as any).status ?? '').trim().toUpperCase();
+      if (lifecycle !== 'ACTIVE') {
+        throw new BadRequestException('Account is not approved for use');
       }
       if (a.type !== 'INCOME') {
         throw new BadRequestException(
@@ -440,6 +450,37 @@ export class ArService {
 
     const arAccount = await resolveArControlAccount(this.prisma as any, tenant.id);
 
+    const postingAccountIds = [String(arAccount.id), String(revenueAccountId)].filter(Boolean);
+    const postingAccounts = await this.prisma.account.findMany({
+      where: {
+        tenantId: tenant.id,
+        id: { in: postingAccountIds },
+        status: 'ACTIVE' as any,
+        isActive: true,
+      } as any,
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+      },
+    });
+    const byId = new Map(postingAccounts.map((a) => [String((a as any).id), a] as const));
+    for (const id of postingAccountIds) {
+      const acct = byId.get(String(id));
+      if (!acct) {
+        throw new BadRequestException('Posting account not found or invalid');
+      }
+      validateAccountPostingEligibility(acct as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
+    }
+
+    const now = new Date();
+
     const journal = await this.prisma.journalEntry.create({
       data: {
         tenantId: tenant.id,
@@ -447,6 +488,9 @@ export class ArService {
         reference: `AR-INVOICE:${inv.id}`,
         description: `AR invoice posting: ${inv.id}`,
         createdById: inv.createdById,
+        status: 'REVIEWED',
+        reviewedById: user.id,
+        reviewedAt: now,
         lines: {
           create: [
             {
@@ -471,22 +515,14 @@ export class ArService {
       include: { lines: true },
     });
 
-    const postedJournal = await this.prisma.journalEntry.update({
-      where: { id: journal.id },
-      data: {
-        status: 'POSTED',
-        postedById: user.id,
-        postedAt: new Date(),
-      },
-      include: { lines: true },
-    });
+    const postedJournal = await this.gl.postJournal(req, journal.id);
 
     const updatedInvoice = await this.prisma.customerInvoice.update({
       where: { id: inv.id },
       data: {
         status: 'POSTED',
         postedById: user.id,
-        postedAt: new Date(),
+        postedAt: now,
       },
       include: { customer: true, lines: true },
     });

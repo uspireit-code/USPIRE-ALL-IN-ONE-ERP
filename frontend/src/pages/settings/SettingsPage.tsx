@@ -3,12 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../auth/permission-catalog';
+import { tokens } from '../../designTokens';
 
 export function SettingsPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
-
-  const NAVY = '#020445';
 
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
@@ -36,6 +35,12 @@ export function SettingsPage() {
     hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
     hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
     hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+
+  const canFinanceConfigChange =
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_CHANGE) ||
+    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+
+  const canManageCoaRootCategories = hasPermission(PERMISSIONS.COA.UNLOCK) || hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
 
   const sections: Array<{ key: string; title: string; description: string; to: string; icon: React.ReactNode }> = [
     ...((canSystemConfigView || canFinanceConfigView)
@@ -160,6 +165,41 @@ export function SettingsPage() {
           },
         ]
       : []),
+    ...(canFinanceConfigChange
+      ? [
+          {
+            key: 'finance-ifrs-reporting-structure',
+            title: 'Finance: IFRS Reporting Structure',
+            description: 'Manage the tenant IFRS reporting hierarchy used for COA mapping and reports.',
+            to: '/settings/finance/ifrs-reporting-structure',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3h18v18H3z" />
+                <path d="M7 7h10" />
+                <path d="M7 12h10" />
+                <path d="M7 17h10" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    ...(canManageCoaRootCategories
+      ? [
+          {
+            key: 'finance-coa-root-categories',
+            title: 'Finance: COA Root Categories',
+            description: 'Configure top-level COA categories and their linked root accounts.',
+            to: '/settings/finance/coa-root-categories',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16v6H4z" />
+                <path d="M4 14h7v6H4z" />
+                <path d="M13 14h7v6h-7z" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
     ...(hasPermission(PERMISSIONS.TAX.RATE_VIEW)
       ? [
           {
@@ -238,20 +278,15 @@ export function SettingsPage() {
           border: '1px solid rgba(11,12,30,0.06)',
         }}
       >
-        <div style={{ fontSize: 26, fontWeight: 750, lineHeight: '32px', color: '#0B0C1E' }}>Settings</div>
+        <div style={{ fontSize: 26, fontWeight: 750, lineHeight: '32px', color: tokens.colors.navy }}>Settings</div>
         <div style={{ marginTop: 10, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
           Manage organisation details, users, access control, and system configuration.
         </div>
       </div>
 
       <div
-        style={{
-          marginTop: 16,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 16,
-          alignItems: 'stretch',
-        }}
+        className="cardsGrid"
+        style={{ marginTop: 16 }}
       >
         {sections.map((section) => (
           <div key={section.key} onClick={() => navigate(section.to)} style={{ cursor: 'pointer' }}>
@@ -259,8 +294,8 @@ export function SettingsPage() {
               interactive
               baseShadow={cardBaseShadow}
               hoverShadow={cardHoverShadow}
-              baseBorderColor="rgba(2,4,69,0.08)"
-              hoverBorderColor="rgba(237,186,53,0.45)"
+              baseBorderColor={tokens.colors.border.subtle}
+              hoverBorderColor="rgba(231,158,19,0.45)"
               style={{
                 background: '#FFFFFF',
                 borderRadius: 16,
@@ -277,8 +312,8 @@ export function SettingsPage() {
                     width: 40,
                     height: 40,
                     borderRadius: 12,
-                    background: 'rgba(2,4,69,0.06)',
-                    color: NAVY,
+                    background: 'rgba(11,11,71,0.06)',
+                    color: tokens.colors.navy,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -288,7 +323,7 @@ export function SettingsPage() {
                   {section.icon}
                 </div>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 750, color: NAVY, lineHeight: '22px' }}>{section.title}</div>
+                  <div style={{ fontSize: 16, fontWeight: 750, color: tokens.colors.navy, lineHeight: '22px' }}>{section.title}</div>
                   <div style={{ marginTop: 6, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>{section.description}</div>
                 </div>
               </div>

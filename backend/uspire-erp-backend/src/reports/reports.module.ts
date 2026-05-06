@@ -10,6 +10,7 @@ import { DisclosureNotesService } from './disclosure-notes.service';
 import { IfrsDisclosureNotesService } from './ifrs-disclosure-notes.service';
 import { ReportsController } from './reports.controller';
 import { FinancialStatementsService } from './financial-statements.service';
+import { CoaReclassificationResolverService } from './coa-reclassification-resolver.service';
 import { ReportAuditService } from './report-audit.service';
 import { ReportExportService } from './report-export.service';
 import { ReportPresentationService } from './report-presentation.service';
@@ -20,6 +21,7 @@ import { ReportsService } from './reports.service';
   controllers: [ReportsController, DisclosureNotesController],
   providers: [
     ReportsService,
+    CoaReclassificationResolverService,
     FinancialStatementsService,
     ReportPresentationService,
     ReportExportService,
@@ -35,6 +37,7 @@ import { ReportsService } from './reports.service';
     ReportPresentationService,
     ReportExportService,
     ReportsService,
+    CoaReclassificationResolverService,
   ],
 })
 export class ReportsModule {}

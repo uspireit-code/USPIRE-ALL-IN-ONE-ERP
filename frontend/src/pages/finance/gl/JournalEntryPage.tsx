@@ -7,6 +7,7 @@ import { AccountContextPanel } from '../../../components/AccountContextPanel';
 import { DataTable } from '../../../components/DataTable';
 import { JournalActionBar } from '../../../components/JournalActionBar';
 import { tokens } from '../../../designTokens';
+import { getSegmentVisibility, validateSegments } from '../../../finance/segments/segmentRequirements';
 import { getApiErrorMessage } from '../../../services/api';
 import {
   createJournal,
@@ -284,21 +285,6 @@ export function JournalEntryPage() {
   const totals = useMemo(() => computeTotals(normalizedLines), [normalizedLines]);
   const balanceOk = totals.net === 0 && totals.totalDebit > 0;
 
-  const getDepartmentRequirementMessage = (accountType: string | null | undefined) => {
-    if (accountType === 'EXPENSE') return 'Department required for expense accounts';
-    if (accountType === 'INCOME') return 'Department required for revenue accounts';
-    if (accountType === 'EQUITY') return 'Department not applicable for equity accounts';
-    return null;
-  };
-
-  const getDepartmentRequirementForAccount = (
-    account: GlAccountLookup | undefined,
-  ): 'REQUIRED' | 'OPTIONAL' | 'FORBIDDEN' => {
-    const r = account?.departmentRequirement;
-    if (r === 'REQUIRED' || r === 'OPTIONAL' || r === 'FORBIDDEN') return r;
-    return 'REQUIRED';
-  };
-
   const [changeAccountConfirm, setChangeAccountConfirm] = useState<null | { rowIndex: number }>(null);
 
   const lineValidationByIndex = useMemo(() => {
@@ -359,39 +345,35 @@ export function JournalEntryPage() {
     sourceLines.forEach((l, idx) => {
       const isNonEmpty = Boolean(l.accountId) || (l.debit ?? 0) !== 0 || (l.credit ?? 0) !== 0;
       if (!isNonEmpty) return;
-      const e: { legalEntity?: string; department?: string; project?: string; fund?: string } = {};
-      if (!l.legalEntityId) e.legalEntity = 'Legal Entity is required to submit.';
+
       const account = accountById.get(l.accountId);
-      const deptReq = getDepartmentRequirementForAccount(account);
-      if (!l.departmentId) {
-        if (deptReq === 'REQUIRED') {
-          const accountType = account?.type;
-          e.department = getDepartmentRequirementMessage(accountType) ?? 'Department is required to submit.';
-        }
-      } else {
-        if (deptReq === 'FORBIDDEN') {
-          e.department = 'Department must not be provided for this account.';
-        }
+      const selectedProject = l.projectId ? projectById.get(l.projectId) : null;
+      const visibility = getSegmentVisibility({
+        account,
+        project: selectedProject,
+        legalEntityRequired: true,
+      });
+
+      const errors = validateSegments({
+        visibility,
+        projectRestricted: Boolean(selectedProject?.isRestricted),
+        values: {
+          legalEntityId: l.legalEntityId ?? null,
+          departmentId: l.departmentId ?? null,
+          projectId: l.projectId ?? null,
+          fundId: l.fundId ?? null,
+        },
+      });
+
+      const e: { legalEntity?: string; department?: string; project?: string; fund?: string } = {};
+      if (errors.legalEntity) e.legalEntity = 'Legal Entity is required to submit.';
+      if (errors.department) e.department = 'Department is required to submit.';
+      if (errors.project) e.project = errors.project === 'Project is required.' ? 'Project is required to submit.' : errors.project;
+      if (errors.fund) {
+        e.fund = errors.fund === 'Fund is required.' ? 'Fund is required to submit.' : errors.fund;
       }
 
-      const selectedProject = l.projectId ? projectById.get(l.projectId) : undefined;
-      const projectRestricted = Boolean(selectedProject?.isRestricted);
-      const fundRequired = Boolean(account?.requiresFund) || projectRestricted;
-      const projectRequired = Boolean(account?.requiresProject) || fundRequired;
-
-      if (l.fundId && !l.projectId) {
-        e.project = 'Project must be selected before Fund.';
-      } else if (!l.projectId && projectRequired) {
-        e.project = 'Project is required to submit.';
-      }
-
-      if (!l.fundId && fundRequired) {
-        e.fund = projectRestricted
-          ? 'Fund is required because the selected Project is restricted.'
-          : 'Fund is required to submit.';
-      }
-      if (e.legalEntity || e.department) out.set(idx, e);
-      if (e.project || e.fund) out.set(idx, e);
+      if (e.legalEntity || e.department || e.project || e.fund) out.set(idx, e);
     });
     return out;
   }, [normalizedLines, accountById, isReversal, projectById]);

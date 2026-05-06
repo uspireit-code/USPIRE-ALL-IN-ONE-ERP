@@ -12,13 +12,25 @@ import { Type } from 'class-transformer';
 
 export class CreatePaymentAllocationDto {
   @IsString()
-  sourceType!: 'SUPPLIER_INVOICE' | 'CUSTOMER_INVOICE';
+  sourceType!: 'SUPPLIER_INVOICE' | 'SUPPLIER_ADVANCE' | 'CUSTOMER_INVOICE';
 
   @IsUUID()
   sourceId!: string;
 
   @Min(0)
   amount!: number;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  fundId?: string;
 }
 
 export class CreatePaymentDto {
@@ -38,11 +50,12 @@ export class CreatePaymentDto {
   @IsString()
   reference?: string;
 
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => CreatePaymentAllocationDto)
-  allocations!: CreatePaymentAllocationDto[];
+  allocations?: CreatePaymentAllocationDto[];
 
   @IsOptional()
   @IsString()

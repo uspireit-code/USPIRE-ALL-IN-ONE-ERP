@@ -4,6 +4,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { getApiErrorMessage, type ApiError } from '../../../services/api';
 import { Alert } from '../../../components/Alert';
+import { tokens } from '../../../designTokens';
 import {
   approvePaymentProposal,
   getPaymentProposal,
@@ -237,7 +238,7 @@ export function PaymentProposalDetailsPage() {
                   type="button"
                   disabled={actionLoading}
                   onClick={() => void onSaveDraft()}
-                  style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: '#020445', color: 'white' }}
+                  style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: tokens.colors.navy, color: 'white' }}
                 >
                   Save
                 </button>
@@ -274,7 +275,7 @@ export function PaymentProposalDetailsPage() {
               type="button"
               disabled={actionLoading}
               onClick={() => void onSubmit()}
-              style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: '#020445', color: 'white' }}
+              style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: tokens.colors.navy, color: 'white' }}
             >
               {actionLoading ? 'Submitting…' : 'Submit'}
             </button>
@@ -285,7 +286,7 @@ export function PaymentProposalDetailsPage() {
               type="button"
               disabled={actionLoading}
               onClick={() => void onApprove()}
-              style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: '#020445', color: 'white' }}
+              style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: tokens.colors.navy, color: 'white' }}
             >
               {actionLoading ? 'Approving…' : 'Approve'}
             </button>
@@ -360,7 +361,7 @@ export function PaymentProposalDetailsPage() {
       <div style={{ marginTop: 14, overflowX: 'auto', background: 'white', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1050 }}>
           <thead>
-            <tr style={{ background: 'rgba(2,4,69,0.05)' }}>
+            <tr style={{ background: 'rgba(11,11,71,0.05)' }}>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Supplier</th>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Invoice #</th>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Invoice Date</th>

@@ -8,6 +8,7 @@ import { DataTable } from '../components/DataTable';
 import { Alert } from '../components/Alert';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import { tokens } from '../designTokens';
 
 const DEFAULT_CUTOVER_DATE = '2026-01-01';
 
@@ -15,12 +16,6 @@ type UiLine = { accountId: string; debit: string; credit: string };
 
 export function OpeningBalancesPage() {
   const { hasPermission } = useAuth();
-
-  const COLORS = {
-    navy: '#0B0C1E',
-    gold: '#EDBA35',
-    white: '#FCFCFC',
-  };
 
   const canView = hasPermission(PERMISSIONS.GL.VIEW);
   const canCreate = hasPermission(PERMISSIONS.GL.CREATE);
@@ -205,7 +200,7 @@ export function OpeningBalancesPage() {
                       value={l.accountId}
                       disabled={isLocked}
                       onChange={(e) => setLine(idx, { accountId: e.target.value })}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(11,12,30,0.14)', background: COLORS.white }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(11,12,30,0.14)', background: tokens.colors.white }}
                     >
                       <option value="">Select account…</option>
                       {accounts.map((a) => (
@@ -245,13 +240,13 @@ export function OpeningBalancesPage() {
 
             <DataTable.Foot>
               <tr>
-                <DataTable.Td align="right" style={{ fontWeight: 800, background: 'rgba(237,186,53,0.06)', borderBottom: '1px solid rgba(11,12,30,0.10)' }}>
+                <DataTable.Td align="right" style={{ fontWeight: 800, background: 'rgba(231,158,19,0.06)', borderBottom: '1px solid rgba(11,12,30,0.10)' }}>
                   Totals
                 </DataTable.Td>
-                <DataTable.Td align="right" style={{ fontWeight: 800, background: 'rgba(237,186,53,0.06)', borderBottom: '1px solid rgba(11,12,30,0.10)' }}>
+                <DataTable.Td align="right" style={{ fontWeight: 800, background: 'rgba(231,158,19,0.06)', borderBottom: '1px solid rgba(11,12,30,0.10)' }}>
                   {totalDebit.toFixed(2)}
                 </DataTable.Td>
-                <DataTable.Td align="right" style={{ fontWeight: 800, background: 'rgba(237,186,53,0.06)', borderBottom: '1px solid rgba(11,12,30,0.10)' }}>
+                <DataTable.Td align="right" style={{ fontWeight: 800, background: 'rgba(231,158,19,0.06)', borderBottom: '1px solid rgba(11,12,30,0.10)' }}>
                   {totalCredit.toFixed(2)}
                 </DataTable.Td>
               </tr>

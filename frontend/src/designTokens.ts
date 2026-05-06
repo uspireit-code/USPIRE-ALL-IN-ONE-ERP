@@ -1,7 +1,12 @@
 export const tokens = {
+  brandHex: {
+    navy: '#0b0b47',
+    gold: '#e79e13',
+  },
+
   colors: {
-    navy: '#0B0C1E',
-    gold: '#EDBA35',
+    navy: 'var(--uspire-navy)',
+    gold: 'var(--uspire-gold)',
     white: '#FCFCFC',
 
     text: {
@@ -20,15 +25,15 @@ export const tokens = {
     surface: {
       subtle: 'rgba(11,12,30,0.02)',
       hover: 'rgba(11,12,30,0.04)',
-      goldHover: 'rgba(237,186,53,0.08)',
+      goldHover: 'rgba(231,158,19,0.08)',
     },
 
     status: {
       successBg: 'rgba(16,185,129,0.10)',
       successBorder: 'rgba(16,185,129,0.22)',
 
-      warningBg: 'rgba(237,186,53,0.14)',
-      warningBorder: 'rgba(237,186,53,0.28)',
+      warningBg: 'rgba(231,158,19,0.14)',
+      warningBorder: 'rgba(231,158,19,0.28)',
 
       errorBg: 'rgba(239,68,68,0.10)',
       errorBorder: 'rgba(239,68,68,0.22)',
@@ -63,7 +68,7 @@ export const tokens = {
   },
 
   focusRing: {
-    ring: '0 0 0 4px rgba(237,186,53,0.18)',
-    borderColor: 'rgba(237,186,53,0.65)',
+    ring: '0 0 0 4px rgba(231, 158, 19, 0.18)',
+    borderColor: 'rgba(231, 158, 19, 0.55)',
   },
 } as const;

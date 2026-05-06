@@ -420,10 +420,19 @@ model PaymentAllocation {
   sourceType PaymentAllocationSourceType
   sourceId   String
   amount     Decimal                     @db.Decimal(18, 2)
+  departmentId String?
+  projectId    String?
+  fundId       String?
   payment    Payment                     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  department Department?                 @relation("PaymentAllocationDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  project    Project?                    @relation("PaymentAllocationProject", fields: [projectId], references: [id], onDelete: Restrict)
+  fund       Fund?                       @relation("PaymentAllocationFund", fields: [fundId], references: [id], onDelete: Restrict)
 
   @@index([paymentId])
   @@index([sourceType, sourceId])
+  @@index([departmentId])
+  @@index([projectId])
+  @@index([fundId])
 }
 
 enum ImprestRiskRating {
@@ -1202,11 +1211,20 @@ model SupplierInvoiceLine {
   accountId         String
   description       String
   amount            Decimal         @db.Decimal(18, 2)
+  departmentId      String?
+  projectId         String?
+  fundId            String?
   account           Account         @relation(fields: [accountId], references: [id])
   supplierInvoice   SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  department        Department?     @relation("SupplierInvoiceLineDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  project           Project?        @relation("SupplierInvoiceLineProject", fields: [projectId], references: [id], onDelete: Restrict)
+  fund              Fund?           @relation("SupplierInvoiceLineFund", fields: [fundId], references: [id], onDelete: Restrict)
 
   @@index([supplierInvoiceId])
   @@index([accountId])
+  @@index([departmentId])
+  @@index([projectId])
+  @@index([fundId])
 }
 
 enum PaymentProposalStatus {
@@ -1396,7 +1414,7 @@ model SupplierChangeLog {
 model Tenant {
   id                             String                          @id @default(uuid())
   name                           String                          @unique
-  status                         TenantStatus                    @default(ACTIVE)
+  status                         MasterStatus                    @default(ACTIVE)
   createdAt                      DateTime                        @default(now())
   logoUrl                        String?
   organisationName               String                          @default("USPIRE ERP")
@@ -1423,8 +1441,13 @@ model Tenant {
   timezone                       String?
   coaFrozen                      Boolean                         @default(false)
   coaLockedAt                    DateTime?
+  coaStructureFrozen             Boolean                         @default(false)
+  coaStructureFrozenAt           DateTime?
+  coaStructureFrozenByUserId     String?
+  coaStructureFreezeEffectiveDate DateTime?
   arControlAccountId             String?
   apControlAccountId             String?
+  supplierAdvanceAccountId       String?
   defaultBankClearingAccountId   String?
   unappliedReceiptsAccountId     String?
   allowSelfPosting               Boolean                         @default(false)
@@ -1437,6 +1460,7 @@ model Tenant {
   requiresFundOnInvoices         Boolean                         @default(false)
   requiresProjectOnInvoices      Boolean                         @default(false)
   cashClearingAccountId          String?
+  coaRootCategories              CoaRootCategory[]                @relation("TenantCoaRootCategories")
   accounts                       Account[]
   periods                        AccountingPeriod[]
   accountingPeriodChecklists     AccountingPeriodChecklist[]
@@ -1501,6 +1525,7 @@ model Tenant {
   imprestSettlementLines          ImprestSettlementLine[]
   arControlAccount               Account?                        @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
   apControlAccount               Account?                        @relation("TenantApControlAccount", fields: [apControlAccountId], references: [id], onDelete: Restrict)
+  supplierAdvanceAccount         Account?                        @relation("TenantSupplierAdvanceAccount", fields: [supplierAdvanceAccountId], references: [id], onDelete: Restrict)
   cashClearingAccount            Account?                        @relation("TenantCashClearingAccount", fields: [cashClearingAccountId], references: [id], onDelete: Restrict)
   defaultBankClearingAccount     Account?                        @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
   unappliedReceiptsAccount       Account?                        @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
@@ -1512,6 +1537,16 @@ model Tenant {
   delegations                    UserDelegation[]
   twoFactorChallenges             TwoFactorChallenge[]
   unlockRequests                 UnlockRequest[]
+  coaApprovalRequests            COAApprovalRequest[]
+  coaApprovalAttachments         COAApprovalAttachment[]
+  coaReclassifications           COAReclassification[]
+  coaImportBatches               CoaImportBatch[]
+  coaStructureChangeRequests     CoaStructureChangeRequest[]
+  coaStructureChangeRequestAttachments CoaStructureChangeRequestAttachment[]
+  coaStructuralChanges           CoaStructuralChange[]
+  ifrsNodes                      IfrsNode[]
+
+  coaStructureFrozenByUser       User?                           @relation("TenantCoaStructureFrozenBy", fields: [coaStructureFrozenByUserId], references: [id], onDelete: SetNull)
 
   @@index([status])
 }
@@ -1616,6 +1651,8 @@ model Project {
   funds                   Fund[]
   journalLines            JournalLine[]
   imprestFacilities       ImprestFacility[]
+  paymentAllocations      PaymentAllocation[]        @relation("PaymentAllocationProject")
+  supplierInvoiceLines    SupplierInvoiceLine[]      @relation("SupplierInvoiceLineProject")
   createdBy               User?                    @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
 
@@ -1651,6 +1688,8 @@ model Fund {
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
   journalLines            JournalLine[]
   imprestFacilities       ImprestFacility[]
+  paymentAllocations      PaymentAllocation[]      @relation("PaymentAllocationFund")
+  supplierInvoiceLines    SupplierInvoiceLine[]    @relation("SupplierInvoiceLineFund")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1683,6 +1722,8 @@ model Department {
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
   journalLines            JournalLine[]
   imprestFacilities       ImprestFacility[]
+  paymentAllocations      PaymentAllocation[]      @relation("PaymentAllocationDepartment")
+  supplierInvoiceLines    SupplierInvoiceLine[]    @relation("SupplierInvoiceLineDepartment")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1725,7 +1766,11 @@ model User {
   twoFactorLockUntil                      DateTime?
   twoFactorFailedAttempts                 Int                             @default(0)
   sessions                                UserSession[]
+  coaRootCategoriesCreated                 CoaRootCategory[]               @relation("CoaRootCategoryCreatedBy")
   accountsCreated                         Account[]                       @relation("AccountCreatedBy")
+  accountsApproved                        Account[]                       @relation("AccountApprovedBy")
+  accountsBlocked                         Account[]                       @relation("AccountBlockedBy")
+  accountsRetired                         Account[]                       @relation("AccountRetiredBy")
   bankStatementsCreated                   BankStatement[]                 @relation("BankStatementCreatedBy")
   bankStatementsReconciled                BankStatement[]                 @relation("BankStatementReconciledBy")
   bankStatementsLocked                    BankStatement[]                 @relation("BankStatementLockedBy")
@@ -1745,6 +1790,17 @@ model User {
   budgetsCreated                          Budget[]                        @relation("BudgetCreatedBy")
   budgetRevisions                         BudgetRevision[]                @relation("BudgetRevisionCreatedBy")
   coaCanonicalSnapshotsUploaded           CoaCanonicalSnapshot[]          @relation("CoaCanonicalSnapshotUploadedBy")
+  coaApprovalRequestsRequested            COAApprovalRequest[]            @relation("COAApprovalRequestedBy")
+  coaApprovalRequestsApproved             COAApprovalRequest[]            @relation("COAApprovalApprovedBy")
+  coaApprovalRequestsRejected             COAApprovalRequest[]            @relation("COAApprovalRejectedBy")
+  coaApprovalAttachmentsUploaded          COAApprovalAttachment[]         @relation("COAApprovalAttachmentUploadedBy")
+  coaImportBatchesCreated                 CoaImportBatch[]                @relation("CoaImportBatchCreatedBy")
+  coaImportBatchesSubmitted               CoaImportBatch[]                @relation("CoaImportBatchSubmittedBy")
+  coaImportBatchesApproved                CoaImportBatch[]                @relation("CoaImportBatchApprovedBy")
+  coaImportBatchesReviewed                CoaImportBatch[]                @relation("CoaImportBatchReviewedBy")
+  coaReclassificationsRequested           COAReclassification[]           @relation("COAReclassRequestedBy")
+  coaReclassificationsApproved            COAReclassification[]           @relation("COAReclassApprovedBy")
+  coaReclassificationsRejected            COAReclassification[]           @relation("COAReclassRejectedBy")
   customerCreditNotesApproved             CustomerCreditNote[]            @relation("CustomerCreditNoteApprovedBy")
   customerCreditNotesCreated              CustomerCreditNote[]            @relation("CustomerCreditNoteCreatedBy")
   customerCreditNotesPosted               CustomerCreditNote[]            @relation("CustomerCreditNotePostedBy")
@@ -1814,6 +1870,16 @@ model User {
   delegationsGiven                        UserDelegation[]                  @relation("DelegationDelegator")
   delegationsReceived                     UserDelegation[]                  @relation("DelegationDelegate")
   delegationsCreated                      UserDelegation[]                  @relation("DelegationCreatedBy")
+  ifrsNodesCreated                         IfrsNode[]                       @relation("IfrsNodeCreatedBy")
+  tenantsCoaStructureFrozenBy              Tenant[]                         @relation("TenantCoaStructureFrozenBy")
+  coaStructureChangeRequestsRequested      CoaStructureChangeRequest[]       @relation("CoaStructureChangeRequestedBy")
+  coaStructureChangeRequestsApproved       CoaStructureChangeRequest[]       @relation("CoaStructureChangeApprovedBy")
+  coaStructureChangeRequestsRejected       CoaStructureChangeRequest[]       @relation("CoaStructureChangeRejectedBy")
+  coaStructureChangeRequestsImplemented    CoaStructureChangeRequest[]       @relation("CoaStructureChangeImplementedBy")
+  coaStructureChangeRequestAttachmentsUploaded CoaStructureChangeRequestAttachment[] @relation("CoaStructureChangeRequestAttachmentUploadedBy")
+
+  coaStructuralChangesApproved             CoaStructuralChange[]              @relation("CoaStructuralChangeApprovedBy")
+  coaStructuralChangesImplemented          CoaStructuralChange[]              @relation("CoaStructuralChangeImplementedBy")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1995,11 +2061,23 @@ model Account {
   code                                    String
   name                                    String
   type                                    AccountType
+  status                                  AccountLifecycleStatus         @default(DRAFT)
   isActive                                Boolean                        @default(true)
   createdAt                               DateTime                       @default(now())
   isCashEquivalent                        Boolean                        @default(false)
+  importBatchId                           String?
   createdById                             String?
+  approvedAt                              DateTime?
+  approvedById                            String?
+  blockedAt                               DateTime?
+  blockedById                             String?
+  retiredAt                               DateTime?
+  retiredById                             String?
+  effectiveFrom                           DateTime?
+  effectiveTo                             DateTime?
+  changeReason                            String?
   ifrsMappingCode                         String?
+  ifrsNodeId                               String?
   isFrozen                                Boolean                        @default(false)
   isPosting                               Boolean                        @default(true)
   parentAccountId                         String?
@@ -2017,8 +2095,14 @@ model Account {
   subCategory                             String?
   requiresDepartment                      Boolean                        @default(false)
   createdBy                               User?                          @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy                              User?                          @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  blockedBy                               User?                          @relation("AccountBlockedBy", fields: [blockedById], references: [id], onDelete: Restrict)
+  retiredBy                               User?                          @relation("AccountRetiredBy", fields: [retiredById], references: [id], onDelete: Restrict)
+  importBatch                             CoaImportBatch?                @relation(fields: [importBatchId], references: [batchId], onDelete: SetNull)
+  ifrsNode                                IfrsNode?                      @relation(fields: [ifrsNodeId], references: [id], onDelete: Restrict)
   parentAccount                           Account?                       @relation("AccountHierarchy", fields: [parentAccountId], references: [id], onDelete: Restrict)
   childAccounts                           Account[]                      @relation("AccountHierarchy")
+  reclassificationsAsNewParent            COAReclassification[]           @relation("COAReclassNewParent")
   tenant                                  Tenant                         @relation(fields: [tenantId], references: [id])
   bankAccounts                            BankAccount[]
   imprestFacilitiesControl                ImprestFacility[]
@@ -2040,16 +2124,318 @@ model Account {
   taxRates                                TaxRate[]
   tenantsAsArControlAccount               Tenant[]                       @relation("TenantArControlAccount")
   tenantsAsApControlAccount               Tenant[]                       @relation("TenantApControlAccount")
+  tenantsAsSupplierAdvanceAccount         Tenant[]                       @relation("TenantSupplierAdvanceAccount")
   tenantsAsCashClearingAccount            Tenant[]                       @relation("TenantCashClearingAccount")
   tenantsAsDefaultBankClearingAccount     Tenant[]                       @relation("TenantDefaultBankClearingAccount")
   tenantsAsUnappliedReceiptsAccount       Tenant[]                       @relation("TenantUnappliedReceiptsAccount")
   tenantTaxConfigsAsInputVatAccount       TenantTaxConfig[]              @relation("TenantTaxConfigInputVatAccount")
   tenantTaxConfigsAsOutputVatAccount      TenantTaxConfig[]              @relation("TenantTaxConfigOutputVatAccount")
 
+  coaReclassifications                    COAReclassification[]
+
+  coaStructuralChanges                    CoaStructuralChange[]           @relation("CoaStructuralChangeAccount")
+  coaStructuralChangesAsOldParent         CoaStructuralChange[]           @relation("CoaStructuralChangeOldParent")
+  coaStructuralChangesAsNewParent         CoaStructuralChange[]           @relation("CoaStructuralChangeNewParent")
+
   @@unique([tenantId, code])
   @@index([tenantId])
+  @@index([tenantId, importBatchId])
   @@index([tenantId, parentAccountId])
+  @@index([tenantId, ifrsNodeId])
   @@index([createdById])
+  @@index([tenantId, status])
+}
+
+enum CoaImportBatchStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model CoaImportBatch {
+  id               String               @id @default(uuid())
+  batchId          String               @unique
+  tenantId         String
+  createdByUserId  String
+  createdAt        DateTime             @default(now())
+  status           CoaImportBatchStatus @default(DRAFT)
+  accountCount     Int                  @default(0)
+  sourceFileName   String?
+  submittedAt      DateTime?
+  submittedByUserId String?
+  approvedAt       DateTime?
+  approvedByUserId String?
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  rejectionReason  String?
+
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
+  createdByUser    User                 @relation("CoaImportBatchCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  submittedByUser  User?                @relation("CoaImportBatchSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  approvedByUser   User?                @relation("CoaImportBatchApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  reviewedByUser   User?                @relation("CoaImportBatchReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  accounts         Account[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([createdByUserId])
+  @@index([submittedByUserId])
+  @@index([approvedByUserId])
+  @@index([reviewedByUserId])
+}
+
+model COAApprovalRequest {
+  id            String                @id @default(uuid())
+  tenantId      String
+  requestType   COAApprovalRequestType
+  entityType    AuditEntityType
+  entityId      String
+  payloadJson   Json
+  requestedById String
+  requestedAt   DateTime              @default(now())
+  status        COAApprovalStatus     @default(PENDING)
+  approvedById  String?
+  approvedAt    DateTime?
+  rejectedById  String?
+  rejectedAt    DateTime?
+  rejectionReason String?
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  requestedBy   User                  @relation("COAApprovalRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy    User?                 @relation("COAApprovalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy    User?                 @relation("COAApprovalRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  attachments   COAApprovalAttachment[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, requestedAt])
+  @@index([requestedById])
+}
+
+model COAApprovalAttachment {
+  id           String            @id @default(uuid())
+  tenantId     String
+  requestId    String
+  filePath     String
+  fileName     String
+  uploadedById String
+  uploadedAt   DateTime          @default(now())
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  request      COAApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedBy   User              @relation("COAApprovalAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([tenantId, requestId])
+  @@index([uploadedById])
+}
+
+model CoaStructureChangeRequest {
+  id            String                     @id @default(uuid())
+  tenantId      String
+  requestType   CoaStructureChangeRequestType
+  description   String
+  beforeState   Json
+  proposedState Json
+  status        CoaStructureChangeRequestStatus @default(DRAFT)
+  requestedById String
+  requestedAt   DateTime                   @default(now())
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  rejectedById  String?
+  rejectedAt    DateTime?
+  rejectionReason String?
+  implementedById String?
+  implementedAt DateTime?
+
+  tenant        Tenant                     @relation(fields: [tenantId], references: [id])
+  requestedBy   User                       @relation("CoaStructureChangeRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy    User?                      @relation("CoaStructureChangeApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy    User?                      @relation("CoaStructureChangeRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  implementedBy User?                      @relation("CoaStructureChangeImplementedBy", fields: [implementedById], references: [id], onDelete: Restrict)
+  attachments   CoaStructureChangeRequestAttachment[]
+  structuralChanges CoaStructuralChange[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, requestedAt])
+  @@index([requestedById])
+  @@index([approvedById])
+  @@index([rejectedById])
+  @@index([implementedById])
+}
+
+model CoaStructuralChange {
+  id                    String                 @id @default(uuid())
+  tenantId              String
+  accountId             String
+  changeType            CoaStructuralChangeType
+
+  oldParentAccountId    String?
+  newParentAccountId    String?
+
+  oldIfrsNodeId         String?
+  newIfrsNodeId         String?
+
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+
+  reason                String
+
+  sourceChangeRequestId String
+
+  approvedByUserId      String
+  approvedAt            DateTime
+
+  implementedByUserId   String
+  implementedAt         DateTime
+
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id])
+  account               Account                @relation("CoaStructuralChangeAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  oldParentAccount      Account?               @relation("CoaStructuralChangeOldParent", fields: [oldParentAccountId], references: [id], onDelete: Restrict)
+  newParentAccount      Account?               @relation("CoaStructuralChangeNewParent", fields: [newParentAccountId], references: [id], onDelete: Restrict)
+  oldIfrsNode           IfrsNode?              @relation("CoaStructuralChangeOldIfrsNode", fields: [oldIfrsNodeId], references: [id], onDelete: Restrict)
+  newIfrsNode           IfrsNode?              @relation("CoaStructuralChangeNewIfrsNode", fields: [newIfrsNodeId], references: [id], onDelete: Restrict)
+  sourceChangeRequest   CoaStructureChangeRequest @relation(fields: [sourceChangeRequestId], references: [id], onDelete: Restrict)
+  approvedByUser        User                   @relation("CoaStructuralChangeApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  implementedByUser     User                   @relation("CoaStructuralChangeImplementedBy", fields: [implementedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([tenantId, accountId])
+  @@index([effectiveFrom])
+  @@index([isActive])
+}
+
+model CoaStructureChangeRequestAttachment {
+  id           String                  @id @default(uuid())
+  tenantId     String
+  requestId    String
+  filePath     String
+  fileName     String
+  uploadedById String
+  uploadedAt   DateTime                @default(now())
+
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id])
+  request      CoaStructureChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedBy   User                    @relation("CoaStructureChangeRequestAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([tenantId, requestId])
+  @@index([uploadedById])
+}
+
+model CoaRootCategory {
+  id             String     @id @default(uuid())
+  tenantId       String
+  code           String
+  name           String
+  accountType    AccountType
+  fsMappingLevel1 String?
+  fsMappingLevel2 String?
+  ifrsMappingCode String?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @default(now()) @updatedAt
+  createdById    String?
+
+  tenant         Tenant     @relation("TenantCoaRootCategories", fields: [tenantId], references: [id])
+  createdBy      User?      @relation("CoaRootCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([createdById])
+}
+
+model IfrsMappingMaster {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  label              String
+  statementType      String
+  section            String?
+  allowedAccountType String
+  displayOrder       Int      @default(0)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+enum IfrsStatement {
+  BS
+  PL
+  CF
+}
+
+model IfrsNode {
+  id         String        @id @default(cuid())
+  tenantId   String
+  code       String
+  name       String
+  statement  IfrsStatement
+  parentId   String?
+  level      Int?
+  sortOrder  Int           @default(0)
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  createdById String?
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent     IfrsNode?     @relation("IfrsNodeHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children   IfrsNode[]    @relation("IfrsNodeHierarchy")
+  createdBy  User?         @relation("IfrsNodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  accounts   Account[]
+
+  coaStructuralChangesAsOldIfrsNode CoaStructuralChange[] @relation("CoaStructuralChangeOldIfrsNode")
+  coaStructuralChangesAsNewIfrsNode CoaStructuralChange[] @relation("CoaStructuralChangeNewIfrsNode")
+
+  @@unique([tenantId, statement, name])
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, statement])
+  @@index([parentId])
+  @@index([createdById])
+}
+
+model COAReclassification {
+  id                 String                   @id @default(uuid())
+  tenantId           String
+  accountId          String
+  newParentAccountId String?
+  newIfrsMappingCode String?
+  newFsMappingLevel1 String?
+  newFsMappingLevel2 String?
+  effectiveStartDate DateTime
+  reason             String?
+  requestedById      String
+  requestedAt        DateTime                 @default(now())
+  status             COAReclassificationStatus @default(DRAFT)
+  approvedById       String?
+  approvedAt         DateTime?
+  rejectedById       String?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id])
+  account            Account                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  newParentAccount   Account?                 @relation("COAReclassNewParent", fields: [newParentAccountId], references: [id], onDelete: Restrict)
+  requestedBy        User                     @relation("COAReclassRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy         User?                    @relation("COAReclassApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy         User?                    @relation("COAReclassRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, status])
+  @@index([tenantId, effectiveStartDate])
+  @@index([requestedById])
 }
 
 model CoaCanonicalSnapshot {
@@ -2528,6 +2914,7 @@ enum PaymentStatus {
 
 enum PaymentAllocationSourceType {
   SUPPLIER_INVOICE
+  SUPPLIER_ADVANCE
   CUSTOMER_INVOICE
 }
 
@@ -2709,6 +3096,12 @@ enum AuditEventType {
   COA_CREATE
   COA_UPDATE
   COA_DEACTIVATE
+  COA_SUBMITTED
+  COA_APPROVED
+  COA_REJECTED
+  COA_STATUS_CHANGE_REQUESTED
+  COA_STATUS_CHANGE_APPROVED
+  COA_UPDATE_REQUESTED
   COA_FREEZE
   COA_UNFREEZE
   COA_HIERARCHY_CHANGE
@@ -2741,6 +3134,10 @@ enum AuditEventType {
   GL_JOURNAL_BUDGET_EVALUATED
   COA_IMPORTED
   COA_CLEANUP_EXECUTED
+  COA_RECLASS_CREATED
+  COA_RECLASS_SUBMITTED
+  COA_RECLASS_APPROVED
+  COA_RECLASS_REJECTED
   PERIOD_CREATED
   PERIOD_REOPENED
   PERIOD_CLOSED
@@ -2789,6 +3186,20 @@ enum AuditEventType {
   IMPREST_CASE_EVIDENCE_LINKED
   IMPREST_CASE_ISSUED
   IMPREST_CASE_SETTLED
+
+  COA_ROOT_CATEGORY_CREATED
+  COA_ROOT_CATEGORY_UPDATED
+  COA_ROOT_CATEGORY_DISABLED
+  COA_ROOT_CATEGORY_SETUP_DEFAULT
+
+  COA_STRUCTURE_FREEZE
+  COA_STRUCTURE_UNFREEZE
+  COA_STRUCTURE_CHANGE_REQUEST_CREATED
+  COA_STRUCTURE_CHANGE_REQUEST_SUBMITTED
+  COA_STRUCTURE_CHANGE_REQUEST_APPROVED
+  COA_STRUCTURE_CHANGE_REQUEST_REJECTED
+  COA_STRUCTURE_CHANGE_REQUEST_IMPLEMENTED
+  COA_STRUCTURE_CHANGE_BLOCKED
 }
 
 enum BudgetStatus {
@@ -2797,6 +3208,7 @@ enum BudgetStatus {
 }
 
 enum BudgetControlMode {
+  NONE
   WARN
   BLOCK
 }
@@ -2832,6 +3244,9 @@ enum AuditEntityType {
   ACCOUNT
   RECURRING_JOURNAL_TEMPLATE
   CHART_OF_ACCOUNTS
+  COA_APPROVAL_REQUEST
+  COA_RECLASSIFICATION
+  COA_STRUCTURE_CHANGE_REQUEST
   CUSTOMER_RECEIPT
   INVOICE_CATEGORY
   TAX_RATE
@@ -2842,6 +3257,60 @@ enum AuditEntityType {
   IMPREST_TYPE_POLICY
   IMPREST_FACILITY
   IMPREST_CASE
+}
+
+enum AccountLifecycleStatus {
+  DRAFT
+  ACTIVE
+  BLOCKED
+  RETIRED
+}
+
+enum COAApprovalRequestType {
+  CREATE_ACCOUNT
+  UPDATE_ACCOUNT
+  STATUS_CHANGE
+  RECLASSIFICATION
+  IMPORT_BATCH
+}
+
+enum COAApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum COAReclassificationStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CoaStructureChangeRequestType {
+  SEGMENT_DEFINITION
+  SEGMENT_ORDER
+  HIERARCHY_CHANGE
+  ADD_ACCOUNT
+  EFFECTIVE_DATED_RECLASSIFICATION
+  REPORTING_NODE_CHANGE
+  TEMPLATE_EXTENSION
+  ROOT_CATEGORY_MODIFICATION
+  OTHER
+}
+
+enum CoaStructuralChangeType {
+  HIERARCHY_RECLASSIFICATION
+  IFRS_RECLASSIFICATION
+}
+
+enum CoaStructureChangeRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  IMPLEMENTED
 }
 
 enum DisclosureNoteType {

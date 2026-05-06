@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tokens } from '../designTokens';
 import { listDepartments, listFunds, listLegalEntities, listProjects, type DepartmentLookup, type FundLookup, type GlAccountLookup, type LegalEntityLookup, type ProjectLookup } from '../services/gl';
+import { getSegmentVisibility, validateSegments } from '../finance/segments/segmentRequirements';
 
 export function AccountContextPanel(props: {
   open: boolean;
@@ -89,28 +90,38 @@ export function AccountContextPanel(props: {
   }, [effectiveOn, props.account, props.onProjectsLoaded, props.open, projects.length]);
 
   const selectedProject = projectId ? projectById.get(projectId) : null;
-  const fundVisible = Boolean(props.account?.requiresFund) || Boolean(selectedProject?.isRestricted);
+  const visibility = useMemo(() => {
+    return getSegmentVisibility({
+      account: props.account,
+      project: selectedProject,
+      legalEntityRequired: true,
+    });
+  }, [props.account, selectedProject]);
 
-  const departmentRequirement = useMemo(() => {
-    const r = props.account?.departmentRequirement;
-    if (r === 'REQUIRED' || r === 'OPTIONAL' || r === 'FORBIDDEN') return r;
-    return 'REQUIRED' as const;
-  }, [props.account?.departmentRequirement]);
-
-  const departmentVisible = departmentRequirement !== 'FORBIDDEN';
-  const departmentRequired = departmentRequirement === 'REQUIRED';
+  const segmentErrors = useMemo(() => {
+    return validateSegments({
+      visibility,
+      projectRestricted: Boolean(selectedProject?.isRestricted),
+      values: {
+        legalEntityId,
+        departmentId,
+        projectId,
+        fundId,
+      },
+    });
+  }, [departmentId, fundId, legalEntityId, projectId, visibility]);
 
   useEffect(() => {
     if (!props.open) return;
-    if (!departmentVisible) {
+    if (!visibility.departmentVisible) {
       if (departmentId !== null) setDepartmentId(null);
       if (departmentPicker) setDepartmentPicker('');
     }
-  }, [departmentId, departmentPicker, departmentVisible, props.open]);
+  }, [departmentId, departmentPicker, props.open, visibility.departmentVisible]);
 
   useEffect(() => {
     if (!props.open) return;
-    if (!fundVisible) {
+    if (!visibility.fundVisible) {
       setFunds([]);
       return;
     }
@@ -122,18 +133,16 @@ export function AccountContextPanel(props: {
     listFunds({ effectiveOn, projectId })
       .then((fs) => setFunds(Array.isArray(fs) ? fs : []))
       .catch(() => undefined);
-  }, [effectiveOn, fundVisible, projectId, props.open]);
-
-  const projectVisible = Boolean(props.account?.requiresProject);
+  }, [effectiveOn, projectId, props.open, visibility.fundVisible]);
 
   const applyDisabled = useMemo(() => {
     if (!props.account) return true;
-    if (!legalEntityId) return true;
-    if (departmentRequired && !departmentId) return true;
-    if (projectVisible && !projectId) return true;
-    if (fundVisible && !fundId) return true;
+    if (segmentErrors.legalEntity) return true;
+    if (segmentErrors.department) return true;
+    if (segmentErrors.project) return true;
+    if (segmentErrors.fund) return true;
     return false;
-  }, [departmentId, departmentRequired, fundId, fundVisible, legalEntityId, projectId, projectVisible, props.account]);
+  }, [props.account, segmentErrors.department, segmentErrors.fund, segmentErrors.legalEntity, segmentErrors.project]);
 
   useEffect(() => {
     if (!props.open) return;
@@ -256,9 +265,9 @@ export function AccountContextPanel(props: {
             </datalist>
           </label>
 
-          {departmentVisible ? (
+          {visibility.departmentVisible ? (
             <label style={{ display: 'grid', gap: 6 }}>
-              Department / Cost Centre{departmentRequired ? ' *' : ''}
+              Department / Cost Centre *
               <input
                 list="acp-departments"
                 value={
@@ -301,7 +310,7 @@ export function AccountContextPanel(props: {
             </label>
           ) : null}
 
-          {projectVisible ? (
+          {visibility.projectVisible ? (
             <label style={{ display: 'grid', gap: 6 }}>
               Project *
               <input
@@ -331,15 +340,11 @@ export function AccountContextPanel(props: {
                     setProjectPicker('');
                   }
                 }}
-                disabled={(!departmentVisible ? !legalEntityId : departmentRequired ? !departmentId : false) || loading}
+                disabled={(!legalEntityId || (visibility.departmentRequired ? !departmentId : false)) || loading}
                 placeholder={
-                  !departmentVisible
-                    ? !legalEntityId
-                      ? 'Select Legal Entity first…'
-                      : loading
-                        ? 'Loading…'
-                        : 'Search project…'
-                    : departmentRequired
+                  !legalEntityId
+                    ? 'Select Legal Entity first…'
+                    : visibility.departmentRequired
                       ? !departmentId
                         ? 'Select Department first…'
                         : loading
@@ -359,7 +364,7 @@ export function AccountContextPanel(props: {
             </label>
           ) : null}
 
-          {fundVisible ? (
+          {visibility.fundVisible ? (
             <label style={{ display: 'grid', gap: 6 }}>
               Fund *
               <input
@@ -416,16 +421,14 @@ export function AccountContextPanel(props: {
           <button
             onClick={() => {
               if (!props.account) return;
+              if (applyDisabled) return;
               if (!legalEntityId) return;
-              if (departmentRequired && !departmentId) return;
-              if (projectVisible && !projectId) return;
-              if (fundVisible && !fundId) return;
 
               props.onApply({
                 legalEntityId,
-                departmentId: departmentVisible ? departmentId : null,
-                projectId: projectVisible ? projectId : null,
-                fundId: fundVisible ? fundId : null,
+                departmentId: visibility.departmentVisible ? departmentId : null,
+                projectId: visibility.projectVisible ? projectId : null,
+                fundId: visibility.fundVisible ? fundId : null,
               });
             }}
             disabled={applyDisabled}

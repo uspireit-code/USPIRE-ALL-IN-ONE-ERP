@@ -9,6 +9,9 @@ import { GlModule } from '../gl/gl.module';
 import { ReportsModule } from '../reports/reports.module';
 import { CoaController } from './coa.controller';
 import { CoaService } from './coa.service';
+import { CoaNamingPolicyService } from './coa-naming-policy.service';
+import { CoaRootCategoriesController } from './coa-root-categories.controller';
+import { CoaRootCategoriesService } from './coa-root-categories.service';
 import { FinanceArCustomersController } from './ar/customers/customers.controller';
 import { FinanceArCustomersService } from './ar/customers/customers.service';
 import { FinanceArInvoicesController } from './ar/invoices/invoices.controller';
@@ -21,11 +24,23 @@ import { InvoiceCategoriesController } from './ar/invoice-categories/invoice-cat
 import { InvoiceCategoryService } from './ar/invoice-categories/invoice-category.service';
 import { FinanceTaxController } from './tax/tax.controller';
 import { FinanceTaxService } from './tax/tax.service';
+import { IfrsMappingController } from './ifrs-mapping.controller';
+import { IfrsMappingService } from './ifrs-mapping.service';
+import { IfrsNodesController } from './ifrs-nodes.controller';
+import { IfrsNodesService } from './ifrs-nodes.service';
+import { CoaStructureChangeRequestsController } from './coa-structure-change-requests.controller';
+import { CoaStructureChangeRequestsService } from './coa-structure-change-requests.service';
+import { CoaStructuralResolverService } from './coa-structural-resolver.service';
+import { CoaHealthService } from './coa-health.service';
 
 @Module({
   imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule, GlModule, ReportsModule],
   controllers: [
+    CoaRootCategoriesController,
     CoaController,
+    CoaStructureChangeRequestsController,
+    IfrsMappingController,
+    IfrsNodesController,
     FinanceArCustomersController,
     FinanceArInvoicesController,
     FinanceArCreditNotesController,
@@ -35,6 +50,13 @@ import { FinanceTaxService } from './tax/tax.service';
   ],
   providers: [
     CoaService,
+    CoaNamingPolicyService,
+    CoaRootCategoriesService,
+    CoaStructuralResolverService,
+    CoaHealthService,
+    CoaStructureChangeRequestsService,
+    IfrsMappingService,
+    IfrsNodesService,
     FinanceArCustomersService,
     FinanceArInvoicesService,
     FinanceArCreditNotesService,

@@ -21,6 +21,18 @@ export class CreateSupplierInvoiceLineDto {
 
   @Min(0)
   amount!: number;
+
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  fundId?: string;
 }
 
 export class CreateSupplierInvoiceDto {

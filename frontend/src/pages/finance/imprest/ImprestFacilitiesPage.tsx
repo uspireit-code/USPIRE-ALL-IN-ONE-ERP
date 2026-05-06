@@ -38,8 +38,8 @@ function StatusPill(props: { status: string }) {
   const s = (props.status ?? '').toUpperCase();
   const isActive = s === 'ACTIVE';
   const isSuspended = s === 'SUSPENDED';
-  const bg = isActive ? 'rgba(16,185,129,0.12)' : isSuspended ? 'rgba(237,186,53,0.14)' : 'rgba(239,68,68,0.10)';
-  const border = isActive ? 'rgba(16,185,129,0.25)' : isSuspended ? 'rgba(237,186,53,0.32)' : 'rgba(239,68,68,0.22)';
+  const bg = isActive ? 'rgba(16,185,129,0.12)' : isSuspended ? 'rgba(231,158,19,0.14)' : 'rgba(239,68,68,0.10)';
+  const border = isActive ? 'rgba(16,185,129,0.25)' : isSuspended ? 'rgba(231,158,19,0.32)' : 'rgba(239,68,68,0.22)';
   const text = isActive ? 'rgba(16,185,129,0.95)' : isSuspended ? 'rgba(154,52,18,0.95)' : 'rgba(239,68,68,0.85)';
 
   return (

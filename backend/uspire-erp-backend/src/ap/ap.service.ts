@@ -8,12 +8,14 @@ import { Inject } from '@nestjs/common';
 import type { Request } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { translatePrismaError } from '../common/prisma-error.util';
 import { assertCanPost } from '../periods/period-guard';
+import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -35,6 +37,7 @@ export class ApService {
   private readonly BILL_NUMBER_SEQUENCE_NAME = 'AP_BILL_NUMBER';
   constructor(
     private readonly prisma: PrismaService,
+    private readonly gl: GlService,
     private readonly reports: ReportsService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
@@ -1690,11 +1693,19 @@ export class ApService {
     return this.prisma.account.findMany({
       where: {
         tenantId: tenant.id,
-        isActive: true,
+        status: 'ACTIVE' as any,
         type: { in: ['EXPENSE', 'ASSET'] },
       },
       orderBy: [{ code: 'asc' }],
-      select: { id: true, code: true, name: true, type: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
     });
   }
 
@@ -1744,9 +1755,8 @@ export class ApService {
       where: {
         tenantId: tenant.id,
         id: { in: dto.lines.map((l) => l.accountId) },
-        isActive: true,
       },
-      select: { id: true, type: true },
+      select: { id: true, type: true, status: true, isActive: true },
     });
 
     const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
@@ -1754,6 +1764,30 @@ export class ApService {
     for (const line of dto.lines) {
       const a = accountMap.get(line.accountId);
       if (!a) {
+        throw new BadRequestException(
+          `Account not found or inactive: ${line.accountId}`,
+        );
+      }
+      const lifecycle = String((a as any).status ?? '').trim().toUpperCase();
+      if (lifecycle === 'DRAFT') {
+        throw new BadRequestException(
+          'Account is in Draft status and cannot be used for posting.',
+        );
+      }
+      if (lifecycle === 'BLOCKED') {
+        throw new BadRequestException(
+          'Account is blocked and cannot be used for posting.',
+        );
+      }
+      if (lifecycle === 'RETIRED') {
+        throw new BadRequestException(
+          'Account is retired and cannot be used for posting.',
+        );
+      }
+      if (lifecycle !== 'ACTIVE') {
+        throw new BadRequestException('Account is not active for posting.');
+      }
+      if (!(a as any).isActive) {
         throw new BadRequestException(
           `Account not found or inactive: ${line.accountId}`,
         );
@@ -1783,6 +1817,9 @@ export class ApService {
                 accountId: l.accountId,
                 description: l.description,
                 amount: l.amount,
+                departmentId: (l as any).departmentId ?? null,
+                projectId: (l as any).projectId ?? null,
+                fundId: (l as any).fundId ?? null,
               })),
             },
           },
@@ -1952,6 +1989,9 @@ export class ApService {
               accountId: l.accountId,
               description: l.description,
               amount: l.amount,
+              departmentId: (l as any).departmentId ?? null,
+              projectId: (l as any).projectId ?? null,
+              fundId: (l as any).fundId ?? null,
             })),
           },
         },
@@ -2315,20 +2355,40 @@ export class ApService {
           where: {
             tenantId: tenant.id,
             code: apOverrideCode,
+            status: 'ACTIVE' as any,
             isActive: true,
             type: 'LIABILITY',
           },
-          select: { id: true, code: true, name: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            status: true,
+            isActive: true,
+            isPostingAllowed: true,
+            isPosting: true,
+            isControlAccount: true,
+          } as any,
         })
       : apControlAccountId
         ? await this.prisma.account.findFirst({
             where: {
               tenantId: tenant.id,
               id: apControlAccountId,
+              status: 'ACTIVE' as any,
               isActive: true,
               type: 'LIABILITY',
             },
-            select: { id: true, code: true, name: true },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              status: true,
+              isActive: true,
+              isPostingAllowed: true,
+              isPosting: true,
+              isControlAccount: true,
+            } as any,
           })
         : null;
 
@@ -2339,6 +2399,11 @@ export class ApService {
           : 'AP control account is not configured. Please configure it in Settings before posting.',
       );
     }
+
+    validateAccountPostingEligibility(apAccount as any, {
+      allowControlAccount: true,
+      errorMode: 'BAD_REQUEST',
+    });
 
     const taxByAccountId = new Map<string, number>();
     for (const t of taxLines) {
@@ -2352,6 +2417,39 @@ export class ApService {
       taxByAccountId.set(accountId, this.round2(prev + Number(t.taxAmount)));
     }
 
+    const taxAccountIds = [...new Set([...taxByAccountId.keys()])].filter(Boolean);
+    if (taxAccountIds.length > 0) {
+      const taxAccounts = await this.prisma.account.findMany({
+        where: {
+          tenantId: tenant.id,
+          id: { in: taxAccountIds },
+        } as any,
+        select: {
+          id: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
+      });
+      const byId = new Map(taxAccounts.map((a) => [String((a as any).id), a] as const));
+      for (const id of taxAccountIds) {
+        const acct = byId.get(String(id));
+        if (!acct) {
+          throw new BadRequestException(
+            'Tax rate is missing a VAT control account (glAccountId). Configure the tax rate before posting.',
+          );
+        }
+        validateAccountPostingEligibility(acct as any, {
+          allowControlAccount: true,
+          errorMode: 'BAD_REQUEST',
+        });
+      }
+    }
+
+    const now = new Date();
+
     const journal = await this.prisma.journalEntry.create({
       data: {
         tenantId: tenant.id,
@@ -2359,22 +2457,28 @@ export class ApService {
         reference: `AP-INVOICE:${inv.id}`,
         description: `AP invoice posting: ${inv.id}`,
         createdById: inv.createdById,
+        status: 'REVIEWED',
+        reviewedById: inv.approvedById ?? user.id,
+        reviewedAt: now,
         lines: {
           create: [
             ...inv.lines.map((l) => ({
-              accountId: l.accountId,
-              debit: l.amount,
+              accountId: String((l as any).accountId),
+              debit: (l as any).amount,
               credit: 0,
+              departmentId: (l as any).departmentId ?? null,
+              projectId: (l as any).projectId ?? null,
+              fundId: (l as any).fundId ?? null,
             })),
             ...[...taxByAccountId.entries()]
               .filter(([, amt]) => amt !== 0)
               .map(([accountId, amt]) => ({
-                accountId,
+                accountId: String(accountId),
                 debit: amt,
                 credit: 0,
               })),
             {
-              accountId: apAccount.id,
+              accountId: String((apAccount as any).id),
               debit: 0,
               credit: inv.totalAmount,
             },
@@ -2382,24 +2486,16 @@ export class ApService {
         },
       },
       include: { lines: true },
-    });
+    } as any);
 
-    const postedJournal = await this.prisma.journalEntry.update({
-      where: { id: journal.id },
-      data: {
-        status: 'POSTED',
-        postedById: user.id,
-        postedAt: new Date(),
-      },
-      include: { lines: true },
-    });
+    const postedJournal = await this.gl.postJournal(req, journal.id);
 
     const updatedInvoice = await this.prisma.supplierInvoice.update({
       where: { id: inv.id },
       data: {
         status: 'POSTED',
         postedById: user.id,
-        postedAt: new Date(),
+        postedAt: now,
       },
       include: { supplier: true, lines: true },
     });

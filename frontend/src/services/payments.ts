@@ -12,9 +12,12 @@ export type BankAccount = {
 
 export type PaymentAllocation = {
   id: string;
-  sourceType: 'SUPPLIER_INVOICE' | 'CUSTOMER_INVOICE';
+  sourceType: 'SUPPLIER_INVOICE' | 'SUPPLIER_ADVANCE' | 'CUSTOMER_INVOICE';
   sourceId: string;
   amount: number;
+  departmentId?: string | null;
+  projectId?: string | null;
+  fundId?: string | null;
 };
 
 export type Payment = {
@@ -49,12 +52,48 @@ export async function createPayment(params: {
   amount: number;
   paymentDate: string;
   reference?: string;
-  allocations: Array<{ sourceType: 'SUPPLIER_INVOICE' | 'CUSTOMER_INVOICE'; sourceId: string; amount: number }>;
+  allocations: Array<{
+    sourceType: 'SUPPLIER_INVOICE' | 'SUPPLIER_ADVANCE' | 'CUSTOMER_INVOICE';
+    sourceId: string;
+    amount: number;
+    departmentId?: string;
+    projectId?: string;
+    fundId?: string;
+  }>;
 }) {
   return apiFetch<Payment>('/payments', {
     method: 'POST',
     body: JSON.stringify({
       type: params.type,
+      bankAccountId: params.bankAccountId,
+      amount: params.amount,
+      paymentDate: params.paymentDate,
+      reference: params.reference || undefined,
+      allocations: params.allocations,
+    }),
+  });
+}
+
+export async function updatePayment(
+  id: string,
+  params: {
+    bankAccountId: string;
+    amount: number;
+    paymentDate: string;
+    reference?: string;
+    allocations: Array<{
+      sourceType: 'SUPPLIER_INVOICE' | 'SUPPLIER_ADVANCE' | 'CUSTOMER_INVOICE';
+      sourceId: string;
+      amount: number;
+      departmentId?: string;
+      projectId?: string;
+      fundId?: string;
+    }>;
+  },
+) {
+  return apiFetch<Payment>(`/payments/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
       bankAccountId: params.bankAccountId,
       amount: params.amount,
       paymentDate: params.paymentDate,

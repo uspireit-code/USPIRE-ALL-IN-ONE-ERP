@@ -14,15 +14,22 @@ export function Button(props: {
   const variant = props.variant ?? 'secondary';
   const size = props.size ?? 'md';
 
-  const padding = size === 'sm' ? '8px 12px' : '10px 14px';
+  const padding = size === 'sm' ? '8px 12px' : '9px 14px';
   const fontSize = size === 'sm' ? 13 : 14;
+  const height = size === 'sm' ? 34 : 38;
 
   const base: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     borderRadius: tokens.radius.sm,
     padding,
     fontSize,
     fontWeight: 650,
     fontFamily: 'inherit',
+    height,
+    lineHeight: 1,
     cursor: props.disabled ? 'not-allowed' : 'pointer',
     transition: `transform ${tokens.transition.normal}, box-shadow ${tokens.transition.normal}, background-color ${tokens.transition.normal}, border-color ${tokens.transition.normal}, color ${tokens.transition.normal}, opacity ${tokens.transition.normal}`,
     boxShadow: 'none',
@@ -34,17 +41,17 @@ export function Button(props: {
     primary: {
       background: tokens.colors.navy,
       color: tokens.colors.text.inverse,
-      border: `1px solid ${tokens.colors.border.subtle}`,
+      border: '1px solid transparent',
     },
     secondary: {
-      background: tokens.colors.white,
+      background: 'transparent',
       color: tokens.colors.text.primary,
       border: `1px solid ${tokens.colors.border.default}`,
     },
     accent: {
-      background: tokens.colors.gold,
-      color: tokens.colors.navy,
-      border: `1px solid rgba(237,186,53,0.40)`,
+      background: tokens.colors.navy,
+      color: tokens.colors.text.inverse,
+      border: '1px solid transparent',
     },
     destructive: {
       background: 'rgba(239,68,68,0.10)',
@@ -61,24 +68,16 @@ export function Button(props: {
   const hoverByVariant: Record<string, React.CSSProperties> = {
     primary: {
       background: 'rgba(11,12,30,0.92)',
-      boxShadow: tokens.shadow.buttonHover,
-      transform: 'translateY(-1px)',
     },
     secondary: {
       background: tokens.colors.surface.subtle,
       border: `1px solid ${tokens.colors.border.strong}`,
-      boxShadow: tokens.shadow.buttonHover,
-      transform: 'translateY(-1px)',
     },
     accent: {
-      background: 'rgba(237,186,53,0.92)',
-      boxShadow: tokens.shadow.buttonHover,
-      transform: 'translateY(-1px)',
+      background: 'rgba(11,12,30,0.92)',
     },
     destructive: {
       background: 'rgba(239,68,68,0.14)',
-      boxShadow: tokens.shadow.buttonHover,
-      transform: 'translateY(-1px)',
     },
     ghost: {
       background: tokens.colors.surface.hover,

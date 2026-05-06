@@ -3,11 +3,10 @@ import { useAuth } from '../auth/AuthContext';
 import { PERMISSIONS } from '../auth/permission-catalog';
 import { PERMISSIONS as SECURITY_PERMISSIONS } from '@/security/permissionCatalog';
 import { Card } from '../components/Card';
+import { tokens } from '../designTokens';
 
 export function DashboardPage() {
   const { hasPermission } = useAuth();
-
-  const NAVY = '#020445';
 
   const cardBaseShadow = '0 1px 2px rgba(11,12,30,0.06), 0 10px 24px rgba(11,12,30,0.08)';
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
@@ -18,11 +17,11 @@ export function DashboardPage() {
     padding: '8px 10px',
     borderRadius: 10,
     textDecoration: 'none',
-    color: 'rgba(2,4,69,0.86)',
+    color: 'rgba(11,11,71,0.86)',
     fontSize: 13,
     fontWeight: 650,
     lineHeight: '18px',
-    border: '1px solid rgba(2,4,69,0.10)',
+    border: '1px solid rgba(11,11,71,0.10)',
     background: 'rgba(255,255,255,1)',
     transition: 'transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease, color 220ms ease',
   };
@@ -171,20 +170,15 @@ export function DashboardPage() {
           border: '1px solid rgba(11,12,30,0.06)',
         }}
       >
-        <div style={{ fontSize: 26, fontWeight: 750, lineHeight: '32px', color: '#0B0C1E' }}>Dashboard</div>
+        <div style={{ fontSize: 26, fontWeight: 750, lineHeight: '32px', color: tokens.colors.navy }}>Dashboard</div>
         <div style={{ marginTop: 10, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>
           Quick access to your modules based on your assigned roles and permissions.
         </div>
       </div>
 
       <div
-        style={{
-          marginTop: 16,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 16,
-          alignItems: 'stretch',
-        }}
+        className="cardsGrid"
+        style={{ marginTop: 16 }}
       >
         {visibleSections.map((section) => (
           <Card
@@ -192,8 +186,8 @@ export function DashboardPage() {
             interactive
             baseShadow={cardBaseShadow}
             hoverShadow={cardHoverShadow}
-            baseBorderColor="rgba(2,4,69,0.08)"
-            hoverBorderColor={`rgba(237,186,53,0.45)`}
+            baseBorderColor={tokens.colors.border.subtle}
+            hoverBorderColor={`rgba(231,158,19,0.45)`}
             style={{
               background: '#FFFFFF',
               borderRadius: 16,
@@ -206,15 +200,15 @@ export function DashboardPage() {
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(2,4,69,0.06)', color: NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(11,11,71,0.06)', color: tokens.colors.navy, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {section.icon}
                 </div>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 750, color: NAVY, lineHeight: '22px' }}>{section.title}</div>
+                  <div style={{ fontSize: 16, fontWeight: 750, color: tokens.colors.navy, lineHeight: '22px' }}>{section.title}</div>
                   <div style={{ marginTop: 6, fontSize: 13, lineHeight: '18px', color: 'rgba(11,12,30,0.62)' }}>{section.description}</div>
                 </div>
               </div>
-              <div style={{ width: 8, height: 8, borderRadius: 999, background: 'rgba(237,186,53,0.0)' }} />
+              <div style={{ width: 8, height: 8, borderRadius: 999, background: 'rgba(231,158,19,0.0)' }} />
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 2 }}>
@@ -224,16 +218,16 @@ export function DashboardPage() {
                   to={m.to}
                   style={linkStyle}
                   onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                    e.currentTarget.style.borderColor = `rgba(237,186,53,0.55)`;
+                    e.currentTarget.style.borderColor = `rgba(231,158,19,0.55)`;
                     e.currentTarget.style.boxShadow = '0 1px 2px rgba(11,12,30,0.06)';
                     e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.color = NAVY;
+                    e.currentTarget.style.color = String(tokens.colors.navy);
                   }}
                   onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                    e.currentTarget.style.borderColor = 'rgba(2,4,69,0.10)';
+                    e.currentTarget.style.borderColor = 'rgba(11,11,71,0.10)';
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.transform = 'translateY(0px)';
-                    e.currentTarget.style.color = 'rgba(2,4,69,0.86)';
+                    e.currentTarget.style.color = 'rgba(11,11,71,0.86)';
                   }}
                 >
                   {m.label}

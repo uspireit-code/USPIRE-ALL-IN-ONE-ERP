@@ -7,11 +7,12 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { GlService } from '../../../gl/gl.service';
 import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import { writeAuditEventWithPrisma } from '../../../audit/audit-writer';
+import { validateAccountPostingEligibility } from '../../common/account-posting-eligibility';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
-import { GlService } from '../../../gl/gl.service';
 import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
 import { ReportExportService } from '../../../reports/report-export.service';
 import type {
@@ -502,14 +503,27 @@ export class FinanceArRefundsService {
           where: {
             tenantId: params.tenantId,
             id: ba.glAccountId,
+            status: 'ACTIVE' as any,
             isActive: true,
             type: 'ASSET',
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            isActive: true,
+            isPostingAllowed: true,
+            isPosting: true,
+            isControlAccount: true,
+          },
         });
         if (!bankGl) {
           throw new BadRequestException('Bank GL account not found or invalid');
         }
+
+        validateAccountPostingEligibility(bankGl as any, {
+          allowControlAccount: true,
+          errorMode: 'BAD_REQUEST',
+        });
 
         return bankGl.id;
       }
@@ -532,16 +546,29 @@ export class FinanceArRefundsService {
       where: {
         tenantId: params.tenantId,
         id: cashClearingAccountId,
+        status: 'ACTIVE' as any,
         isActive: true,
         type: 'ASSET',
       },
-      select: { id: true },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+      },
     });
     if (!cashAccount) {
       throw new BadRequestException(
         'Configured cash clearing GL account not found or invalid',
       );
     }
+
+    validateAccountPostingEligibility(cashAccount as any, {
+      allowControlAccount: true,
+      errorMode: 'BAD_REQUEST',
+    });
 
     return cashAccount.id;
   }
@@ -704,16 +731,29 @@ export class FinanceArRefundsService {
       where: {
         tenantId: tenant.id,
         id: refundClearingAccountId,
+        status: 'ACTIVE' as any,
         isActive: true,
         type: 'ASSET',
       },
-      select: { id: true },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+      },
     });
     if (!refundClearingAccount) {
       throw new BadRequestException(
         'Configured refund clearing GL account not found or invalid',
       );
     }
+
+    validateAccountPostingEligibility(refundClearingAccount as any, {
+      allowControlAccount: true,
+      errorMode: 'BAD_REQUEST',
+    });
 
     const paymentAccountId = await this.resolveClearingAccountId({
       tenantId: tenant.id,

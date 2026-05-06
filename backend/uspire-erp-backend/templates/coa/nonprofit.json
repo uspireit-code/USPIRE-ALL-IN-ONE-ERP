@@ -1,0 +1,31 @@
+[
+  {"accountCode":"10000","accountName":"Assets","accountType":"ASSET","parentCode":"","normalBalance":"DEBIT","ifrsNodeName":"","description":"Non-posting category"},
+  {"accountCode":"20000","accountName":"Liabilities","accountType":"LIABILITY","parentCode":"","normalBalance":"CREDIT","ifrsNodeName":"","description":"Non-posting category"},
+  {"accountCode":"30000","accountName":"Equity","accountType":"EQUITY","parentCode":"","normalBalance":"CREDIT","ifrsNodeName":"","description":"Non-posting category"},
+  {"accountCode":"40000","accountName":"Revenue","accountType":"INCOME","parentCode":"","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":"Non-posting category"},
+  {"accountCode":"50000","accountName":"Cost of Sales","accountType":"EXPENSE","parentCode":"","normalBalance":"DEBIT","ifrsNodeName":"Cost of Sales","description":"Non-posting category"},
+  {"accountCode":"60000","accountName":"Operating Expenses","accountType":"EXPENSE","parentCode":"","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":"Non-posting category"},
+
+  {"accountCode":"11000","accountName":"Current Assets","accountType":"ASSET","parentCode":"10000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11100","accountName":"Cash and Bank","accountType":"ASSET","parentCode":"11000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11200","accountName":"Grants Receivable","accountType":"ASSET","parentCode":"11000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"11300","accountName":"Prepaid Expenses","accountType":"ASSET","parentCode":"11000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+
+  {"accountCode":"15000","accountName":"Non-current Assets","accountType":"ASSET","parentCode":"10000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"15100","accountName":"Property and Equipment","accountType":"ASSET","parentCode":"15000","normalBalance":"DEBIT","ifrsNodeName":"","description":""},
+  {"accountCode":"15200","accountName":"Accumulated Depreciation - Property and Equipment","accountType":"ASSET","parentCode":"15000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+
+  {"accountCode":"21000","accountName":"Current Liabilities","accountType":"LIABILITY","parentCode":"20000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+  {"accountCode":"21100","accountName":"Accounts Payable","accountType":"LIABILITY","parentCode":"21000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+  {"accountCode":"21200","accountName":"Accrued Expenses","accountType":"LIABILITY","parentCode":"21000","normalBalance":"CREDIT","ifrsNodeName":"","description":""},
+
+  {"accountCode":"40100","accountName":"Donations","accountType":"INCOME","parentCode":"40000","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":"Donations received"},
+  {"accountCode":"40200","accountName":"Grants Income","accountType":"INCOME","parentCode":"40000","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":""},
+  {"accountCode":"40300","accountName":"Fundraising Income","accountType":"INCOME","parentCode":"40000","normalBalance":"CREDIT","ifrsNodeName":"Revenue","description":""},
+
+  {"accountCode":"60100","accountName":"Programme Costs","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":"Programme expenditure"},
+  {"accountCode":"60200","accountName":"Admin Salaries","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""},
+  {"accountCode":"60300","accountName":"Office Rent","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""},
+  {"accountCode":"60400","accountName":"Utilities","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""},
+  {"accountCode":"60500","accountName":"Fundraising Costs","accountType":"EXPENSE","parentCode":"60000","normalBalance":"DEBIT","ifrsNodeName":"Operating Expenses","description":""}
+]

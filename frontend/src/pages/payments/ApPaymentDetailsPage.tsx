@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '@/security/permissionCatalog';
 import type { Payment } from '../../services/payments';
-import { approvePayment, listPayments, postPayment } from '../../services/payments';
+import { approvePayment, listPayments, postPayment, updatePayment } from '../../services/payments';
 import { listInvoices as listApInvoices, type SupplierInvoice } from '../../services/ap';
+import { ApPaymentForm } from './ApPaymentForm';
 
 function formatMoney(n: number) {
   return Number(n).toFixed(2);
@@ -23,6 +24,7 @@ export function ApPaymentDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -43,6 +45,10 @@ export function ApPaymentDetailsPage() {
         const first = p.allocations[0];
         const inv = first ? byId.get(first.sourceId) : undefined;
         setSupplierName(inv?.supplier?.name ?? null);
+
+        if ((p?.status ?? '') !== 'DRAFT') {
+          setEditing(false);
+        }
       })
       .catch((err: any) => {
         const msg = err?.body?.message ?? err?.body?.error ?? 'Failed to load payment';
@@ -65,6 +71,10 @@ export function ApPaymentDetailsPage() {
       post: Boolean(payment) && status === 'APPROVED' && canPost,
     };
   }, [canApprove, canPost, payment]);
+
+  const canEdit = useMemo(() => {
+    return Boolean(payment) && payment?.status === 'DRAFT' && hasPermission(PERMISSIONS.PAYMENT.CREATE);
+  }, [hasPermission, payment]);
 
   async function runAction(kind: 'approve' | 'post') {
     if (!payment) return;
@@ -96,6 +106,31 @@ export function ApPaymentDetailsPage() {
   if (error) return <div style={{ color: 'crimson' }}>{error}</div>;
   if (!payment) return <div style={{ color: 'crimson' }}>Payment not found</div>;
 
+  if (editing && canEdit) {
+    return (
+      <ApPaymentForm
+        title="Edit Supplier Payment"
+        submitLabel="Save Changes"
+        initialPayment={payment}
+        onSubmit={async (params) => {
+          if (!id) throw new Error('Missing payment id');
+          return updatePayment(id, {
+            bankAccountId: params.bankAccountId,
+            amount: params.amount,
+            paymentDate: params.paymentDate,
+            reference: params.reference,
+            allocations: params.allocations,
+          });
+        }}
+        onSubmitted={(p) => {
+          setPayment(p);
+          setEditing(false);
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -122,6 +157,11 @@ export function ApPaymentDetailsPage() {
       </div>
 
       <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+        {canEdit ? (
+          <button onClick={() => setEditing(true)} disabled={acting}>
+            Edit
+          </button>
+        ) : null}
         <button onClick={() => runAction('approve')} disabled={!allowed.approve || acting}>
           Submit/Approve
         </button>

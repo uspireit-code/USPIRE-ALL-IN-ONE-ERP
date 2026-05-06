@@ -9,11 +9,11 @@ import { getSettingsRoleDetails, listSettingsRolesOverview } from '../../service
 function Badge(props: { label: string; tone: 'neutral' | 'info' | 'warning' }) {
   const bg =
     props.tone === 'warning'
-      ? 'rgba(237,186,53,0.18)'
+      ? 'rgba(231,158,19,0.18)'
       : props.tone === 'info'
-        ? 'rgba(2,4,69,0.08)'
+        ? 'rgba(11,11,71,0.08)'
         : 'rgba(11,12,30,0.06)';
-  const fg = props.tone === 'warning' ? '#6C4A00' : '#0B0C1E';
+  const fg = props.tone === 'warning' ? '#6C4A00' : tokens.colors.navy;
 
   return (
     <span
@@ -129,7 +129,7 @@ export function SettingsRolesPage() {
       >
         <div style={{ background: '#fff', border: '1px solid rgba(11,12,30,0.08)', borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ padding: 14, borderBottom: '1px solid rgba(11,12,30,0.06)' }}>
-            <div style={{ fontSize: 13, fontWeight: 750, color: '#0B0C1E' }}>Roles</div>
+            <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.navy }}>Roles</div>
             <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(11,12,30,0.58)', lineHeight: '16px' }}>Click a role to see what it can do.</div>
           </div>
 
@@ -149,14 +149,14 @@ export function SettingsRolesPage() {
                       cursor: 'pointer',
                       borderRadius: 12,
                       padding: 12,
-                      border: active ? '1px solid rgba(2,4,69,0.26)' : '1px solid rgba(11,12,30,0.06)',
-                      background: active ? 'rgba(2,4,69,0.04)' : '#fff',
+                      border: active ? '1px solid rgba(11,11,71,0.26)' : '1px solid rgba(11,12,30,0.06)',
+                      background: active ? 'rgba(11,11,71,0.04)' : '#fff',
                       marginBottom: 8,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 750, color: '#0B0C1E' }}>{r.name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 750, color: tokens.colors.navy }}>{r.name}</div>
                         <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(11,12,30,0.58)', lineHeight: '16px' }}>{r.description || '—'}</div>
                       </div>
                     </div>
@@ -182,7 +182,7 @@ export function SettingsRolesPage() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#0B0C1E' }}>{details.name}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: tokens.colors.navy }}>{details.name}</div>
                   <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(11,12,30,0.62)', lineHeight: '18px' }}>{details.description || '—'}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -193,21 +193,21 @@ export function SettingsRolesPage() {
               </div>
 
               <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: 'rgba(11,12,30,0.02)', border: '1px solid rgba(11,12,30,0.06)' }}>
-                <div style={{ fontSize: 13, fontWeight: 750, color: '#0B0C1E' }}>Role Overview</div>
+                <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.navy }}>Role Overview</div>
                 <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '160px 1fr', rowGap: 8, columnGap: 12, fontSize: 13 }}>
                   <div style={{ color: 'rgba(11,12,30,0.62)' }}>Role name</div>
-                  <div style={{ color: '#0B0C1E', fontWeight: 650 }}>{details.name}</div>
+                  <div style={{ color: tokens.colors.navy, fontWeight: 650 }}>{details.name}</div>
 
                   <div style={{ color: 'rgba(11,12,30,0.62)' }}>Description</div>
-                  <div style={{ color: '#0B0C1E' }}>{details.description || '—'}</div>
+                  <div style={{ color: tokens.colors.navy }}>{details.description || '—'}</div>
 
                   <div style={{ color: 'rgba(11,12,30,0.62)' }}>Intended users</div>
-                  <div style={{ color: '#0B0C1E' }}>{details.intendedUsers || '—'}</div>
+                  <div style={{ color: tokens.colors.navy }}>{details.intendedUsers || '—'}</div>
                 </div>
               </div>
 
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 750, color: '#0B0C1E' }}>Permissions Breakdown (read-only)</div>
+                <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.navy }}>Permissions Breakdown (read-only)</div>
                 <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(11,12,30,0.58)', lineHeight: '16px' }}>
                   Permissions are shown for understanding only. Changes are controlled and will be introduced in a later step.
                 </div>
@@ -215,13 +215,13 @@ export function SettingsRolesPage() {
                 <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
                   {details.permissions.map((group) => (
                     <div key={group.module} style={{ border: '1px solid rgba(11,12,30,0.06)', borderRadius: 14, padding: 12 }}>
-                      <div style={{ fontSize: 13, fontWeight: 750, color: '#0B0C1E' }}>{group.module}</div>
+                      <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.navy }}>{group.module}</div>
                       <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
                         {group.items.map((p) => (
                           <div key={`${group.module}-${p.label}`} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                             <CheckIcon allowed={p.allowed} />
                             <div>
-                              <div style={{ fontSize: 13, color: '#0B0C1E', fontWeight: 650 }}>{p.label}</div>
+                              <div style={{ fontSize: 13, color: tokens.colors.navy, fontWeight: 650 }}>{p.label}</div>
                               <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(11,12,30,0.58)', lineHeight: '16px' }}>{p.explanation}</div>
                             </div>
                           </div>
@@ -233,7 +233,7 @@ export function SettingsRolesPage() {
               </div>
 
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 750, color: '#0B0C1E' }}>Control Rules</div>
+                <div style={{ fontSize: 13, fontWeight: 750, color: tokens.colors.navy }}>Control Rules</div>
                 <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(11,12,30,0.58)', lineHeight: '16px' }}>
                   These rules exist to prevent a single person from creating and approving the same work, and to protect sensitive controls.
                 </div>
@@ -248,7 +248,7 @@ export function SettingsRolesPage() {
                           <span aria-hidden style={{ width: 18, display: 'inline-flex', justifyContent: 'center', color: 'rgba(11,12,30,0.5)' }}>
                             •
                           </span>
-                          <div style={{ fontSize: 13, color: '#0B0C1E', lineHeight: '18px' }}>{r}</div>
+                          <div style={{ fontSize: 13, color: tokens.colors.navy, lineHeight: '18px' }}>{r}</div>
                         </div>
                       ))}
                     </div>

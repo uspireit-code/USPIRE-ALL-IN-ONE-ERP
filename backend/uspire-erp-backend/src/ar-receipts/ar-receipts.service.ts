@@ -7,8 +7,12 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertCanPost } from '../periods/period-guard';
+import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
+import { requirePermission } from '../rbac/finance-authz.helpers';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
+import { assertCanPost } from '../periods/period-guard';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
 import { SetReceiptAllocationsDto } from './dto/set-receipt-allocations.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
@@ -20,7 +24,10 @@ export class ArReceiptsService {
   private readonly RECEIPT_NUMBER_SEQUENCE_NAME = 'AR_RECEIPT_NUMBER';
   private readonly OPENING_PERIOD_NAME = 'Opening Balances';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gl: GlService,
+  ) {}
 
   private round2(n: number) {
     return Math.round(n * 100) / 100;
@@ -1466,19 +1473,35 @@ export class ArReceiptsService {
         where: {
           tenantId: tenant.id,
           id: bankClearingAccountId,
+          status: 'ACTIVE' as any,
           isActive: true,
           type: 'ASSET',
         },
-        select: { id: true },
+        select: {
+          id: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
       }),
       this.prisma.account.findFirst({
         where: {
           tenantId: tenant.id,
           id: arControlAccountId,
+          status: 'ACTIVE' as any,
           isActive: true,
           type: 'ASSET',
         },
-        select: { id: true },
+        select: {
+          id: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
       }),
     ]);
 
@@ -1492,6 +1515,15 @@ export class ArReceiptsService {
         'Configured AR control GL account not found or invalid',
       );
     }
+
+    validateAccountPostingEligibility(bankAccount as any, {
+      allowControlAccount: true,
+      errorMode: 'BAD_REQUEST',
+    });
+    validateAccountPostingEligibility(arAccount as any, {
+      allowControlAccount: true,
+      errorMode: 'BAD_REQUEST',
+    });
 
     const amount = header.amount;
 
@@ -1519,15 +1551,30 @@ export class ArReceiptsService {
             where: {
               tenantId: tenant.id,
               id: unappliedReceiptsAccountId as string,
+              status: 'ACTIVE' as any,
               isActive: true,
             },
-            select: { id: true },
+            select: {
+              id: true,
+              status: true,
+              isActive: true,
+              isPostingAllowed: true,
+              isPosting: true,
+              isControlAccount: true,
+            },
           })
         : null;
     if (unappliedTotal > 0 && !unappliedAccount) {
       throw new BadRequestException(
         'Configured unapplied receipts GL account not found or inactive',
       );
+    }
+
+    if (unappliedTotal > 0) {
+      validateAccountPostingEligibility(unappliedAccount as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
     }
 
     const posted = await this.prisma.$transaction(async (tx) => {
@@ -1554,13 +1601,25 @@ export class ArReceiptsService {
         select: { id: true, status: true },
       });
       if (existingJournal) {
-        if (existingJournal.status !== 'POSTED') {
+        const existingStatus = String(existingJournal.status);
+        if (existingStatus !== 'POSTED' && existingStatus !== 'REVIEWED') {
           throw new ConflictException({
-            error: 'Existing receipt journal is not POSTED; cannot continue',
+            error: 'Existing receipt journal is not in a postable state; cannot continue',
             journalId: existingJournal.id,
             status: existingJournal.status,
           });
         }
+
+        const postedJournalId =
+          existingStatus === 'POSTED'
+            ? existingJournal.id
+            : (
+                await this.gl.postJournalInTx({
+                  tx,
+                  req,
+                  id: existingJournal.id,
+                })
+              ).id;
 
         await (tx as any).customerReceipt.update({
           where: { id },
@@ -1569,11 +1628,11 @@ export class ArReceiptsService {
             postedById: user.id,
             postedByUserId: user.id,
             postedAt: now,
-            glJournalId: existingJournal.id,
+            glJournalId: postedJournalId,
           },
         });
 
-        return { receiptId: id, glJournalId: existingJournal.id };
+        return { receiptId: id, glJournalId: postedJournalId };
       }
 
       const invoiceIds = [...new Set((draftLines ?? []).map((l: any) => l.invoiceId))];
@@ -1643,6 +1702,9 @@ export class ArReceiptsService {
           reference: `AR-RECEIPT:${id}`,
           description: `AR receipt posting: ${receiptNumber || id}`,
           createdById: existing.createdById,
+          status: 'REVIEWED',
+          reviewedById: user.id,
+          reviewedAt: now,
           lines: {
             create: [
               {
@@ -1695,14 +1757,10 @@ export class ArReceiptsService {
         include: { lines: true },
       });
 
-      const postedJournal = await tx.journalEntry.update({
-        where: { id: journal.id },
-        data: {
-          status: 'POSTED',
-          postedById: user.id,
-          postedAt: now,
-        } as any,
-        select: { id: true },
+      const postedJournal = await this.gl.postJournalInTx({
+        tx,
+        req,
+        id: journal.id,
       });
 
       await (tx as any).customerReceipt.update({

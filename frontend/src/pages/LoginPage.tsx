@@ -368,7 +368,7 @@ export function LoginPage() {
       <div style={{ marginTop: 2 }}>
         {phase === 'LOGIN' ? (
           <>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Sign In</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: tokens.colors.navy }}>Sign In</div>
             <form noValidate onSubmit={onSubmitLogin} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {showTenantField ? (
                 <div>
@@ -442,7 +442,7 @@ export function LoginPage() {
                     touched={touched.password}
                     error={fieldErrors.password}
                     autoComplete="off"
-                    style={{ background: 'rgba(2,4,69,0.02)' }}
+                    style={{ background: 'rgba(11,11,71,0.02)' }}
                     rightAdornment={
                       <button
                         type="button"
@@ -465,7 +465,7 @@ export function LoginPage() {
               <Button
                 type="submit"
                 disabled={loading}
-                variant="accent"
+                variant="primary"
                 style={{
                   width: '70%',
                   justifyContent: 'center',
@@ -546,7 +546,7 @@ export function LoginPage() {
           </>
         ) : (
           <>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Verify</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: tokens.colors.navy }}>Verify</div>
             <form noValidate onSubmit={onSubmit2fa} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {showTenantField ? (
                 <div>
@@ -602,7 +602,7 @@ export function LoginPage() {
 
               {errorBox}
 
-              <Button type="submit" disabled={loading} variant="accent" style={{ width: '100%', justifyContent: 'center' }}>
+              <Button type="submit" disabled={loading} variant="primary" style={{ width: '100%', justifyContent: 'center' }}>
                 {loading ? 'Verifying…' : 'Verify'}
               </Button>
 

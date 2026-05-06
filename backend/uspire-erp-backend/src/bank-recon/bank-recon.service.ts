@@ -7,8 +7,11 @@ import {
 import type { Request } from 'express';
 import { AuditEntityType, AuditEventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
+import { requirePermission } from '../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
 import type {
   AddBankStatementLinesDto,
   CreateAdjustmentJournalDto,
@@ -22,7 +25,10 @@ import type {
 export class BankReconService {
   private readonly JOURNAL_NUMBER_SEQUENCE_NAME = 'JOURNAL_ENTRY';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gl: GlService,
+  ) {}
 
   private ensureTenant(req: Request) {
     const tenant = req.tenant;
@@ -928,28 +934,55 @@ export class BankReconService {
         where: {
           tenantId: tenant.id,
           id: line.statement.bankAccount.glAccountId,
+          status: 'ACTIVE' as any,
           isActive: true,
           type: 'ASSET',
         },
-        select: { id: true },
+        select: {
+          id: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
       });
       if (!bankGlAccount) {
         throw new BadRequestException('Bank GL account not found or invalid');
       }
 
+      validateAccountPostingEligibility(bankGlAccount as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
+
       const glAccount = await tx.account.findFirst({
         where: {
           tenantId: tenant.id,
           id: dto.glAccountId,
+          status: 'ACTIVE' as any,
           isActive: true,
           isPostingAllowed: true,
           type: classification === 'BANK_CHARGE' ? 'EXPENSE' : 'INCOME',
         },
-        select: { id: true, type: true },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
       });
       if (!glAccount) {
         throw new BadRequestException('GL account must exist, be active, postable, and of the correct type');
       }
+
+      validateAccountPostingEligibility(glAccount as any, {
+        allowControlAccount: false,
+        errorMode: 'BAD_REQUEST',
+      });
 
       const legalEntity = await tx.legalEntity.findFirst({
         where: {
@@ -976,28 +1009,6 @@ export class BankReconService {
       const memo = dto.memo ? String(dto.memo).trim() : '';
       const journalDescription = memo ? `${descriptionBase} - ${memo}` : descriptionBase;
 
-      const counter = await (tx as any).tenantSequenceCounter.upsert({
-        where: {
-          tenantId_name: {
-            tenantId: tenant.id,
-            name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
-          },
-        },
-        create: {
-          tenantId: tenant.id,
-          name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
-          value: 0,
-        },
-        update: {},
-        select: { id: true },
-      });
-
-      const bumped = await (tx as any).tenantSequenceCounter.update({
-        where: { id: counter.id },
-        data: { value: { increment: 1 } },
-        select: { value: true },
-      });
-
       const bankAccountId = line.statement.bankAccountId;
 
       const debitLine =
@@ -1014,16 +1025,14 @@ export class BankReconService {
           tenantId: tenant.id,
           reference: `BANK_RECON_ADJUSTMENT:${line.id}`,
           description: journalDescription,
-          status: 'POSTED',
           createdById: user.id,
-          postedById: user.id,
-          postedAt: now,
           journalDate: postingDate,
           journalType: 'STANDARD',
-          periodId: period.id,
-          journalNumber: bumped.value,
           sourceType: 'BANK_RECON_ADJUSTMENT',
           sourceId: line.id,
+          status: 'REVIEWED',
+          reviewedById: user.id,
+          reviewedAt: now,
           lines: {
             create: [
               {
@@ -1048,7 +1057,13 @@ export class BankReconService {
         include: { lines: true },
       });
 
-      const bankLine = (journal.lines as any[]).find(
+      const postedJournal = await this.gl.postJournalInTx({
+        tx,
+        req,
+        id: journal.id,
+      });
+
+      const bankLine = ((postedJournal as any).lines as any[]).find(
         (l) => l.accountId === bankGlAccount.id,
       );
       if (!bankLine) {
@@ -1070,7 +1085,7 @@ export class BankReconService {
           matched: true,
           matchedJournalLineId: bankLine.id,
           classification: 'SYSTEM_MATCH' as any,
-          adjustmentJournalId: journal.id,
+          adjustmentJournalId: postedJournal.id,
         },
       });
 
@@ -1093,7 +1108,7 @@ export class BankReconService {
             postingDate: dto.postingDate,
             classification,
             glAccountId: dto.glAccountId,
-            journalId: journal.id,
+            journalId: postedJournal.id,
             bankJournalLineId: bankLine.id,
             amount: Number(amount),
           },
@@ -1103,7 +1118,7 @@ export class BankReconService {
 
       return {
         statementLine: updatedLine,
-        journal,
+        journal: postedJournal,
         clearedJournalLine: updatedJournalLine,
       };
     });

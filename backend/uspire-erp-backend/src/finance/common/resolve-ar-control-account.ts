@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { validateAccountPostingEligibility } from './account-posting-eligibility';
 
 const AR_CONTROL_INVALID_MESSAGE =
   'AR control account is not configured or is invalid. Please check Finance Settings.';
@@ -21,16 +22,31 @@ export async function resolveArControlAccount(
     where: {
       tenantId,
       id: arControlAccountId,
+      status: 'ACTIVE',
       isActive: true,
       type: 'ASSET',
       normalBalance: 'DEBIT',
     },
-    select: { id: true, code: true, name: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      isActive: true,
+      isPostingAllowed: true,
+      isPosting: true,
+      isControlAccount: true,
+    },
   });
 
   if (!arAccount) {
     throw new BadRequestException(AR_CONTROL_INVALID_MESSAGE);
   }
 
-  return arAccount;
+  validateAccountPostingEligibility(arAccount, {
+    allowControlAccount: true,
+    errorMode: 'BAD_REQUEST',
+  });
+
+  return { id: arAccount.id, code: arAccount.code, name: arAccount.name };
 }

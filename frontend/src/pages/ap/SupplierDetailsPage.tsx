@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { PERMISSIONS } from '@/security/permissionCatalog';
+import { PERMISSIONS } from '../../auth/permission-catalog';
+import { tokens } from '../../designTokens';
 import { PageLayout } from '../../components/PageLayout';
 import type { Supplier, SupplierBankAccount, SupplierChangeLog, SupplierDocument } from '../../services/ap';
 import {
@@ -25,8 +26,8 @@ export function SupplierDetailsPage() {
   const supplierId = params.id ?? '';
 
   const { hasPermission } = useAuth();
-  const canViewSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.VIEW);
-  const canManageSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER.CREATE);
+  const canViewSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER_VIEW);
+  const canManageSupplier = hasPermission(PERMISSIONS.AP.SUPPLIER_CREATE);
 
   const [tab, setTab] = useState<TabKey>('OVERVIEW');
 
@@ -323,8 +324,8 @@ export function SupplierDetailsPage() {
             padding: '6px 10px',
             borderRadius: 6,
             border: '1px solid #ddd',
-            background: tab === k ? '#0B0C1E' : '#fff',
-            color: tab === k ? '#fff' : '#0B0C1E',
+            background: tab === k ? tokens.colors.navy : '#fff',
+            color: tab === k ? '#fff' : tokens.colors.navy,
             cursor: 'pointer',
           }}
         >

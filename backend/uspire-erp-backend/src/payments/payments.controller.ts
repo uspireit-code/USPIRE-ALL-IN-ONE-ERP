@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -13,6 +14,7 @@ import { Permissions } from '../rbac/permissions.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PostPaymentDto } from './dto/post-payment.dto';
 import { PaymentsService } from './payments.service';
 
@@ -25,6 +27,16 @@ export class PaymentsController {
   @Permissions(PERMISSIONS.PAYMENT.CREATE)
   async createPayment(@Req() req: Request, @Body() dto: CreatePaymentDto) {
     return this.payments.createPayment(req, dto);
+  }
+
+  @Patch(':id')
+  @Permissions(PERMISSIONS.PAYMENT.CREATE)
+  async updatePayment(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdatePaymentDto,
+  ) {
+    return this.payments.updatePayment(req, id, dto);
   }
 
   @Post(':id/approve')

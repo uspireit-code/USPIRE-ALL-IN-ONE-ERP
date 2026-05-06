@@ -1,4 +1,12 @@
 :root {
+  --uspire-navy: #0b0b47;
+  --uspire-gold: #e79e13;
+  --bg: #f8f9fb;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-muted: #6b7280;
+
   font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -6,8 +14,8 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: rgba(11, 12, 30, 0.92);
-  background-color: #FCFCFC;
+  color: var(--text);
+  background-color: var(--card);
 }
 
 html,
@@ -15,11 +23,119 @@ body {
   height: 100%;
 }
 
+#root {
+  height: 100%;
+}
+
+.appShell {
+  display: flex;
+  height: 100vh;
+}
+
+.mainContent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.pageContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.financePage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.cardsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .cardsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .cardsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.coaTreeRow {
+  display: grid;
+  grid-template-columns: max-content 22px 92px minmax(0, 1fr) 96px;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 44px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  min-width: 0;
+  width: 100%;
+}
+
+.coaTreeIndent {
+  width: calc(var(--coa-depth, 0) * 16px);
+}
+
+.coaTreeToggle {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  color: rgba(15, 23, 42, 0.55);
+  font-weight: 700;
+  line-height: 16px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.coaTreeCode {
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  font-size: 12px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coaTreeName {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coaTreeMeta {
+  justify-self: end;
+  width: 96px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #FCFCFC;
+  background: var(--card);
 }
 
 button,
@@ -30,7 +146,7 @@ select {
 }
 
 a {
-  color: rgba(11, 12, 30, 0.92);
+  color: var(--text);
   text-decoration: none;
 }
 
@@ -40,7 +156,7 @@ a:hover {
 }
 
 .auth-link {
-  color: #1d67be;
+  color: var(--uspire-gold);
   text-decoration: none;
   font-weight: 500;
 }

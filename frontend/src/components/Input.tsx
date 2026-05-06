@@ -18,7 +18,7 @@ export type InputProps = {
   step?: string;
   required?: boolean;
   touched?: boolean;
-  error?: string;
+  error?: string | string[];
   rightAdornment?: React.ReactNode;
 };
 
@@ -26,8 +26,22 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   props,
   ref,
 ) {
-  const invalid = Boolean(props.touched && props.error);
+  const invalid = Boolean(
+    props.touched &&
+      (typeof props.error === 'string'
+        ? props.error
+        : Array.isArray(props.error)
+          ? props.error.length > 0
+          : false),
+  );
   const hasRightAdornment = Boolean(props.rightAdornment);
+
+  const errorLines = (() => {
+    if (!invalid) return [] as string[];
+    if (typeof props.error === 'string') return [props.error];
+    if (Array.isArray(props.error)) return props.error.filter((x) => typeof x === 'string' && x.trim());
+    return [] as string[];
+  })();
 
   const resolvedRightAdornment = (() => {
     const node = props.rightAdornment;
@@ -176,7 +190,15 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
           fontWeight: 650,
         }}
       >
-        {invalid ? props.error : '\u00A0'}
+        {invalid ? (
+          <div style={{ display: 'grid', gap: 2 }}>
+            {errorLines.map((line, idx) => (
+              <div key={idx}>{line}</div>
+            ))}
+          </div>
+        ) : (
+          '\u00A0'
+        )}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
 import { getApiErrorMessage, type ApiError } from '../../../services/api';
 import { Alert } from '../../../components/Alert';
+import { tokens } from '../../../designTokens';
 import {
   listPaymentProposals,
   type PaymentProposal,
@@ -68,7 +69,7 @@ export function PaymentProposalsListPage() {
   if (!canView) {
     return (
       <div style={{ padding: 18 }}>
-        <h2 style={{ margin: 0 }}>Payment Proposals</h2>
+        <h2 style={{ margin: 0, color: tokens.colors.navy }}>Payment Proposals</h2>
         <div style={{ marginTop: 10, color: '#b00020' }}>Access denied.</div>
       </div>
     );
@@ -78,7 +79,7 @@ export function PaymentProposalsListPage() {
     <div style={{ padding: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Payment Proposals</h2>
+          <h2 style={{ margin: 0, color: tokens.colors.navy }}>Payment Proposals</h2>
           <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
             Prepare controlled payment proposal packs from posted AP invoices.
           </div>
@@ -92,7 +93,7 @@ export function PaymentProposalsListPage() {
               alignItems: 'center',
               padding: '0 14px',
               borderRadius: 8,
-              background: '#020445',
+              background: tokens.colors.navy,
               color: 'white',
               textDecoration: 'none',
               fontSize: 13,
@@ -164,7 +165,7 @@ export function PaymentProposalsListPage() {
           type="button"
           onClick={() => void run()}
           disabled={loading}
-          style={{ height: 36, padding: '0 14px', borderRadius: 8, border: 0, background: '#020445', color: 'white' }}
+          style={{ height: 36, padding: '0 14px', borderRadius: 8, border: 0, background: tokens.colors.navy, color: 'white' }}
         >
           {loading ? 'Loading…' : 'Apply'}
         </button>
@@ -175,7 +176,7 @@ export function PaymentProposalsListPage() {
       <div style={{ marginTop: 14, overflowX: 'auto', background: 'white', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
           <thead>
-            <tr style={{ background: 'rgba(2,4,69,0.05)' }}>
+            <tr style={{ background: 'rgba(11,11,71,0.05)' }}>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Proposal #</th>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Date</th>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Status</th>

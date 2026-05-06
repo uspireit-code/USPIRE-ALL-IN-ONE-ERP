@@ -20,6 +20,7 @@ export enum NormalBalanceDto {
 }
 
 export enum BudgetControlModeDto {
+  NONE = 'NONE',
   WARN = 'WARN',
   BLOCK = 'BLOCK',
 }
@@ -73,12 +74,32 @@ export class CreateCoaAccountDto {
   fsMappingLevel2?: string;
 
   @IsOptional()
+  @IsString()
+  ifrsCode?: string;
+
+  @IsOptional()
+  @IsString()
+  ifrsNodeId?: string;
+
+  @IsOptional()
   @IsBoolean()
   isBudgetRelevant?: boolean;
 
   @IsOptional()
   @IsEnum(BudgetControlModeDto)
   budgetControlMode?: BudgetControlModeDto;
+}
+
+export class ApproveCoaImportBatchDto {
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}
+
+export class RejectCoaImportBatchDto {
+  @IsString()
+  @MinLength(3)
+  rejectionReason!: string;
 }
 
 export class UpdateCoaAccountDto {
@@ -134,7 +155,15 @@ export class UpdateCoaAccountDto {
 
   @IsOptional()
   @IsString()
-  ifrsMappingCode?: string;
+  ifrsMappingCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  ifrsCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  ifrsNodeId?: string | null;
 
   @IsOptional()
   @IsBoolean()

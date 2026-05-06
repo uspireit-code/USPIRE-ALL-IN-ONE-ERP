@@ -13,6 +13,7 @@ import { writeAuditEventWithPrisma } from '../../../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
 import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
+import { validateAccountPostingEligibility } from '../../common/account-posting-eligibility';
 import { ReportExportService } from '../../../reports/report-export.service';
 import type {
   ApproveCreditNoteDto,
@@ -559,8 +560,8 @@ export class FinanceArCreditNotesService {
 
     const accountIds = [...new Set(dto.lines.map((l: any) => l.revenueAccountId))];
     const accounts = await this.prisma.account.findMany({
-      where: { tenantId: tenant.id, id: { in: accountIds }, isActive: true },
-      select: { id: true, type: true },
+      where: { tenantId: tenant.id, id: { in: accountIds } },
+      select: { id: true, type: true, status: true, isActive: true },
     });
     const byId = new Map(accounts.map((a) => [a.id, a] as const));
 
@@ -581,6 +582,28 @@ export class FinanceArCreditNotesService {
 
       const acct = byId.get(l.revenueAccountId);
       if (!acct) {
+        throw new BadRequestException('One or more revenue accounts were not found or inactive');
+      }
+      const lifecycle = String((acct as any).status ?? '').trim().toUpperCase();
+      if (lifecycle === 'DRAFT') {
+        throw new BadRequestException(
+          'Account is in Draft status and cannot be used for posting.',
+        );
+      }
+      if (lifecycle === 'BLOCKED') {
+        throw new BadRequestException(
+          'Account is blocked and cannot be used for posting.',
+        );
+      }
+      if (lifecycle === 'RETIRED') {
+        throw new BadRequestException(
+          'Account is retired and cannot be used for posting.',
+        );
+      }
+      if (lifecycle !== 'ACTIVE') {
+        throw new BadRequestException('Account is not active for posting.');
+      }
+      if (!(acct as any).isActive) {
         throw new BadRequestException('One or more revenue accounts were not found or inactive');
       }
       if (String((acct as any).type) !== 'INCOME') {
@@ -886,6 +909,33 @@ export class FinanceArCreditNotesService {
       throw new BadRequestException('Missing tenant output VAT account configuration');
     }
 
+    if (taxLineAmount > 0) {
+      const vatAccount = await this.prisma.account.findFirst({
+        where: {
+          tenantId: tenant.id,
+          id: taxAccountId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+        } as any,
+        select: {
+          id: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
+      });
+      if (!vatAccount) {
+        throw new BadRequestException('Missing tenant output VAT account configuration');
+      }
+      validateAccountPostingEligibility(vatAccount as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
+      (cn as any).__validatedOutputVatAccountId = vatAccount.id;
+    }
+
     const journal = await this.prisma.journalEntry.create({
       data: {
         tenantId: tenant.id,
@@ -912,7 +962,7 @@ export class FinanceArCreditNotesService {
             ...(taxLineAmount > 0
               ? [
                   {
-                    accountId: taxAccountId,
+                    accountId: String((cn as any).__validatedOutputVatAccountId ?? ''),
                     debit: taxLineAmount,
                     credit: 0,
                     description: 'Output VAT (credit note)',
@@ -1033,7 +1083,7 @@ export class FinanceArCreditNotesService {
             ...(taxLineAmount > 0
               ? [
                   {
-                    accountId: taxAccountId,
+                    accountId: String((cn as any).__validatedOutputVatAccountId ?? ''),
                     debit: 0,
                     credit: taxLineAmount,
                     description: 'Output VAT reversal (credit note)',

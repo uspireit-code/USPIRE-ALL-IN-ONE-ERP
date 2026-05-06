@@ -50,6 +50,7 @@ export type TenantSystemConfig = {
   arRefundClearingAccountId?: string | null;
   arCashClearingAccountId?: string | null;
   unappliedReceiptsAccountId?: string | null;
+  supplierAdvanceAccountId?: string | null;
   updatedAt: string;
 };
 

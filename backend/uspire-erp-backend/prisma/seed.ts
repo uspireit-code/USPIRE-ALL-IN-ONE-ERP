@@ -62,6 +62,87 @@ async function seedJournalLineDimensionsMasters() {
 }
 
 async function main() {
+  await (prisma as any).ifrsMappingMaster.createMany({
+    data: [
+      { code: 'BS_CA', label: 'Current Assets', statementType: 'BS', section: 'CURRENT_ASSET', displayOrder: 10, allowedAccountType: 'ASSET' },
+      { code: 'BS_NCA', label: 'Non-Current Assets', statementType: 'BS', section: 'NON_CURRENT_ASSET', displayOrder: 20, allowedAccountType: 'ASSET' },
+      { code: 'BS_CL', label: 'Current Liabilities', statementType: 'BS', section: 'CURRENT_LIABILITY', displayOrder: 10, allowedAccountType: 'LIABILITY' },
+      { code: 'BS_NCL', label: 'Non-Current Liabilities', statementType: 'BS', section: 'NON_CURRENT_LIABILITY', displayOrder: 20, allowedAccountType: 'LIABILITY' },
+      { code: 'BS_EQ', label: 'Equity', statementType: 'BS', section: 'EQUITY', displayOrder: 10, allowedAccountType: 'EQUITY' },
+
+      { code: 'PL_REV', label: 'Revenue', statementType: 'PL', section: 'REVENUE', displayOrder: 10, allowedAccountType: 'INCOME' },
+
+      { code: 'PL_EXP_COS', label: 'Cost of Sales', statementType: 'PL', section: 'COST_OF_SALES', displayOrder: 20, allowedAccountType: 'EXPENSE' },
+      { code: 'PL_EXP_OP', label: 'Operating Expenses', statementType: 'PL', section: 'OPERATING_EXPENSE', displayOrder: 30, allowedAccountType: 'EXPENSE' },
+      { code: 'PL_EXP_FIN', label: 'Finance Costs', statementType: 'PL', section: 'FINANCE_COST', displayOrder: 40, allowedAccountType: 'EXPENSE' },
+      { code: 'PL_EXP_TAX', label: 'Tax Expense', statementType: 'PL', section: 'TAX_EXPENSE', displayOrder: 50, allowedAccountType: 'EXPENSE' },
+    ],
+    skipDuplicates: true,
+  });
+
+  // Backfill section/displayOrder for pre-existing rows (skipDuplicates does not update).
+  await (prisma as any).ifrsMappingMaster.upsert({
+    where: { code: 'BS_CA' },
+    create: { code: 'BS_CA', label: 'Current Assets', statementType: 'BS', section: 'CURRENT_ASSET', displayOrder: 10, allowedAccountType: 'ASSET', isActive: true },
+    update: { statementType: 'BS', section: 'CURRENT_ASSET', displayOrder: 10, allowedAccountType: 'ASSET' },
+  });
+  await (prisma as any).ifrsMappingMaster.upsert({
+    where: { code: 'BS_NCA' },
+    create: { code: 'BS_NCA', label: 'Non-Current Assets', statementType: 'BS', section: 'NON_CURRENT_ASSET', displayOrder: 20, allowedAccountType: 'ASSET', isActive: true },
+    update: { statementType: 'BS', section: 'NON_CURRENT_ASSET', displayOrder: 20, allowedAccountType: 'ASSET' },
+  });
+  await (prisma as any).ifrsMappingMaster.upsert({
+    where: { code: 'BS_CL' },
+    create: { code: 'BS_CL', label: 'Current Liabilities', statementType: 'BS', section: 'CURRENT_LIABILITY', displayOrder: 10, allowedAccountType: 'LIABILITY', isActive: true },
+    update: { statementType: 'BS', section: 'CURRENT_LIABILITY', displayOrder: 10, allowedAccountType: 'LIABILITY' },
+  });
+  await (prisma as any).ifrsMappingMaster.upsert({
+    where: { code: 'PL_REV' },
+    create: { code: 'PL_REV', label: 'Revenue', statementType: 'PL', section: 'REVENUE', displayOrder: 10, allowedAccountType: 'INCOME', isActive: true },
+    update: { statementType: 'PL', section: 'REVENUE', displayOrder: 10, allowedAccountType: 'INCOME' },
+  });
+  await (prisma as any).ifrsMappingMaster.upsert({
+    where: { code: 'PL_EXP_OP' },
+    create: { code: 'PL_EXP_OP', label: 'Operating Expenses', statementType: 'PL', section: 'OPERATING_EXPENSE', displayOrder: 30, allowedAccountType: 'EXPENSE', isActive: true },
+    update: { statementType: 'PL', section: 'OPERATING_EXPENSE', displayOrder: 30, allowedAccountType: 'EXPENSE' },
+  });
+
+  // One-time COA posting flag reconciliation (idempotent):
+  // - Parent accounts (have children) must be non-posting
+  // - Leaf accounts (no children) must be posting
+  // - Control accounts must always be posting
+  await prisma.account.updateMany({
+    where: {
+      isControlAccount: true,
+    },
+    data: {
+      isPosting: true,
+      isPostingAllowed: true,
+    },
+  });
+
+  await prisma.account.updateMany({
+    where: {
+      isControlAccount: false,
+      childAccounts: { some: {} },
+    },
+    data: {
+      isPosting: false,
+      isPostingAllowed: false,
+    },
+  });
+
+  await prisma.account.updateMany({
+    where: {
+      isControlAccount: false,
+      childAccounts: { none: {} },
+    },
+    data: {
+      isPosting: true,
+      isPostingAllowed: true,
+    },
+  });
+
   const tenant = await prisma.tenant.upsert({
     where: { name: 'USPIRE Demo Tenant' },
     create: {
@@ -105,6 +186,53 @@ async function main() {
     where: { id: tenant.id },
     data: { arControlAccountId: arControlAccount.id },
   });
+
+  // Seed top-level grouping (non-posting) COA categories required for hierarchy.
+  // These are created as ACTIVE to serve as parents.
+  const topLevel = [
+    { code: '10000', name: 'Assets', type: 'ASSET' as any, normalBalance: 'DEBIT' as any },
+    { code: '20000', name: 'Liabilities', type: 'LIABILITY' as any, normalBalance: 'CREDIT' as any },
+    { code: '30000', name: 'Equity', type: 'EQUITY' as any, normalBalance: 'CREDIT' as any },
+    { code: '40000', name: 'Income', type: 'INCOME' as any, normalBalance: 'CREDIT' as any },
+    { code: '50000', name: 'Cost of Sales', type: 'EXPENSE' as any, normalBalance: 'DEBIT' as any },
+    { code: '60000', name: 'Operating Expenses', type: 'EXPENSE' as any, normalBalance: 'DEBIT' as any },
+    { code: '70000', name: 'Other Income', type: 'INCOME' as any, normalBalance: 'CREDIT' as any },
+    { code: '80000', name: 'Other Expenses', type: 'EXPENSE' as any, normalBalance: 'DEBIT' as any },
+  ];
+
+  for (const t of topLevel) {
+    await prisma.account.upsert({
+      where: { tenantId_code: { tenantId: tenant.id, code: t.code } },
+      create: {
+        tenantId: tenant.id,
+        code: t.code,
+        name: t.name,
+        type: t.type,
+        normalBalance: t.normalBalance,
+        parentAccountId: null,
+        isActive: true,
+        isPosting: false,
+        isPostingAllowed: false,
+        isControlAccount: false,
+        status: 'ACTIVE' as any,
+        approvedAt: new Date() as any,
+        approvedById: null,
+        hierarchyPath: undefined,
+      } as any,
+      update: {
+        name: t.name,
+        type: t.type,
+        normalBalance: t.normalBalance,
+        parentAccountId: null,
+        isActive: true,
+        isPosting: false,
+        isPostingAllowed: false,
+        isControlAccount: false,
+        status: 'ACTIVE' as any,
+      } as any,
+      select: { id: true },
+    });
+  }
 
   const baselineChecklistItems: Array<{ code: string; label: string }> = [
     { code: 'BANK_RECONCILIATION', label: 'Bank reconciliations completed and reviewed' },
@@ -624,6 +752,21 @@ async function main() {
         },
       });
     }
+  }
+
+  // COA RBAC correction: remove overlapping legacy permissions from existing DBs (idempotent).
+  // - FINANCE_CONTROLLER must not have COA.APPROVE
+  // - FINANCE_OFFICER must not have COA.UPDATE
+  // - FINANCE_MANAGER must not have COA.UPDATE
+  if (financeControllerRole?.id) {
+    await removePermissionsByCode([financeControllerRole.id], [PERMISSIONS.COA.APPROVE]);
+    await removePermissionsByCode([financeControllerRole.id], [PERMISSIONS.COA.UPDATE]);
+  }
+  if (financeOfficerRole?.id) {
+    await removePermissionsByCode([financeOfficerRole.id], [PERMISSIONS.COA.UPDATE]);
+  }
+  if (financeManagerRole?.id) {
+    await removePermissionsByCode([financeManagerRole.id], [PERMISSIONS.COA.UPDATE]);
   }
 
   await assignPermissionsByCode(financeControllerRole.id, [PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW]);
@@ -1778,20 +1921,35 @@ async function main() {
 
   const coaViewFinancePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.VIEW }, select: { id: true } });
   const coaUpdateFinancePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.UPDATE }, select: { id: true } });
+  const coaApproveFinancePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.APPROVE }, select: { id: true } });
   const coaUnlockPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.UNLOCK }, select: { id: true } });
+  const coaDraftCreatePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.DRAFT_CREATE }, select: { id: true } });
+  const coaDraftEditPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.DRAFT_EDIT }, select: { id: true } });
+  const coaDraftSubmitPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.DRAFT_SUBMIT }, select: { id: true } });
+  const coaRejectFinancePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.REJECT }, select: { id: true } });
+  const coaFreezePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.COA.FREEZE }, select: { id: true } });
   const reportsModuleViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.REPORTS_VIEW }, select: { id: true } });
 
   // COA RBAC backfill (idempotent):
   // - ADMIN: view + update
-  // - FINANCE_CONTROLLER: view + update
-  // - FINANCE_MANAGER: view only
-  // - FINANCE_OFFICER: none
-  const coaPermIds = [coaViewFinancePerm?.id, coaUpdateFinancePerm?.id].filter(Boolean) as string[];
+  // - FINANCE_OFFICER: view + draft create/edit/submit
+  // - FINANCE_MANAGER: view + approve/reject
+  // - FINANCE_CONTROLLER: view + unlock + freeze + update (governance) (no draft, no approve)
   const coaViewPermId = coaViewFinancePerm?.id ? [coaViewFinancePerm.id] : [];
+  const coaUpdatePermId = coaUpdateFinancePerm?.id ? [coaUpdateFinancePerm.id] : [];
+  const coaApprovePermId = coaApproveFinancePerm?.id ? [coaApproveFinancePerm.id] : [];
+  const coaUnlockPermId = coaUnlockPerm?.id ? [coaUnlockPerm.id] : [];
+  const coaDraftPermIds = [coaDraftCreatePerm?.id, coaDraftEditPerm?.id, coaDraftSubmitPerm?.id].filter(Boolean) as string[];
+  const coaRejectPermId = coaRejectFinancePerm?.id ? [coaRejectFinancePerm.id] : [];
+  const coaFreezePermId = coaFreezePerm?.id ? [coaFreezePerm.id] : [];
+  const coaAdminPermIds = [...coaViewPermId, ...coaUpdatePermId];
+  const coaOfficerPermIds = [...coaViewPermId, ...coaDraftPermIds];
+  const coaManagerPermIds = [...coaViewPermId, ...coaApprovePermId, ...coaRejectPermId];
+  const coaControllerPermIds = [...coaViewPermId, ...coaUnlockPermId, ...coaFreezePermId];
 
-  // COA governance: FINANCE_MANAGER is view-only.
+  // COA governance: FINANCE_MANAGER can approve.
   if (financeManagerRole?.id) {
-    const permIds = coaViewPermId;
+    const permIds = coaManagerPermIds;
 
     if (permIds.length > 0) {
       await prisma.rolePermission.createMany({
@@ -1804,9 +1962,9 @@ async function main() {
     }
   }
 
-  // COA governance: FINANCE_CONTROLLER can view + edit.
+  // COA governance: FINANCE_CONTROLLER can view + approve + unlock (no create/edit to enforce maker-checker).
   if (financeControllerRole?.id) {
-    const permIds = coaPermIds;
+    const permIds = coaControllerPermIds;
 
     if (permIds.length > 0) {
       await prisma.rolePermission.createMany({
@@ -1820,9 +1978,9 @@ async function main() {
   }
 
   // Ensure ADMIN has COA view + update even on older DBs.
-  if (adminRole?.id && coaPermIds.length > 0) {
+  if (adminRole?.id && coaAdminPermIds.length > 0) {
     await prisma.rolePermission.createMany({
-      data: coaPermIds.map((permissionId) => ({
+      data: coaAdminPermIds.map((permissionId) => ({
         roleId: adminRole.id,
         permissionId,
       })),
@@ -1830,14 +1988,22 @@ async function main() {
     });
   }
 
-  // Ensure FINANCE_OFFICER does not have COA permissions.
-  if (financeOfficerRole?.id && coaPermIds.length > 0) {
-    await prisma.rolePermission.deleteMany({
-      where: {
-        roleId: financeOfficerRole.id,
-        permissionId: { in: coaPermIds },
-      },
-    });
+  // COA governance: FINANCE_OFFICER can view + edit (but does not approve).
+  if (financeOfficerRole?.id) {
+    const permIds = coaOfficerPermIds;
+
+    if (permIds.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: permIds.map((permissionId) => ({
+          roleId: financeOfficerRole.id,
+          permissionId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // NOTE: We intentionally do not grant COA approve to FINANCE_OFFICER.
+    // Approval stays with FINANCE_MANAGER / FINANCE_CONTROLLER.
   }
 
   // Reports RBAC backfill (idempotent):

@@ -23,7 +23,9 @@ import {
 import * as ExcelJS from 'exceljs';
 import { CacheService } from '../cache/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CoaReclassificationResolverService } from '../reports/coa-reclassification-resolver.service';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
 import { PeriodStatus } from '../periods/period-semantics';
 import { assertCanPost } from '../periods/period-guard';
 import {
@@ -102,7 +104,92 @@ export class GlService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly coaReclass: CoaReclassificationResolverService,
   ) {}
+
+  private async assertCoaStructureNotFrozen(params: {
+    tenantId: string;
+    userId?: string;
+    permissionUsed: string;
+    action: string;
+    reason?: Record<string, any>;
+  }) {
+    const t = await this.prisma.tenant.findUnique({
+      where: { id: params.tenantId },
+      select: { coaStructureFrozen: true } as any,
+    });
+
+    const frozen = Boolean((t as any)?.coaStructureFrozen);
+    if (!frozen) return;
+
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: params.tenantId,
+          eventType: 'COA_STRUCTURE_CHANGE_BLOCKED' as any,
+          entityType: 'TENANT' as any,
+          entityId: params.tenantId,
+          action: params.action,
+          outcome: 'BLOCKED' as any,
+          reason: params.reason ? JSON.stringify(params.reason) : undefined,
+          userId: params.userId,
+          permissionUsed: params.permissionUsed as any,
+        } as any,
+      })
+      .catch(() => undefined);
+
+    throw new ForbiddenException(
+      'COA structure is frozen. Submit a controlled change request to modify structure.',
+    );
+  }
+
+  private resolveLifecyclePostingBlockMessage(status: string): string | null {
+    const s = String(status ?? '').trim().toUpperCase();
+    if (s === 'ACTIVE') {
+      return null;
+    }
+    if (s === 'DRAFT') {
+      return 'Account is pending approval and cannot be posted.';
+    }
+    if (s === 'BLOCKED') {
+      return 'Account is blocked and cannot be used for posting.';
+    }
+    if (s === 'RETIRED') {
+      return 'Account is retired and cannot be used for posting.';
+    }
+    return 'Account is not ACTIVE and cannot be used for posting.';
+  }
+
+  private assertAccountLifecycleAllowsPosting(params: {
+    accountId: string;
+    status: string | null | undefined;
+  }) {
+    const s = String(params.status ?? '').trim().toUpperCase();
+    if (s === 'ACTIVE') return;
+    const msg = this.resolveLifecyclePostingBlockMessage(s);
+    if (msg) throw new ForbiddenException(msg);
+  }
+
+  private assertAccountFlagsAllowPosting(account: {
+    id: string;
+    isActive: boolean;
+    isPostingAllowed: boolean;
+    isPosting?: boolean | null;
+    isControlAccount?: boolean | null;
+  }) {
+    if (!account.isActive) {
+      throw new ForbiddenException('Account is inactive and cannot be posted.');
+    }
+    if ((account as any).isControlAccount) {
+      throw new ForbiddenException('Control accounts cannot be used for postings.');
+    }
+    if (!account.isPostingAllowed) {
+      throw new ForbiddenException('Account is not posting-allowed and cannot be posted.');
+    }
+    if (!(account as any).isPosting) {
+      throw new ForbiddenException('Account is non-posting and cannot be posted.');
+    }
+  }
 
   private parseOptionalYmd(s: string | undefined): Date | null {
     const v = (s ?? '').trim();
@@ -329,10 +416,12 @@ export class GlService {
 
         if (availableAmount !== null && lineAmount > availableAmount) {
           flags.push('BUDGET_EXCEEDED');
-          const mode = (account?.budgetControlMode ?? 'WARN') as
-            | 'WARN'
-            | 'BLOCK';
-          status = mode === 'BLOCK' ? 'BLOCK' : 'WARN';
+          const mode = String(account?.budgetControlMode ?? 'WARN').trim().toUpperCase();
+          if (mode === 'NONE') {
+            status = 'OK';
+          } else {
+            status = mode === 'BLOCK' ? 'BLOCK' : 'WARN';
+          }
         }
       }
 
@@ -1238,7 +1327,11 @@ export class GlService {
   private getDepartmentRequirement(account: {
     type: string | null | undefined;
     isControlAccount?: boolean | null;
+    requiresDepartment?: boolean | null;
   }): DepartmentRequirement {
+    if (Boolean((account as any).requiresDepartment)) {
+      return DepartmentRequirement.REQUIRED;
+    }
     if (account.isControlAccount) return DepartmentRequirement.FORBIDDEN;
     if (account.type === 'INCOME' || account.type === 'EXPENSE')
       return DepartmentRequirement.REQUIRED;
@@ -2222,6 +2315,18 @@ export class GlService {
           });
           continue;
         }
+
+        const lifecycleMsg = this.resolveLifecyclePostingBlockMessage(String((acc as any).status ?? ''));
+        if (lifecycleMsg) {
+          errors.push({
+            journalKey: key,
+            sheet: isXlsx ? 'JournalLines' : 'CSV',
+            rowNumber: l.rowNumber,
+            field: 'accountCode',
+            message: lifecycleMsg,
+          });
+        }
+
         if (!acc.isActive) {
           errors.push({
             journalKey: key,
@@ -2238,6 +2343,16 @@ export class GlService {
             rowNumber: l.rowNumber,
             field: 'accountCode',
             message: `Account is non-posting and cannot be used in journals: ${l.accountCode}`,
+          });
+        }
+
+        if ((acc as any).isControlAccount) {
+          errors.push({
+            journalKey: key,
+            sheet: isXlsx ? 'JournalLines' : 'CSV',
+            rowNumber: l.rowNumber,
+            field: 'accountCode',
+            message: `Account is a control account and cannot be used in journals: ${l.accountCode}`,
           });
         }
 
@@ -3274,6 +3389,13 @@ export class GlService {
   private readonly JOURNAL_NUMBER_SEQUENCE_NAME = 'JOURNAL_ENTRY';
 
   private async ensureMinimalBalanceSheetCoaForTenant(tenantId: string) {
+    await this.assertCoaStructureNotFrozen({
+      tenantId,
+      permissionUsed: PERMISSIONS.GL.VIEW,
+      action: 'GL_ENSURE_MINIMAL_BALANCE_SHEET_COA',
+      reason: { action: 'GL_ENSURE_MINIMAL_BALANCE_SHEET_COA' },
+    });
+
     const existingCount = await this.prisma.account.count({
       where: { tenantId },
     });
@@ -3313,13 +3435,28 @@ export class GlService {
       throw new BadRequestException('Missing tenant context');
     }
 
+    const user = req.user;
+
     const t = await this.prisma.tenant.findUnique({
       where: { id: tenant.id },
-      select: { coaFrozen: true },
+      select: { coaFrozen: true, coaStructureFrozen: true } as any,
     });
     if (t?.coaFrozen) {
       throw new ForbiddenException('Chart of Accounts is frozen');
     }
+
+    await this.assertCoaStructureNotFrozen({
+      tenantId: tenant.id,
+      userId: user?.id,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      action: 'GL_ACCOUNT_CREATE',
+      reason: {
+        action: 'GL_ACCOUNT_CREATE',
+        code: dto.code ?? null,
+        name: dto.name ?? null,
+        type: dto.type ?? null,
+      },
+    });
 
     return this.prisma.account.create({
       data: {
@@ -3346,7 +3483,7 @@ export class GlService {
       .findMany({
         where: {
           tenantId: tenant.id,
-          isActive: true,
+          status: 'ACTIVE' as any,
           ...(balanceSheetOnly
             ? { type: { in: ['ASSET', 'LIABILITY', 'EQUITY'] } }
             : {}),
@@ -4337,13 +4474,21 @@ export class GlService {
 
     const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
 
+    const asOfDate = dto.asOfDate ?? dto.to;
+    const resolved = await this.coaReclass.resolveAccountsAsOfDateBulk({
+      tenantId: tenant.id,
+      accountIds,
+      asOfDate,
+    });
+
     const rows = grouped
       .map((g) => {
         const a = accountMap.get(g.accountId);
+        const r = resolved.get(g.accountId) ?? null;
         const totalDebit = Number(g._sum.debit ?? 0);
         const totalCredit = Number(g._sum.credit ?? 0);
 
-        return {
+        const baseRow: any = {
           accountId: g.accountId,
           accountCode: a?.code ?? 'UNKNOWN',
           accountName: a?.name ?? 'Unknown account',
@@ -4353,6 +4498,20 @@ export class GlService {
           totalCredit,
           net: totalDebit - totalCredit,
         };
+
+        if (dto.includeReclassificationEvidence) {
+          baseRow.reclassificationEvidence = {
+            asOfDate,
+            appliedReclassificationId: r?.appliedReclassificationId ?? null,
+            appliedEffectiveStartDate: r?.appliedEffectiveStartDate ?? null,
+            resolvedParentAccountId: r?.resolvedParentAccountId ?? null,
+            resolvedIfrsMappingCode: r?.resolvedIfrsMappingCode ?? null,
+            resolvedFsMappingLevel1: r?.resolvedFsMappingLevel1 ?? null,
+            resolvedFsMappingLevel2: r?.resolvedFsMappingLevel2 ?? null,
+          };
+        }
+
+        return baseRow;
       })
       .sort((x, y) => x.accountCode.localeCompare(y.accountCode));
 
@@ -4977,7 +5136,14 @@ export class GlService {
         tenantId: authz.tenantId,
         id: { in: dto.lines.map((l) => l.accountId) },
       },
-      select: { id: true, isActive: true, isPostingAllowed: true },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+      },
     });
 
     const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
@@ -4987,14 +5153,19 @@ export class GlService {
       if (!account) {
         throw new BadRequestException(`Account not found: ${line.accountId}`);
       }
-      if (!account.isActive) {
-        throw new BadRequestException(`Account is inactive: ${line.accountId}`);
-      }
-      if (!account.isPostingAllowed) {
-        throw new BadRequestException(
-          `Account is non-posting and cannot be used in journals: ${line.accountId}`,
-        );
-      }
+
+      this.assertAccountLifecycleAllowsPosting({
+        accountId: line.accountId,
+        status: (account as any).status,
+      });
+
+      this.assertAccountFlagsAllowPosting({
+        id: String((account as any).id),
+        isActive: Boolean((account as any).isActive),
+        isPostingAllowed: Boolean((account as any).isPostingAllowed),
+        isPosting: Boolean((account as any).isPosting),
+        isControlAccount: Boolean((account as any).isControlAccount),
+      });
     }
 
     const created = await this.prisma.journalEntry.create({
@@ -5198,7 +5369,15 @@ export class GlService {
         tenantId: authz.tenantId,
         id: { in: dto.lines.map((l) => l.accountId) },
       },
-      select: { id: true, code: true, isActive: true, isPostingAllowed: true },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+      },
     });
     const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
 
@@ -5207,14 +5386,19 @@ export class GlService {
       if (!account) {
         throw new BadRequestException(`Account not found: ${line.accountId}`);
       }
-      if (!account.isActive) {
-        throw new BadRequestException(`Account is inactive: ${line.accountId}`);
-      }
-      if (!account.isPostingAllowed) {
-        throw new BadRequestException(
-          `Account is non-posting and cannot be used in journals: ${line.accountId}`,
-        );
-      }
+
+      this.assertAccountLifecycleAllowsPosting({
+        accountId: line.accountId,
+        status: (account as any).status,
+      });
+
+      this.assertAccountFlagsAllowPosting({
+        id: String((account as any).id),
+        isActive: Boolean((account as any).isActive),
+        isPostingAllowed: Boolean((account as any).isPostingAllowed),
+        isPosting: Boolean((account as any).isPosting),
+        isControlAccount: Boolean((account as any).isControlAccount),
+      });
     }
 
     const updated = await this.prisma.journalEntry.update({
@@ -6606,7 +6790,36 @@ export class GlService {
     const authz = await this.getUserAuthz(req);
     requirePermission(authz, 'FINANCE_GL_FINAL_POST');
 
-    const entry = await this.prisma.journalEntry.findFirst({
+    return this.postJournalCore({
+      prisma: this.prisma,
+      authz,
+      id,
+    });
+  }
+
+  async postJournalInTx(params: {
+    tx: any;
+    req: Request;
+    id: string;
+  }) {
+    const authz = await this.getUserAuthz(params.req);
+    requirePermission(authz, 'FINANCE_GL_FINAL_POST');
+
+    return this.postJournalCore({
+      prisma: params.tx,
+      authz,
+      id: params.id,
+    });
+  }
+
+  private async postJournalCore(params: {
+    prisma: any;
+    authz: any;
+    id: string;
+  }) {
+    const { prisma, authz, id } = params;
+
+    const entry = await prisma.journalEntry.findFirst({
       where: {
         id,
         tenantId: authz.tenantId,
@@ -6642,7 +6855,7 @@ export class GlService {
       })),
     );
 
-    const period = await (this.prisma.accountingPeriod as any).findFirst({
+    const period = await (prisma.accountingPeriod as any).findFirst({
       where: {
         tenantId: authz.tenantId,
         startDate: { lte: entry.journalDate },
@@ -6672,7 +6885,7 @@ export class GlService {
             periodStatus: null,
           },
         },
-        this.prisma,
+        prisma,
       );
 
       throw new ForbiddenException({
@@ -6704,7 +6917,7 @@ export class GlService {
             periodStatus: (period as any)?.status ?? null,
           },
         },
-        this.prisma,
+        prisma,
       );
 
       throw new ForbiddenException({
@@ -6748,7 +6961,7 @@ export class GlService {
             cutoverDate: cutover.toISOString().slice(0, 10),
           },
         },
-        this.prisma,
+        prisma,
       );
 
       throw new ForbiddenException({
@@ -6766,6 +6979,90 @@ export class GlService {
           credit: Number(l.credit),
         })),
       });
+    }
+
+    const accountIds = [
+      ...new Set((entry.lines ?? []).map((l) => String((l as any).accountId))),
+    ] as string[];
+    const accounts: any[] = await prisma.account.findMany({
+      where: {
+        tenantId: authz.tenantId,
+        id: { in: accountIds },
+      },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
+    });
+    const byId = new Map<string, any>(accounts.map((a) => [a.id, a] as const));
+    for (const accountId of accountIds) {
+      const a = byId.get(accountId);
+      if (!a) {
+        throw new BadRequestException(`Account not found: ${accountId}`);
+      }
+
+      const lifecycleMsg = this.resolveLifecyclePostingBlockMessage(
+        String(a.status ?? ''),
+      );
+
+      if (lifecycleMsg) {
+        await writeAuditEventWithPrisma(
+          {
+            tenantId: authz.tenantId,
+            eventType: AuditEventType.GL_JOURNAL_POST_BLOCKED,
+            entityType: AuditEntityType.JOURNAL_ENTRY,
+            entityId: entry.id,
+            actorUserId: authz.id,
+            timestamp: new Date(),
+            outcome: 'BLOCKED' as any,
+            action: 'FINANCE_GL_FINAL_POST',
+            permissionUsed: PERMISSIONS.GL.FINAL_POST,
+            lifecycleType: 'POST',
+            reason: lifecycleMsg,
+            metadata: {
+              journalId: entry.id,
+              accountId,
+              accountStatus: String(a.status ?? null),
+            },
+          },
+          prisma,
+        );
+
+        throw new ForbiddenException(lifecycleMsg);
+      }
+
+      this.assertAccountFlagsAllowPosting({
+        id: String(accountId),
+        isActive: Boolean((a as any).isActive),
+        isPostingAllowed: Boolean((a as any).isPostingAllowed),
+        isPosting: Boolean((a as any).isPosting),
+        isControlAccount: Boolean((a as any).isControlAccount),
+      });
+    }
+
+    for (const l of entry.lines) {
+      const a = byId.get(l.accountId);
+      if (!a) {
+        throw new BadRequestException(`Account not found: ${l.accountId}`);
+      }
+      validateSegmentCompleteness(
+        a as any,
+        {
+          accountId: String((l as any).accountId),
+          lineNumber: (l as any).lineNumber ?? null,
+          departmentId: (l as any).departmentId ?? null,
+          projectId: (l as any).projectId ?? null,
+          fundId: (l as any).fundId ?? null,
+        },
+        { errorMode: 'BAD_REQUEST', module: 'GL', transactionType: 'POST_JOURNAL' },
+      );
     }
 
     const now = new Date();
@@ -6823,7 +7120,7 @@ export class GlService {
       });
     }
 
-    const accountsForRisk = await this.prisma.account.findMany({
+    const accountsForRisk = await prisma.account.findMany({
       where: {
         tenantId: authz.tenantId,
         id: { in: [...new Set(entry.lines.map((l) => l.accountId))] },
@@ -6869,8 +7166,15 @@ export class GlService {
           : { budgetStatus: budgetImpact.budgetStatus },
     });
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const counter = await tx.tenantSequenceCounter.upsert({
+    const runAsTransaction = async (fn: (tx: any) => Promise<any>) => {
+      if (typeof prisma?.$transaction === 'function') {
+        return prisma.$transaction(fn);
+      }
+      return fn(prisma);
+    };
+
+    const updated = await runAsTransaction(async (tx) => {
+      const counter = await (tx.tenantSequenceCounter as any).upsert({
         where: {
           tenantId_name: {
             tenantId: authz.tenantId,
@@ -6886,7 +7190,7 @@ export class GlService {
         select: { id: true },
       });
 
-      const bumped = await tx.tenantSequenceCounter.update({
+      const bumped = await (tx.tenantSequenceCounter as any).update({
         where: { id: counter.id },
         data: { value: { increment: 1 } },
         select: { value: true },
@@ -6927,7 +7231,7 @@ export class GlService {
           lifecycleStage: 'POST',
         },
       },
-      this.prisma,
+      prisma,
     );
 
     await writeAuditEventWithPrisma(
@@ -6973,7 +7277,7 @@ export class GlService {
             periodId: period.id,
           },
         },
-        this.prisma,
+        prisma,
       );
     }
 

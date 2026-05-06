@@ -8,6 +8,7 @@ import {
   listEligibleApInvoicesForPaymentProposal,
   type EligibleApInvoice,
 } from '../../../services/paymentProposalEligibleInvoices';
+import { tokens } from '../../../designTokens';
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -235,7 +236,7 @@ export function PaymentProposalCreatePage() {
           type="button"
           onClick={() => void loadEligible()}
           disabled={loading}
-          style={{ height: 36, padding: '0 14px', borderRadius: 8, border: 0, background: '#020445', color: 'white' }}
+          style={{ height: 36, padding: '0 14px', borderRadius: 8, border: 0, background: tokens.colors.navy, color: 'white' }}
         >
           {loading ? 'Loading…' : 'Search'}
         </button>
@@ -246,7 +247,7 @@ export function PaymentProposalCreatePage() {
       <div style={{ marginTop: 14, overflowX: 'auto', background: 'white', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1050 }}>
           <thead>
-            <tr style={{ background: 'rgba(2,4,69,0.05)' }}>
+            <tr style={{ background: 'rgba(11,11,71,0.05)' }}>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }} />
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Supplier</th>
               <th style={{ textAlign: 'left', padding: 12, fontSize: 12 }}>Invoice #</th>
@@ -370,7 +371,7 @@ export function PaymentProposalCreatePage() {
             type="button"
             disabled={selectedLines.length === 0 || !selectionValidation.ok || !canSubmit}
             onClick={() => void onCreate(true)}
-            style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: '#020445', color: 'white' }}
+            style={{ height: 38, padding: '0 14px', borderRadius: 8, border: 0, background: tokens.colors.navy, color: 'white' }}
           >
             Save & Submit
           </button>

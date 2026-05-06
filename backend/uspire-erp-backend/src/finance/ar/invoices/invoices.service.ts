@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { GlService } from '../../../gl/gl.service';
 import { PERMISSIONS } from '../../../rbac/permission-catalog';
 import { assertPeriodIsOpen } from '../../common/accounting-period.guard';
 import type {
@@ -17,13 +18,17 @@ import type {
   ListInvoicesQueryDto,
 } from './invoices.dto';
 import { resolveArControlAccount } from '../../common/resolve-ar-control-account';
+import { validateAccountPostingEligibility } from '../../common/account-posting-eligibility';
 
 @Injectable()
 export class FinanceArInvoicesService {
   private readonly INVOICE_NUMBER_SEQUENCE_NAME = 'AR_INVOICE_NUMBER';
   private readonly OPENING_PERIOD_NAME = 'Opening Balances';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gl: GlService,
+  ) {}
 
   private round2(n: number) {
     return Math.round(Number(n ?? 0) * 100) / 100;
@@ -624,9 +629,8 @@ export class FinanceArInvoicesService {
       where: {
         tenantId: tenant.id,
         id: { in: accountIds },
-        isActive: true,
       },
-      select: { id: true, type: true },
+      select: { id: true, type: true, status: true, isActive: true },
     });
     const byId = new Map(accounts.map((a) => [a.id, a] as const));
 
@@ -649,6 +653,30 @@ export class FinanceArInvoicesService {
 
       const acct = byId.get(l.accountId);
       if (!acct) {
+        throw new BadRequestException(
+          `Account not found or inactive: ${l.accountId}`,
+        );
+      }
+      const lifecycle = String((acct as any).status ?? '').trim().toUpperCase();
+      if (lifecycle === 'DRAFT') {
+        throw new BadRequestException(
+          'Account is in Draft status and cannot be used for posting.',
+        );
+      }
+      if (lifecycle === 'BLOCKED') {
+        throw new BadRequestException(
+          'Account is blocked and cannot be used for posting.',
+        );
+      }
+      if (lifecycle === 'RETIRED') {
+        throw new BadRequestException(
+          'Account is retired and cannot be used for posting.',
+        );
+      }
+      if (lifecycle !== 'ACTIVE') {
+        throw new BadRequestException('Account is not active for posting.');
+      }
+      if (!(acct as any).isActive) {
         throw new BadRequestException(
           `Account not found or inactive: ${l.accountId}`,
         );
@@ -1124,6 +1152,34 @@ export class FinanceArInvoicesService {
           'VAT accounts must be configured before posting taxable invoices',
         );
       }
+
+      const vatAccount = await this.prisma.account.findFirst({
+        where: {
+          tenantId: tenant.id,
+          id: vatAccountId,
+          status: 'ACTIVE' as any,
+          isActive: true,
+        } as any,
+        select: {
+          id: true,
+          status: true,
+          isActive: true,
+          isPostingAllowed: true,
+          isPosting: true,
+          isControlAccount: true,
+        },
+      });
+      if (!vatAccount) {
+        throw new BadRequestException(
+          'VAT accounts must be configured before posting taxable invoices',
+        );
+      }
+      validateAccountPostingEligibility(vatAccount as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
+
+      (inv as any).__validatedOutputVatAccountId = vatAccount.id;
     }
 
     const lines = ((inv as any).lines ?? []).map((l: any) => ({
@@ -1142,6 +1198,8 @@ export class FinanceArInvoicesService {
 
     let postedJournal: any = null;
     try {
+      const now = new Date();
+
       const journal = await this.prisma.journalEntry.create({
         data: {
           tenantId: tenant.id,
@@ -1149,6 +1207,9 @@ export class FinanceArInvoicesService {
           reference: `AR-INVOICE:${(inv as any).id}`,
           description: `AR invoice posting: ${(inv as any).invoiceNumber}`,
           createdById: (inv as any).createdById,
+          status: 'REVIEWED',
+          reviewedById: user.id,
+          reviewedAt: now,
           lines: {
             create: [
               {
@@ -1170,14 +1231,7 @@ export class FinanceArInvoicesService {
               ...(invTaxAmount > 0
                 ? [
                     {
-                      accountId: String(
-                        (
-                          (await (this.prisma as any).tenantTaxConfig.findFirst({
-                            where: { tenantId: tenant.id },
-                            select: { outputVatAccountId: true } as any,
-                          })) as any
-                        )?.outputVatAccountId,
-                      ),
+                      accountId: String((inv as any).__validatedOutputVatAccountId ?? ''),
                       debit: 0,
                       credit: invTaxAmount,
                       projectId: postingProjectId,
@@ -1192,22 +1246,14 @@ export class FinanceArInvoicesService {
         include: { lines: true } as any,
       } as any);
 
-      postedJournal = await this.prisma.journalEntry.update({
-        where: { id: (journal as any).id },
-        data: {
-          status: 'POSTED',
-          postedById: user.id,
-          postedAt: new Date(),
-        },
-        include: { lines: true } as any,
-      } as any);
+      postedJournal = await this.gl.postJournal(req, (journal as any).id);
 
       const updated = await this.prisma.customerInvoice.update({
         where: { id: (inv as any).id },
         data: {
           status: 'POSTED',
           postedById: user.id,
-          postedAt: new Date(),
+          postedAt: now,
         },
         include: { customer: true, lines: true } as any,
       } as any);

@@ -1,0 +1,30 @@
+.ui-statusBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.ui-statusBadge--pending {
+  color: #92400E;
+}
+
+.ui-statusBadge--rejected {
+  color: #991B1B;
+}
+
+.ui-statusBadge--draft {
+  color: #374151;
+}
+
+.ui-statusBadge--active {
+  color: #065F46;
+}

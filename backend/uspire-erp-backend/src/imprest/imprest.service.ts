@@ -5,13 +5,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
 import type { Request } from 'express';
+import {
+  AuditEntityType,
+  AuditEventType,
+  Prisma,
+  PrismaClient,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
-import { requirePermission } from '../rbac/finance-authz.helpers';
+import { requirePermission, requireOwnership } from '../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
-import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
+import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
 import {
   mapGenericPrismaValidationError,
   mapImprestValidationError,
@@ -42,7 +49,10 @@ export class ImprestService {
   private readonly IMPREST_CASE_SEQUENCE_NAME = 'IMPREST_CASE';
   private readonly JOURNAL_NUMBER_SEQUENCE_NAME = 'JOURNAL_ENTRY';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gl: GlService,
+  ) {}
 
   private async hasActiveDepartmentMembership(params: {
     tenantId: string;
@@ -183,6 +193,7 @@ export class ImprestService {
 
   private async createPostedSettlementJournal(
     tx: any,
+    req: Request,
     args: {
       tenantId: string;
       actorUserId: string;
@@ -226,60 +237,74 @@ export class ImprestService {
     }
 
     const accountIds = Array.from(new Set(args.lines.map((l) => l.accountId)));
-    const accounts: Array<{ id: string; isActive: boolean; isPostingAllowed: boolean }> = await (tx.account as any).findMany({
+    const accounts: Array<{
+      id: string;
+      status: string;
+      isActive: boolean;
+      isPostingAllowed: boolean;
+      isPosting?: boolean;
+      isControlAccount?: boolean;
+      requiresDepartment?: boolean;
+      requiresProject?: boolean;
+      requiresFund?: boolean;
+    }> = await (tx.account as any).findMany({
       where: {
         tenantId: args.tenantId,
         id: { in: accountIds },
       },
-      select: { id: true, isActive: true, isPostingAllowed: true },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
     });
     const map = new Map(accounts.map((a) => [a.id, a] as const));
     for (const id of accountIds) {
       const a = map.get(id);
       if (!a) throw new BadRequestException(`Account not found: ${id}`);
-      if (!a.isActive) throw new BadRequestException(`Account is inactive: ${id}`);
-      if (!a.isPostingAllowed) throw new BadRequestException(`Account is non-posting and cannot be used: ${id}`);
+      validateAccountPostingEligibility(a as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
+    }
+
+    for (const l of args.lines) {
+      const a = map.get(l.accountId);
+      if (!a) throw new BadRequestException(`Account not found: ${l.accountId}`);
+      validateSegmentCompleteness(
+        a as any,
+        {
+          accountId: String(l.accountId),
+          lineNumber: l.lineNumber ?? null,
+          departmentId: (l as any).departmentId ?? null,
+          projectId: (l as any).projectId ?? null,
+          fundId: (l as any).fundId ?? null,
+        },
+        { errorMode: 'BAD_REQUEST', module: 'IMPREST', transactionType: 'SETTLEMENT' },
+      );
     }
 
     const now = new Date();
 
-    const counter = await (tx as any).tenantSequenceCounter.upsert({
-      where: {
-        tenantId_name: {
-          tenantId: args.tenantId,
-          name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
-        },
-      },
-      create: {
-        tenantId: args.tenantId,
-        name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
-        value: 0,
-      },
-      update: {},
-      select: { id: true },
-    });
-
-    const bumped = await (tx as any).tenantSequenceCounter.update({
-      where: { id: counter.id },
-      data: { value: { increment: 1 } },
-      select: { value: true },
-    });
-
-    return (tx as any).journalEntry.create({
+    const journal = await (tx as any).journalEntry.create({
       data: {
         tenantId: args.tenantId,
         reference: args.reference,
         description: args.description,
-        status: 'POSTED',
         createdById: args.actorUserId,
-        postedById: args.actorUserId,
-        postedAt: now,
         journalDate: args.journalDate,
         journalType: 'STANDARD',
-        periodId: period.id,
-        journalNumber: bumped.value,
         sourceType: 'IMPREST_SETTLEMENT',
         sourceId: args.sourceId,
+        status: 'REVIEWED',
+        reviewedById: args.actorUserId,
+        reviewedAt: now,
         lines: {
           create: args.lines.map((l) => ({
             accountId: l.accountId,
@@ -294,6 +319,12 @@ export class ImprestService {
         },
       },
       include: { lines: true },
+    });
+
+    return this.gl.postJournalInTx({
+      tx,
+      req,
+      id: journal.id,
     });
   }
 
@@ -1231,7 +1262,7 @@ export class ImprestService {
     return linked;
   }
 
-  private async createPostedIssuanceJournal(args: {
+  private async createPostedIssuanceJournal(req: Request, args: {
     tenantId: string;
     actorUserId: string;
     journalDate: Date;
@@ -1273,58 +1304,70 @@ export class ImprestService {
       where: {
         tenantId: args.tenantId,
         id: { in: [args.debitAccountId, args.creditAccountId] },
+        status: 'ACTIVE' as any,
+        isActive: true,
       },
-      select: { id: true, isActive: true, isPostingAllowed: true },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isPostingAllowed: true,
+        isPosting: true,
+        isControlAccount: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      },
     });
     const map = new Map(accounts.map((a) => [a.id, a] as const));
     for (const id of [args.debitAccountId, args.creditAccountId]) {
       const a = map.get(id);
-      if (!a) throw new BadRequestException(`Account not found: ${id}`);
-      if (!a.isActive) throw new BadRequestException(`Account is inactive: ${id}`);
-      if (!a.isPostingAllowed)
-        throw new BadRequestException(`Account is non-posting and cannot be used: ${id}`);
+      if (!a) throw new BadRequestException(`Account not found or invalid: ${id}`);
+      validateAccountPostingEligibility(a as any, {
+        allowControlAccount: true,
+        errorMode: 'BAD_REQUEST',
+      });
     }
+
+    validateSegmentCompleteness(
+      map.get(args.debitAccountId) as any,
+      {
+        accountId: String(args.debitAccountId),
+        lineNumber: 1,
+        departmentId: args.departmentId ?? null,
+        projectId: args.projectId ?? null,
+        fundId: args.fundId ?? null,
+      },
+      { errorMode: 'BAD_REQUEST', module: 'IMPREST', transactionType: 'ISSUANCE' },
+    );
+    validateSegmentCompleteness(
+      map.get(args.creditAccountId) as any,
+      {
+        accountId: String(args.creditAccountId),
+        lineNumber: 2,
+        departmentId: args.departmentId ?? null,
+        projectId: args.projectId ?? null,
+        fundId: args.fundId ?? null,
+      },
+      { errorMode: 'BAD_REQUEST', module: 'IMPREST', transactionType: 'ISSUANCE' },
+    );
 
     const now = new Date();
 
     const created = await this.prisma.$transaction(async (tx) => {
-      const counter = await (tx as any).tenantSequenceCounter.upsert({
-        where: {
-          tenantId_name: {
-            tenantId: args.tenantId,
-            name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
-          },
-        },
-        create: {
-          tenantId: args.tenantId,
-          name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
-          value: 0,
-        },
-        update: {},
-        select: { id: true },
-      });
-
-      const bumped = await (tx as any).tenantSequenceCounter.update({
-        where: { id: counter.id },
-        data: { value: { increment: 1 } },
-        select: { value: true },
-      });
-
-      return (tx as any).journalEntry.create({
+      const journal = await (tx as any).journalEntry.create({
         data: {
           tenantId: args.tenantId,
           reference: args.reference,
           description: args.description,
-          status: 'POSTED',
           createdById: args.actorUserId,
-          postedById: args.actorUserId,
-          postedAt: now,
           journalDate: args.journalDate,
           journalType: 'STANDARD',
-          periodId: period.id,
-          journalNumber: bumped.value,
           sourceType: 'IMPREST_ISSUANCE',
           sourceId: args.sourceId,
+          status: 'REVIEWED',
+          reviewedById: args.actorUserId,
+          reviewedAt: now,
           lines: {
             create: [
               {
@@ -1351,6 +1394,12 @@ export class ImprestService {
           },
         },
         include: { lines: true },
+      });
+
+      return this.gl.postJournalInTx({
+        tx,
+        req,
+        id: journal.id,
       });
     });
 
@@ -1424,7 +1473,7 @@ export class ImprestService {
     const issueDate = new Date(dto.issueDate);
     if (Number.isNaN(issueDate.getTime())) throw new BadRequestException('Invalid issueDate');
 
-    const journal = await this.createPostedIssuanceJournal({
+    const journal = await this.createPostedIssuanceJournal(req, {
       tenantId: authz.tenantId,
       actorUserId: authz.id,
       journalDate: issueDate,
@@ -1660,7 +1709,7 @@ export class ImprestService {
     const now = new Date();
 
     const { updated, journal } = await this.prisma.$transaction(async (tx) => {
-      const journal = await this.createPostedSettlementJournal(tx as any, {
+      const journal = await this.createPostedSettlementJournal(tx as any, req, {
         tenantId: authz.tenantId,
         actorUserId: authz.id,
         journalDate: settlementDate,

@@ -1,9 +1,9 @@
 import type React from 'react';
 import { tokens } from '../designTokens';
 
-export function DataTable(props: { children: React.ReactNode; style?: React.CSSProperties }) {
+export function DataTable(props: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
-    <div style={{ width: '100%', overflowX: 'auto', ...props.style }}>
+    <div className={props.className} style={{ width: '100%', overflowX: 'auto', ...props.style }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, borderRadius: tokens.radius.md, overflow: 'hidden' }}>{props.children}</table>
     </div>
   );
@@ -37,20 +37,26 @@ DataTable.Foot = function DataTableFoot(props: { children: React.ReactNode }) {
 
 DataTable.Row = function DataTableRow(props: {
   children: React.ReactNode;
+  className?: string;
   zebra?: boolean;
   index?: number;
   hoverable?: boolean;
+  selected?: boolean;
   style?: React.CSSProperties;
   onClick?: React.MouseEventHandler<HTMLTableRowElement>;
   onMouseEnter?: React.MouseEventHandler<HTMLTableRowElement>;
   onMouseLeave?: React.MouseEventHandler<HTMLTableRowElement>;
 }) {
   const zebraBg = props.zebra && typeof props.index === 'number' && props.index % 2 === 1 ? tokens.colors.surface.subtle : 'transparent';
-  const hoverBg = tokens.colors.surface.goldHover;
+
+  const explicitBg = (props.style as any)?.background ?? (props.style as any)?.backgroundColor;
+  const baseBg = explicitBg ?? (props.selected ? '#eef2f6' : zebraBg);
+  const hoverBg = props.selected ? baseBg : 'var(--dataTable-hover-bg, ' + tokens.colors.surface.goldHover + ')';
   const hoverable = props.hoverable ?? true;
   return (
     <tr
-      style={{ background: zebraBg, transition: `background-color ${tokens.transition.normal}`, ...props.style }}
+      className={props.className}
+      style={{ background: baseBg, transition: `background-color ${tokens.transition.normal}`, ...props.style }}
       onClick={props.onClick}
       onMouseEnter={(e) => {
         if (!hoverable) return;
@@ -59,7 +65,7 @@ DataTable.Row = function DataTableRow(props: {
       }}
       onMouseLeave={(e) => {
         if (!hoverable) return;
-        e.currentTarget.style.backgroundColor = zebraBg;
+        e.currentTarget.style.backgroundColor = baseBg;
         props.onMouseLeave?.(e);
       }}
     >
@@ -68,17 +74,25 @@ DataTable.Row = function DataTableRow(props: {
   );
 };
 
-DataTable.Th = function DataTableTh(props: { children: React.ReactNode; align?: 'left' | 'right' | 'center'; style?: React.CSSProperties }) {
+DataTable.Th = function DataTableTh(props: {
+  children: React.ReactNode;
+  className?: string;
+  align?: 'left' | 'right' | 'center';
+  paddingY?: number;
+  paddingX?: number;
+  style?: React.CSSProperties;
+}) {
   return (
     <th
+      className={props.className}
       style={{
         textAlign: props.align ?? 'left',
-        padding: `${tokens.spacing.x2}px ${tokens.spacing.x2}px`,
+        padding: `${props.paddingY ?? tokens.spacing.x2}px ${props.paddingX ?? tokens.spacing.x2}px`,
         fontSize: 12,
         fontWeight: 600,
         letterSpacing: 0.2,
         color: tokens.colors.text.secondary,
-        borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+        borderBottom: `1px solid var(--dataTable-border, ${tokens.colors.border.subtle})`,
         background: tokens.colors.surface.subtle,
         whiteSpace: 'nowrap',
         ...props.style,
@@ -89,15 +103,23 @@ DataTable.Th = function DataTableTh(props: { children: React.ReactNode; align?: 
   );
 };
 
-DataTable.Td = function DataTableTd(props: { children: React.ReactNode; align?: 'left' | 'right' | 'center'; style?: React.CSSProperties }) {
+DataTable.Td = function DataTableTd(props: {
+  children: React.ReactNode;
+  className?: string;
+  align?: 'left' | 'right' | 'center';
+  paddingY?: number;
+  paddingX?: number;
+  style?: React.CSSProperties;
+}) {
   return (
     <td
+      className={props.className}
       style={{
         textAlign: props.align ?? 'left',
-        padding: `${tokens.spacing.x2}px ${tokens.spacing.x2}px`,
+        padding: `${props.paddingY ?? tokens.spacing.x2}px ${props.paddingX ?? tokens.spacing.x2}px`,
         fontSize: 13,
         fontWeight: 400,
-        borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+        borderBottom: `1px solid var(--dataTable-border, ${tokens.colors.border.subtle})`,
         verticalAlign: 'middle',
         color: tokens.colors.text.primary,
         ...props.style,

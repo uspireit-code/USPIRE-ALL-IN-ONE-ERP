@@ -125,7 +125,7 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthLayout>
-      <div style={{ fontSize: 20, fontWeight: 900, color: '#020445' }}>Forgot Password</div>
+      <div style={{ fontSize: 20, fontWeight: 900, color: tokens.colors.navy }}>Forgot Password</div>
       <div style={{ marginTop: 10, fontSize: 12.5, color: tokens.colors.text.secondary, lineHeight: 1.45 }}>
         Enter the email address associated with your account. We'll send you instructions to reset your password.
       </div>
@@ -162,7 +162,7 @@ export function ForgotPasswordPage() {
 
         {successBox}
 
-        <Button type="submit" disabled={loading} variant="accent" style={{ width: '100%', justifyContent: 'center' }}>
+        <Button type="submit" disabled={loading} variant="primary" style={{ width: '100%', justifyContent: 'center' }}>
           {loading ? 'Submitting…' : 'Send reset instructions'}
         </Button>
 

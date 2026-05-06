@@ -180,6 +180,15 @@ export class FinanceTaxService {
             entityId: created.id,
             action: 'TAX_RATE_CREATE',
             outcome: 'SUCCESS',
+            reason: JSON.stringify({
+              action: 'TAX_RATE_CREATE',
+              code,
+              name,
+              rate,
+              type: dto.type ?? null,
+              glAccountId,
+              timestamp: new Date().toISOString(),
+            }),
             userId: user.id,
             permissionUsed: PERMISSIONS.TAX.RATE_CREATE,
           } as any,
@@ -201,7 +210,15 @@ export class FinanceTaxService {
 
     const existing = await (this.prisma as any).taxRate.findFirst({
       where: { id, tenantId: tenant.id },
-      select: { id: true } as any,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        rate: true,
+        type: true,
+        glAccountId: true,
+        isActive: true,
+      } as any,
     });
     if (!existing) throw new NotFoundException('Tax rate not found');
 
@@ -259,6 +276,20 @@ export class FinanceTaxService {
             entityId: id,
             action: 'TAX_RATE_UPDATE',
             outcome: 'SUCCESS',
+            reason: JSON.stringify({
+              action: 'TAX_RATE_UPDATE',
+              id,
+              old: {
+                code: (existing as any).code ?? null,
+                name: (existing as any).name ?? null,
+                rate: (existing as any).rate ?? null,
+                type: (existing as any).type ?? null,
+                glAccountId: (existing as any).glAccountId ?? null,
+                isActive: (existing as any).isActive ?? null,
+              },
+              patch,
+              timestamp: new Date().toISOString(),
+            }),
             userId: user.id,
             permissionUsed: PERMISSIONS.TAX.RATE_UPDATE,
           } as any,
@@ -280,7 +311,7 @@ export class FinanceTaxService {
 
     const existing = await (this.prisma as any).taxRate.findFirst({
       where: { id, tenantId: tenant.id },
-      select: { id: true } as any,
+      select: { id: true, isActive: true } as any,
     });
     if (!existing) throw new NotFoundException('Tax rate not found');
 
@@ -298,6 +329,13 @@ export class FinanceTaxService {
           entityId: id,
           action: 'TAX_RATE_UPDATE',
           outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            action: 'TAX_RATE_STATUS_CHANGE',
+            id,
+            oldIsActive: Boolean((existing as any).isActive),
+            newIsActive: Boolean(isActive),
+            timestamp: new Date().toISOString(),
+          }),
           userId: user.id,
           permissionUsed: PERMISSIONS.TAX.RATE_UPDATE,
         } as any,
@@ -338,6 +376,11 @@ export class FinanceTaxService {
   async updateConfig(req: Request, dto: UpdateTenantTaxConfigDto) {
     const tenant = this.ensureTenant(req);
     const user = this.ensureUser(req);
+
+    const prev = await (this.prisma as any).tenantTaxConfig.findFirst({
+      where: { tenantId: tenant.id },
+      select: { outputVatAccountId: true, inputVatAccountId: true } as any,
+    });
 
     const outputVatAccountId =
       dto.outputVatAccountId === undefined
@@ -390,6 +433,20 @@ export class FinanceTaxService {
           entityId: tenant.id,
           action: 'TAX_CONFIG_UPDATE',
           outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            action: 'TAX_CONFIG_UPDATE',
+            old: {
+              outputVatAccountId: (prev as any)?.outputVatAccountId ?? null,
+              inputVatAccountId: (prev as any)?.inputVatAccountId ?? null,
+            },
+            next: {
+              outputVatAccountId:
+                outputVatAccountId === undefined ? '(unchanged)' : outputVatAccountId,
+              inputVatAccountId:
+                inputVatAccountId === undefined ? '(unchanged)' : inputVatAccountId,
+            },
+            timestamp: new Date().toISOString(),
+          }),
           userId: user.id,
           permissionUsed: PERMISSIONS.TAX.CONFIG_UPDATE,
         } as any,

@@ -1,0 +1,159 @@
+ .approval-grid {
+  display: grid;
+  grid-template-columns: 40px 100px 1fr 160px;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+}
+
+.coa-layout {
+  grid-template-columns: minmax(560px, 12fr) minmax(320px, 8fr);
+}
+
+@media (max-width: 1100px) {
+  .coa-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.approval-grid > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.approval-row,
+.approval-row * {
+  word-break: normal;
+  overflow-wrap: normal;
+  white-space: normal;
+}
+
+.coa-left .coa-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden !important;
+  padding-right: 0 !important;
+}
+
+.approvals-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.approvals-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  scroll-behavior: smooth;
+}
+
+.approvals-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.approvals-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.approvals-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.approval-header {
+  padding: 8px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 3;
+}
+
+.approval-header > div {
+  font-size: 12.5px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.approval-row {
+  padding: 10px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.approval-row:last-child {
+  border-bottom: none;
+}
+
+.approval-row[data-selected="true"] {
+  background: rgba(11, 11, 71, 0.06);
+}
+
+.approval-row:hover {
+  background-color: #f9fafb;
+  transition: background-color 0.15s ease;
+}
+
+.cell-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cell-code {
+  font-size: 12.5px;
+  color: #374151;
+}
+
+.cell-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #111827;
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-right: 8px;
+}
+
+.cell-status {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.cell-status .status {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #1f2937;
+  line-height: 1.2;
+}
+
+.cell-status .date {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.2;
+}
+
+.status-cell {
+  white-space: nowrap !important;
+}
+
+.approval-name {
+  white-space: normal;
+  line-height: 1.3;
+}
