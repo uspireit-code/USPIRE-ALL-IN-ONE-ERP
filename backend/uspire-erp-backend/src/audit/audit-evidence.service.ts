@@ -50,7 +50,22 @@ export class AuditEvidenceService {
         storageKey,
         sha256Hash: sha256,
         uploadedById: user.id,
-      },
+        governanceDomain: String(dto.governanceDomain ?? '').trim() || null,
+        governanceActionType:
+          String(dto.governanceActionType ?? '').trim() || null,
+        evidenceCategory: String(dto.evidenceCategory ?? '').trim() || null,
+        retentionClassification:
+          String(dto.retentionClassification ?? '').trim() || null,
+        auditSensitivity: String(dto.auditSensitivity ?? '').trim() || null,
+        justificationText: String(dto.justificationText ?? '').trim() || null,
+        links: {
+          create: {
+            tenantId: tenant.id,
+            entityType: dto.entityType as any,
+            entityId: dto.entityId,
+          },
+        },
+      } as any,
       select: {
         id: true,
         tenantId: true,
@@ -94,7 +109,7 @@ export class AuditEvidenceService {
       throw new BadRequestException('entityType and entityId are required');
     }
 
-    return this.prisma.auditEvidence.findMany({
+    const links = await (this.prisma as any).auditEvidenceLink.findMany({
       where: {
         tenantId: tenant.id,
         entityType: dto.entityType as any,
@@ -102,19 +117,25 @@ export class AuditEvidenceService {
       },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true,
-        tenantId: true,
-        entityType: true,
-        entityId: true,
-        fileName: true,
-        mimeType: true,
-        size: true,
-        sha256Hash: true,
-        uploadedById: true,
-        createdAt: true,
-        uploadedBy: { select: { id: true, email: true } },
+        evidence: {
+          select: {
+            id: true,
+            tenantId: true,
+            entityType: true,
+            entityId: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+            sha256Hash: true,
+            uploadedById: true,
+            createdAt: true,
+            uploadedBy: { select: { id: true, email: true } },
+          },
+        },
       },
     });
+
+    return (links ?? []).map((l: any) => l.evidence);
   }
 
   async downloadEvidence(req: Request, id: string) {

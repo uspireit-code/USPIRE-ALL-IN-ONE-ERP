@@ -2,6 +2,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
+ model TenantJournalNumberingConfig {
+  id         String                @id @default(uuid())
+  tenantId   String                @unique
+  scope      JournalNumberingScope @default(TENANT_GLOBAL)
+  updatedAt  DateTime              @updatedAt
+  updatedById String?
+
+  tenant     Tenant                @relation(fields: [tenantId], references: [id])
+  updatedBy  User?                 @relation("TenantJournalNumberingConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+ }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -1010,15 +1023,38 @@ model AuditEvidence {
   sha256Hash   String
   uploadedById String
   createdAt    DateTime        @default(now())
+  governanceDomain          String?
+  governanceActionType      String?
+  evidenceCategory          String?
+  retentionClassification   String?
+  auditSensitivity          String?
+  justificationText         String?
   tenant       Tenant          @relation(fields: [tenantId], references: [id])
   uploadedBy   User            @relation("AuditEvidenceUploadedBy", fields: [uploadedById], references: [id])
   imprestCaseEvidence ImprestCaseEvidence[]
+  links        AuditEvidenceLink[]
 
   @@unique([tenantId, storageKey])
   @@index([tenantId])
   @@index([tenantId, entityType, entityId])
   @@index([uploadedById])
   @@index([tenantId, createdAt])
+}
+
+model AuditEvidenceLink {
+  id         String        @id @default(uuid())
+  tenantId   String
+  evidenceId String
+  entityType AuditEntityType
+  entityId   String
+  createdAt  DateTime      @default(now())
+  evidence   AuditEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  tenant     Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, evidenceId, entityType, entityId])
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, evidenceId])
 }
 
 model ReviewPack {
@@ -1451,6 +1487,7 @@ model Tenant {
   defaultBankClearingAccountId   String?
   unappliedReceiptsAccountId     String?
   allowSelfPosting               Boolean                         @default(false)
+  retroPostToleranceDays         Int                             @default(0)
   receiptBankName                String?
   receiptBankAccountName         String?
   receiptBankAccountNumber       String?
@@ -1472,6 +1509,7 @@ model Tenant {
   arReminderTemplates            ArReminderTemplate[]
   auditEvents                    AuditEvent[]
   auditEvidence                  AuditEvidence[]
+  auditEvidenceLinks             AuditEvidenceLink[]
   bankAccounts                   BankAccount[]
   bankReconciliationSnapshots     BankReconciliationSnapshot[]
   bankStatements                 BankStatement[]
@@ -1519,6 +1557,7 @@ model Tenant {
   taxRates                       TaxRate[]
   imprestTypePolicies             ImprestTypePolicy[]
   imprestFacilities               ImprestFacility[]
+  journalNumberingConfig          TenantJournalNumberingConfig?
   imprestCases                    ImprestCase[]
   imprestCaseTransitionLogs       ImprestCaseTransitionLog[]
   imprestCaseEvidence             ImprestCaseEvidence[]
@@ -1532,7 +1571,11 @@ model Tenant {
   sequenceCounters               TenantSequenceCounter[]
   taxConfig                      TenantTaxConfig?
   users                          User[]
+  userLegalEntityAccess          UserLegalEntityAccess[]
   sessions                       UserSession[]
+  governanceOverrideSessions      GovernanceOverrideSession[]
+  governanceAutomationExecutionSessions GovernanceAutomationExecutionSession[]
+  governanceAutomationSchedules   GovernanceAutomationSchedule[]
   passwordResetTokens            PasswordResetToken[]
   delegations                    UserDelegation[]
   twoFactorChallenges             TwoFactorChallenge[]
@@ -1545,6 +1588,7 @@ model Tenant {
   coaStructureChangeRequestAttachments CoaStructureChangeRequestAttachment[]
   coaStructuralChanges           CoaStructuralChange[]
   ifrsNodes                      IfrsNode[]
+  notifications                  Notification[]
 
   coaStructureFrozenByUser       User?                           @relation("TenantCoaStructureFrozenBy", fields: [coaStructureFrozenByUserId], references: [id], onDelete: SetNull)
 
@@ -1596,6 +1640,7 @@ model LegalEntity {
   updatedAt     DateTime      @default(now()) @updatedAt
   budgetLines   BudgetLine[]
   journalLines  JournalLine[]
+  userLegalEntityAccess UserLegalEntityAccess[]
   createdBy     User?         @relation("LegalEntityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
 
@@ -1766,6 +1811,15 @@ model User {
   twoFactorLockUntil                      DateTime?
   twoFactorFailedAttempts                 Int                             @default(0)
   sessions                                UserSession[]
+  governanceOverrideSessionsRequested      GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionRequestedBy")
+  governanceOverrideSessionsApproved       GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionApprovedBy")
+  governanceOverrideSessionsRejected       GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionRejectedBy")
+  governanceOverrideSessionsRevoked        GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionRevokedBy")
+  governanceAutomationExecutionSessionsAsActor GovernanceAutomationExecutionSession[] @relation("GovernanceAutomationExecutionSessionActor")
+  governanceAutomationSchedulesCreated        GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleCreatedBy")
+  governanceAutomationSchedulesApproved       GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleApprovedBy")
+  governanceAutomationSchedulesSuspended      GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleSuspendedBy")
+  governanceAutomationSchedulesRevoked        GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleRevokedBy")
   coaRootCategoriesCreated                 CoaRootCategory[]               @relation("CoaRootCategoryCreatedBy")
   accountsCreated                         Account[]                       @relation("AccountCreatedBy")
   accountsApproved                        Account[]                       @relation("AccountApprovedBy")
@@ -1826,11 +1880,13 @@ model User {
   journalsCreated                         JournalEntry[]                  @relation("JournalCreatedBy")
   journalsPosted                          JournalEntry[]                  @relation("JournalPostedBy")
   journalsRejected                        JournalEntry[]                  @relation("JournalRejectedBy")
+  journalsVoided                          JournalEntry[]                  @relation("JournalVoidedBy")
   journalsReturnedByPoster                JournalEntry[]                  @relation("JournalReturnedByPoster")
   journalsReversalInitiated               JournalEntry[]                  @relation("JournalReversalInitiatedBy")
   journalsReversalPrepared                JournalEntry[]                  @relation("JournalReversalPreparedBy")
   journalsReviewed                        JournalEntry[]                  @relation("JournalReviewedBy")
   journalsSubmitted                       JournalEntry[]                  @relation("JournalSubmittedBy")
+  tenantJournalNumberingConfigsUpdated    TenantJournalNumberingConfig[]  @relation("TenantJournalNumberingConfigUpdatedBy")
   legalEntitiesCreated                    LegalEntity[]                   @relation("LegalEntityCreatedBy")
   paymentsApproved                        Payment[]                       @relation("PaymentApprovedBy")
   paymentsCreated                         Payment[]                       @relation("PaymentCreatedBy")
@@ -1881,8 +1937,35 @@ model User {
   coaStructuralChangesApproved             CoaStructuralChange[]              @relation("CoaStructuralChangeApprovedBy")
   coaStructuralChangesImplemented          CoaStructuralChange[]              @relation("CoaStructuralChangeImplementedBy")
 
+  legalEntityAccess                       UserLegalEntityAccess[]
+  legalEntityAccessGranted                UserLegalEntityAccess[]             @relation("UserLegalEntityAccessGrantedBy")
+
+  notifications                           Notification[]
+
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  title      String
+  message    String
+  type       String
+  entityType String?
+  entityId   String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([userId])
+  @@index([tenantId, isRead])
+  @@index([tenantId, createdAt])
 }
 
 model UserSession {
@@ -1915,10 +1998,161 @@ model UserSession {
   @@index([expiresAt])
 }
 
+model GovernanceOverrideSession {
+  id              String   @id @default(uuid())
+  tenantId         String
+
+  overrideCode     String
+  entryPoint       String
+  status           String   @default("REQUESTED")
+
+  reason           String
+  justification    String
+
+  escalationType   String?
+  escalationReason String?
+
+  entityType       AuditEntityType?
+  entityId         String?
+
+  requestedById    String
+  approvedById     String?
+  rejectedById     String?
+  revokedById      String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+  expiresAt        DateTime
+  executedAt       DateTime?
+  revokedAt        DateTime?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requestedBy      User     @relation("GovernanceOverrideSessionRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  approvedBy       User?    @relation("GovernanceOverrideSessionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy       User?    @relation("GovernanceOverrideSessionRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  revokedBy        User?    @relation("GovernanceOverrideSessionRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, overrideCode])
+  @@index([tenantId, status])
+  @@index([tenantId, expiresAt])
+  @@index([tenantId, requestedById])
+
+  governanceAutomationExecutionSessions GovernanceAutomationExecutionSession[]
+}
+
+model GovernanceAutomationExecutionSession {
+  id               String   @id @default(uuid())
+  tenantId          String
+
+  automationCode    String
+  scheduleId        String?
+  executionStatus   String   @default("STARTED")
+
+  actorType         String
+  actorUserId       String?
+
+  governanceDomain  String?
+  severity          String?
+  auditSensitivity  String?
+
+  overrideSessionId String?
+  escalationType    String?
+  escalationReason  String?
+
+  evidenceMetadata  Json?
+  governanceMetadata Json?
+
+  executionResult   Json?
+  failureReason     String?
+  retryCount        Int      @default(0)
+
+  startedAt         DateTime @default(now())
+  completedAt       DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorUser         User?    @relation("GovernanceAutomationExecutionSessionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  overrideSession   GovernanceOverrideSession? @relation(fields: [overrideSessionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, automationCode])
+  @@index([tenantId, scheduleId])
+  @@index([tenantId, executionStatus])
+  @@index([tenantId, startedAt])
+  @@index([tenantId, completedAt])
+  @@index([overrideSessionId])
+}
+
+model GovernanceAutomationSchedule {
+  id             String   @id @default(uuid())
+  tenantId        String
+
+  automationCode  String
+  scheduleStatus  String   @default("ACTIVE")
+
+  activationStatus String  @default("ACTIVE")
+
+  approvedById    String?
+  approvedAt      DateTime?
+
+  targetType      String
+  targetId        String
+
+  scheduleConfig  Json?
+
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+
+  expiresAt       DateTime?
+
+  suspendedAt     DateTime?
+  suspendedById   String?
+
+  revokedAt       DateTime?
+  revokedById     String?
+
+  reviewRequiredAt DateTime?
+
+  consecutiveFailureCount Int @default(0)
+  lastFailureReason String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+  createdById    String
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy      User     @relation("GovernanceAutomationScheduleCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  approvedBy     User?    @relation("GovernanceAutomationScheduleApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  suspendedBy    User?    @relation("GovernanceAutomationScheduleSuspendedBy", fields: [suspendedById], references: [id], onDelete: SetNull)
+  revokedBy      User?    @relation("GovernanceAutomationScheduleRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, automationCode])
+  @@index([tenantId, scheduleStatus])
+  @@index([tenantId, activationStatus])
+  @@index([tenantId, nextRunAt])
+  @@index([tenantId, targetType, targetId])
+  @@index([createdById])
+  @@index([approvedById])
+}
+
 enum DelegationScope {
   APPROVE
   POST
   BOTH
+}
+
+enum LegalEntityAccessLevel {
+  VIEW
+  PREPARE
+  POST
+  APPROVE
+  OVERRIDE
 }
 
 model UserDelegation {
@@ -1946,6 +2180,31 @@ model UserDelegation {
   @@index([tenantId, delegateUserId])
   @@index([tenantId, delegatorUserId, delegateUserId])
   @@index([tenantId, expiresAt])
+}
+
+model UserLegalEntityAccess {
+  id           String                @id @default(uuid())
+  tenantId     String
+  userId       String
+  legalEntityId String
+  accessLevel  LegalEntityAccessLevel
+  canPost      Boolean               @default(false)
+  canApprove   Boolean               @default(false)
+  canOverride  Boolean               @default(false)
+  grantedById  String?
+  grantedAt    DateTime              @default(now())
+  expiresAt    DateTime?
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  grantedBy   User?      @relation("UserLegalEntityAccessGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, userId, legalEntityId])
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([tenantId, legalEntityId])
+  @@index([expiresAt])
 }
 
 model PasswordResetToken {
@@ -2065,6 +2324,9 @@ model Account {
   isActive                                Boolean                        @default(true)
   createdAt                               DateTime                       @default(now())
   isCashEquivalent                        Boolean                        @default(false)
+  isIntercompanyAccount                   Boolean                        @default(false)
+  intercompanyEnabled                     Boolean                        @default(false)
+  intercompanyRole                        IntercompanyAccountRole?
   importBatchId                           String?
   createdById                             String?
   approvedAt                              DateTime?
@@ -2152,6 +2414,12 @@ enum CoaImportBatchStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+enum IntercompanyAccountRole {
+  DUE_TO
+  DUE_FROM
+  INTERCOMPANY_CLEARING
 }
 
 model CoaImportBatch {
@@ -2461,6 +2729,10 @@ model JournalEntry {
   reference                   String?
   description                 String?
   status                      JournalStatus                @default(DRAFT)
+  reviewMode                  JournalReviewMode?
+  intent                      JournalIntent                @default(OPERATIONAL)
+  intentNotes                 String?
+  intentReference             String?
   createdById                 String
   postedById                  String?
   createdAt                   DateTime                     @default(now())
@@ -2487,6 +2759,10 @@ model JournalEntry {
   reversalReason              String?
   reversalPreparedById        String?
   correctsJournalId           String?
+  voidedAt                    DateTime?
+  voidedById                  String?
+  voidReason                  String?
+  voidReference               String?
   riskScore                   Int                          @default(0)
   riskFlags                   Json                         @default("[]")
   riskComputedAt              DateTime?
@@ -2509,6 +2785,7 @@ model JournalEntry {
   period                      AccountingPeriod?            @relation(fields: [periodId], references: [id], onDelete: Restrict)
   postedBy                    User?                        @relation("JournalPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
   rejectedBy                  User?                        @relation("JournalRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  voidedBy                    User?                        @relation("JournalVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
   returnedByPoster            User?                        @relation("JournalReturnedByPoster", fields: [returnedByPosterId], references: [id], onDelete: Restrict)
   reversalInitiatedBy         User?                        @relation("JournalReversalInitiatedBy", fields: [reversalInitiatedById], references: [id], onDelete: Restrict)
   reversalOf                  JournalEntry?                @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
@@ -2537,6 +2814,9 @@ model RecurringJournalTemplate {
   tenantId            String
   name                String
   journalType         JournalType                    @default(STANDARD)
+  intent              JournalIntent                  @default(OPERATIONAL)
+  intentNotes         String?
+  intentReference     String?
   referenceTemplate   String
   descriptionTemplate String?
   frequency           RecurringJournalFrequency
@@ -2969,6 +3249,35 @@ enum JournalStatus {
   SUBMITTED
   REVIEWED
   REJECTED
+  VOIDED
+}
+
+ enum JournalIntent {
+  OPERATIONAL
+  ACCRUAL
+  ADJUSTMENT
+  CORRECTION
+  REVERSAL
+  RECLASSIFICATION
+  OPENING_BALANCE
+  CLOSING
+  TAX
+  INTERCOMPANY
+  AUDIT_ADJUSTMENT
+  SYSTEM_GENERATED
+ }
+
+ enum JournalNumberingScope {
+  TENANT_GLOBAL
+  LEGAL_ENTITY
+  FISCAL_YEAR
+  LEGAL_ENTITY_FISCAL_YEAR
+ }
+
+enum JournalReviewMode {
+  MANUAL_REVIEW
+  SYSTEM_REVIEW
+  OVERRIDE_REVIEW
 }
 
 enum JournalType {
@@ -2991,8 +3300,11 @@ enum NormalBalance {
 
 enum AccountingPeriodStatus {
   OPEN
-  CLOSED
   SOFT_CLOSED
+  HARD_CLOSED
+  ARCHIVED
+  // Legacy value retained for backward compatibility with existing data.
+  CLOSED
 }
 
 enum AccountingPeriodType {
@@ -3055,6 +3367,13 @@ enum AuditEventType {
   DELEGATION_ACTION_BLOCKED_SOD
   OTP_SUCCESS
   OTP_FAILED
+  OVERRIDE_SESSION_CREATED
+  OVERRIDE_SESSION_UPDATED
+  OVERRIDE_SESSION_APPROVED
+  OVERRIDE_SESSION_REJECTED
+  OVERRIDE_SESSION_REVOKED
+  OVERRIDE_SESSION_EXPIRED
+  OVERRIDE_SESSION_EXECUTED
   JOURNAL_POST
   PERIOD_CHECKLIST_COMPLETE
   PERIOD_CLOSE
@@ -3114,15 +3433,31 @@ enum AuditEventType {
   RECURRING_TEMPLATE_CREATE
   RECURRING_TEMPLATE_UPDATE
   RECURRING_JOURNAL_GENERATED
+  AUTOMATION_EXECUTION_STARTED
+  AUTOMATION_EXECUTION_COMPLETED
+  AUTOMATION_EXECUTION_FAILED
+  AUTOMATION_SUSPENDED
+  AUTOMATION_ESCALATED
+  AUTOMATION_OVERRIDE_USED
+  AUTOMATION_SCHEDULE_CREATED
+  AUTOMATION_SCHEDULE_UPDATED
+  AUTOMATION_SCHEDULE_SUSPENDED
+  AUTOMATION_SCHEDULE_RESUMED
+  AUTOMATION_SCHEDULE_REVOKED
+  AUTOMATION_SCHEDULE_EXPIRED
   JOURNAL_UPLOAD
   JOURNAL_UPLOAD_FAILED
+  GL_JOURNAL_VOIDED
+  JOURNAL_NUMBERING_CONFIGURATION_CHANGED
   DISCLOSURE_NOTE_GENERATE
   DISCLOSURE_NOTE_VIEW
   GL_JOURNAL_SUBMITTED
   GL_JOURNAL_REVIEWED
+  GL_JOURNAL_SYSTEM_REVIEWED
   GL_JOURNAL_POSTED
   GL_JOURNAL_REVERSED
   GL_JOURNAL_POST_BLOCKED
+  GL_LIFECYCLE_BYPASS_BLOCKED
   FA_POST
   GL_JOURNAL_REJECTED
   GL_JOURNAL_RETURNED_BY_POSTER
@@ -3132,6 +3467,8 @@ enum AuditEventType {
   GL_JOURNAL_REVERSAL_ASSIGNED
   GL_JOURNAL_RISK_COMPUTED
   GL_JOURNAL_BUDGET_EVALUATED
+  GL_JOURNAL_OVERRIDE_POSTED
+  GL_JOURNAL_SOD_VIOLATION_BLOCKED
   COA_IMPORTED
   COA_CLEANUP_EXECUTED
   COA_RECLASS_CREATED
@@ -3222,6 +3559,7 @@ enum JournalBudgetStatus {
 enum AuditEntityType {
   TWO_FACTOR_CHALLENGE
   JOURNAL_ENTRY
+  JOURNAL_UPLOAD_BATCH
   ACCOUNTING_PERIOD
   ACCOUNTING_PERIOD_CHECKLIST_ITEM
   SUPPLIER_INVOICE
@@ -3257,6 +3595,9 @@ enum AuditEntityType {
   IMPREST_TYPE_POLICY
   IMPREST_FACILITY
   IMPREST_CASE
+  GOVERNANCE_OVERRIDE_SESSION
+  GOVERNANCE_AUTOMATION_EXECUTION_SESSION
+  GOVERNANCE_AUTOMATION_SCHEDULE
 }
 
 enum AccountLifecycleStatus {

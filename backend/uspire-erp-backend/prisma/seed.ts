@@ -432,6 +432,40 @@ async function main() {
     });
   }
 
+  // Governance RBAC bootstrap (additive-only):
+  // - FINANCE_MANAGER: governance view + automation view
+  // - FINANCE_CONTROLLER: governance view/manage + full automation governance capabilities
+  // - AUDITOR: automation view + automation analytics only
+  await assignPermissionsByCode(financeManagerRole.id, [
+    PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW,
+    PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+  ]);
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW,
+    PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE,
+    PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+    PERMISSIONS.GOVERNANCE.AUTOMATION.CREATE,
+    PERMISSIONS.GOVERNANCE.AUTOMATION.EXECUTE,
+    PERMISSIONS.GOVERNANCE.AUTOMATION.SUSPEND,
+    PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+  ]);
+
+  const auditorRole = await prisma.role.findUnique({
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'AUDITOR',
+      },
+    },
+    select: { id: true },
+  });
+  if (auditorRole?.id) {
+    await assignPermissionsByCode(auditorRole.id, [
+      PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+      PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+    ]);
+  }
+
   {
     const refundPowersAndAliases = [
       PERMISSIONS.AR.REFUND_CREATE,
@@ -1180,6 +1214,20 @@ async function main() {
     select: { id: true },
   });
 
+  const glOverridePostPerm = await prisma.permission.upsert({
+    where: { code: PERMISSIONS.GL.OVERRIDE_POST },
+    create: {
+      code: PERMISSIONS.GL.OVERRIDE_POST,
+      description:
+        'Override Segregation of Duties controls for GL posting (requires reason and is audited)',
+    },
+    update: {
+      description:
+        'Override Segregation of Duties controls for GL posting (requires reason and is audited)',
+    },
+    select: { id: true },
+  });
+
   // Backfill: ensure all FINANCE_OFFICER roles (across all tenants) have recurring generate.
   // This is additive-only and safe to re-run.
   if (glRecurringGeneratePerm?.id) {
@@ -1672,6 +1720,24 @@ async function main() {
           },
         });
       }
+    }
+  }
+
+  // Governance: FINANCE_CONTROLLER can perform SoD override posting (additive-only).
+  if (glOverridePostPerm?.id) {
+    const financeControllerRoles = await prisma.role.findMany({
+      where: { name: 'FINANCE_CONTROLLER' },
+      select: { id: true },
+    });
+
+    if (financeControllerRoles.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: financeControllerRoles.map((r) => ({
+          roleId: r.id,
+          permissionId: glOverridePostPerm.id,
+        })),
+        skipDuplicates: true,
+      });
     }
   }
 

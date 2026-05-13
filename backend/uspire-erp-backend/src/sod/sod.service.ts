@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import type { AuditEntityType } from '@prisma/client';
+import { AuditEventType, type AuditEntityType } from '@prisma/client';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
@@ -60,10 +60,15 @@ export class SoDService {
       ? 'You cannot approve or post a transaction you initiated.'
       : 'You cannot perform this action because you already participated in this transaction workflow.';
 
+    const eventType =
+      params.entityType === 'JOURNAL_ENTRY'
+        ? AuditEventType.GL_JOURNAL_SOD_VIOLATION_BLOCKED
+        : AuditEventType.DELEGATION_ACTION_BLOCKED_SOD;
+
     await writeAuditEventWithPrisma(
       {
         tenantId: params.tenantId,
-        eventType: 'DELEGATION_ACTION_BLOCKED_SOD' as any,
+        eventType,
         actorUserId: params.realUserId,
         entityType: params.entityType,
         entityId: params.entityId,

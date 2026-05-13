@@ -50,6 +50,44 @@ export class CreateJournalDto {
   @IsDateString()
   journalDate!: string;
 
+  @IsEnum(
+    [
+      'OPERATIONAL',
+      'ACCRUAL',
+      'ADJUSTMENT',
+      'CORRECTION',
+      'REVERSAL',
+      'RECLASSIFICATION',
+      'OPENING_BALANCE',
+      'CLOSING',
+      'TAX',
+      'INTERCOMPANY',
+      'AUDIT_ADJUSTMENT',
+      'SYSTEM_GENERATED',
+    ] as const,
+  )
+  intent!:
+    | 'OPERATIONAL'
+    | 'ACCRUAL'
+    | 'ADJUSTMENT'
+    | 'CORRECTION'
+    | 'REVERSAL'
+    | 'RECLASSIFICATION'
+    | 'OPENING_BALANCE'
+    | 'CLOSING'
+    | 'TAX'
+    | 'INTERCOMPANY'
+    | 'AUDIT_ADJUSTMENT'
+    | 'SYSTEM_GENERATED';
+
+  @IsOptional()
+  @IsString()
+  intentNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  intentReference?: string;
+
   @IsOptional()
   @IsEnum(['STANDARD', 'ADJUSTING', 'ACCRUAL', 'REVERSING'] as const)
   journalType?: 'STANDARD' | 'ADJUSTING' | 'ACCRUAL' | 'REVERSING';

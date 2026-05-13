@@ -12,6 +12,59 @@ export type OrganisationSettings = {
   updatedAt: string;
 };
 
+export type SystemGovernanceSettings = {
+  id: string;
+  name: string;
+  organisationName: string;
+  organisationShortName: string | null;
+  legalName: string | null;
+  defaultCurrency: string | null;
+  country: string | null;
+  timezone: string | null;
+  financialYearStartMonth: number | null;
+  dateFormat: string | null;
+  numberFormat: string | null;
+  defaultLandingPage: string | null;
+  defaultDashboard: string | null;
+  defaultLanguage: string | null;
+  demoModeEnabled: boolean | null;
+  defaultUserRoleCode: string | null;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string | null;
+  accentColor: string | null;
+  secondaryAccentColor: string | null;
+  receiptBankName?: string | null;
+  receiptBankAccountName?: string | null;
+  receiptBankAccountNumber?: string | null;
+  receiptBankBranch?: string | null;
+  receiptBankSwiftCode?: string | null;
+  updatedAt: string;
+};
+
+export type FinancialGovernanceSettings = {
+  id: string;
+  allowSelfPosting?: boolean;
+  journalNumberingScope?:
+    | 'TENANT_GLOBAL'
+    | 'LEGAL_ENTITY'
+    | 'FISCAL_YEAR'
+    | 'LEGAL_ENTITY_FISCAL_YEAR'
+    | null;
+  requiresDepartmentOnInvoices?: boolean;
+  requiresProjectOnInvoices?: boolean;
+  requiresFundOnInvoices?: boolean;
+  arControlAccountId?: string | null;
+  apControlAccountId?: string | null;
+  defaultBankClearingAccountId?: string | null;
+  arRefundClearingAccountId?: string | null;
+  cashClearingAccountId?: string | null;
+  arCashClearingAccountId?: string | null;
+  unappliedReceiptsAccountId?: string | null;
+  updatedAt: string;
+};
+
 export type TenantSystemConfig = {
   id: string;
   name: string;
@@ -171,11 +224,84 @@ export async function getSystemConfig() {
   return apiFetch<TenantSystemConfig>('/settings/system', { method: 'GET' });
 }
 
-export async function updateSystemConfig(params: Partial<Omit<TenantSystemConfig, 'id' | 'updatedAt' | 'logoUrl' | 'faviconUrl' | 'name'>>) {
-  return apiFetch<TenantSystemConfig>('/settings/system', {
+export async function getSystemGovernance() {
+  return apiFetch<SystemGovernanceSettings>('/settings/governance/system', {
+    method: 'GET',
+  });
+}
+
+export async function updateSystemGovernance(
+  params: Partial<Omit<SystemGovernanceSettings, 'id' | 'name' | 'updatedAt' | 'logoUrl' | 'faviconUrl'>>,
+) {
+  return apiFetch<SystemGovernanceSettings>('/settings/governance/system', {
     method: 'PUT',
     body: JSON.stringify(params),
   });
+}
+
+export async function getFinancialGovernance() {
+  return apiFetch<FinancialGovernanceSettings>('/settings/governance/financial', {
+    method: 'GET',
+  });
+}
+
+export async function updateFinancialGovernance(
+  params: Partial<Omit<FinancialGovernanceSettings, 'id' | 'updatedAt'>>,
+) {
+  return apiFetch<FinancialGovernanceSettings>('/settings/governance/financial', {
+    method: 'PUT',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function updateSystemConfig(
+  params: Partial<
+    Omit<TenantSystemConfig, 'id' | 'updatedAt' | 'logoUrl' | 'faviconUrl' | 'name'>
+  >,
+) {
+  const financeKeys = new Set<string>([
+    'allowSelfPosting',
+    'requiresDepartmentOnInvoices',
+    'requiresProjectOnInvoices',
+    'requiresFundOnInvoices',
+    'arControlAccountId',
+    'apControlAccountId',
+    'defaultBankClearingAccountId',
+    'arRefundClearingAccountId',
+    'cashClearingAccountId',
+    'arCashClearingAccountId',
+    'unappliedReceiptsAccountId',
+    'arRefundClearingAccountId',
+    'supplierAdvanceAccountId',
+  ]);
+
+  const payloadKeys = Object.keys(params ?? {}).filter((k) => (params as any)?.[k] !== undefined);
+  const financePayload: any = {};
+  const systemPayload: any = {};
+
+  for (const k of payloadKeys) {
+    if (financeKeys.has(k)) financePayload[k] = (params as any)[k];
+    else systemPayload[k] = (params as any)[k];
+  }
+
+  let latest: TenantSystemConfig | null = null;
+
+  if (Object.keys(systemPayload).length > 0) {
+    const sys = await updateSystemGovernance(systemPayload);
+    latest = { ...(latest ?? ({} as any)), ...(sys as any) } as TenantSystemConfig;
+  }
+
+  if (Object.keys(financePayload).length > 0) {
+    const fin = await updateFinancialGovernance(financePayload);
+    latest = { ...(latest ?? ({} as any)), ...(fin as any) } as TenantSystemConfig;
+  }
+
+  if (!latest) {
+    return getSystemConfig();
+  }
+
+  // Some callers expect the full TenantSystemConfig shape; fetch canonical read model.
+  return getSystemConfig();
 }
 
 export async function getFinanceApControlAccount(): Promise<{ apControlAccountId: string | null }> {

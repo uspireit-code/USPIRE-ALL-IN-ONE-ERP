@@ -211,6 +211,9 @@ export function JournalUploadPage() {
             If any row fails validation, the entire upload is rejected and you’ll get a detailed error list.
           </div>
           <div style={{ marginTop: 8, fontSize: 13, color: tokens.colors.text.secondary, lineHeight: '18px' }}>
+            Journal Intent is required. Make sure the Journals sheet includes Intent (and optionally IntentNotes and IntentReference).
+          </div>
+          <div style={{ marginTop: 8, fontSize: 13, color: tokens.colors.text.secondary, lineHeight: '18px' }}>
             LegalEntityCode is mandatory on every journal line. DepartmentCode depends on the Natural Account (required for P&L, optional for balance sheet, forbidden for control accounts).
           </div>
           <div style={{ marginTop: 8, fontSize: 13, color: tokens.colors.text.secondary, lineHeight: '18px' }}>

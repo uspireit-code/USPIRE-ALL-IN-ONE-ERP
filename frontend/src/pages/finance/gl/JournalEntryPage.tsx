@@ -24,6 +24,7 @@ import {
   getInvalidJournalDateMessage,
   type AccountingPeriod,
   type GlAccountLookup,
+  type JournalIntent,
   type JournalEntry,
   type JournalDetailResponse,
   type JournalStatus,
@@ -169,6 +170,12 @@ export function JournalEntryPage() {
   const [hasLockedJournalType, setHasLockedJournalType] = useState(false);
   const [description, setDescription] = useState('');
   const [budgetOverrideJustification, setBudgetOverrideJustification] = useState('');
+
+  const [intent, setIntent] = useState<JournalIntent>(() => {
+    return correctsJournalIdFromUrl ? 'CORRECTION' : 'OPERATIONAL';
+  });
+  const [intentNotes, setIntentNotes] = useState('');
+  const [intentReference, setIntentReference] = useState('');
 
   const correctsJournalIdFromUrl = useMemo(() => {
     const v = (searchParams.get('correctsJournalId') ?? '').trim();
@@ -383,6 +390,11 @@ export function JournalEntryPage() {
     return description.trim() ? null : 'Journal description is required before you can capture.';
   }, [canCreate, readOnly, description]);
 
+  const intentError = useMemo(() => {
+    if (!canCreate || readOnly) return null;
+    return String(intent ?? '').trim() ? null : 'Journal intent is required before you can capture.';
+  }, [canCreate, readOnly, intent]);
+
   const totalsError = useMemo(() => {
     if (!canCreate || readOnly) return null;
     if (totals.totalDebit === 0 && totals.totalCredit === 0) return 'Enter at least one debit/credit amount.';
@@ -392,7 +404,7 @@ export function JournalEntryPage() {
   }, [canCreate, readOnly, totals.totalDebit, totals.totalCredit, totals.net]);
 
   const captureDisabledReason =
-    headerDescriptionError || lineValidationByIndex.size > 0 || totalsError || journalDateInfoMessage
+    intentError || headerDescriptionError || lineValidationByIndex.size > 0 || totalsError || journalDateInfoMessage
       ? 'Complete all required fields and fix validation errors before capturing.'
       : null;
 
@@ -450,6 +462,9 @@ export function JournalEntryPage() {
         setJournalDate(existing.journalDate.slice(0, 10));
         setJournalType((existing.journalType ?? 'STANDARD') as JournalType);
         setDescription(existing.description ?? '');
+        setIntent(((existing as any).intent ?? (detail as any)?.intent ?? 'OPERATIONAL') as JournalIntent);
+        setIntentNotes(String((existing as any).intentNotes ?? (detail as any)?.intentNotes ?? ''));
+        setIntentReference(String((existing as any).intentReference ?? (detail as any)?.intentReference ?? ''));
         setBudgetOverrideJustification(String((detail as any)?.budgetOverrideJustification ?? (existing as any)?.budgetOverrideJustification ?? ''));
 
         setLines(
@@ -473,6 +488,9 @@ export function JournalEntryPage() {
         setJournalType('STANDARD');
         setHasLockedJournalType(true);
         setDescription(source.description ? `Correction: ${source.description}` : 'Correcting journal');
+        setIntent('CORRECTION');
+        setIntentNotes('');
+        setIntentReference(correctsJournalIdFromUrl);
         setBudgetOverrideJustification('');
         setLines(
           (source.lines ?? []).map((l, idx) => ({
@@ -530,6 +548,11 @@ export function JournalEntryPage() {
       return;
     }
 
+    if (intentError) {
+      setError(intentError);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -540,6 +563,9 @@ export function JournalEntryPage() {
         journalType,
         reference: undefined,
         description: description.trim() ? description.trim() : undefined,
+        intent,
+        intentNotes: intentNotes.trim() ? intentNotes.trim() : undefined,
+        intentReference: intentReference.trim() ? intentReference.trim() : undefined,
         budgetOverrideJustification: budgetOverrideJustification.trim() ? budgetOverrideJustification.trim() : undefined,
         correctsJournalId: correctsJournalIdFromUrl ?? undefined,
         lines: payloadLines,
@@ -1226,6 +1252,52 @@ export function JournalEntryPage() {
             {!readOnly && canEditHeaderDescription && headerDescriptionError ? (
               <div style={{ marginTop: 4, fontSize: 12, color: '#9a3412' }}>{headerDescriptionError}</div>
             ) : null}
+          </label>
+
+          <label>
+            Journal Intent *
+            <select
+              value={intent}
+              onChange={(e) => setIntent(e.target.value as JournalIntent)}
+              disabled={!canCreate || readOnly}
+            >
+              <option value="OPERATIONAL">OPERATIONAL</option>
+              <option value="ACCRUAL">ACCRUAL</option>
+              <option value="ADJUSTMENT">ADJUSTMENT</option>
+              <option value="CORRECTION">CORRECTION</option>
+              <option value="REVERSAL">REVERSAL</option>
+              <option value="RECLASSIFICATION">RECLASSIFICATION</option>
+              <option value="OPENING_BALANCE">OPENING_BALANCE</option>
+              <option value="CLOSING">CLOSING</option>
+              <option value="TAX">TAX</option>
+              <option value="INTERCOMPANY">INTERCOMPANY</option>
+              <option value="AUDIT_ADJUSTMENT">AUDIT_ADJUSTMENT</option>
+              <option value="SYSTEM_GENERATED">SYSTEM_GENERATED</option>
+            </select>
+            {!readOnly && canCreate && intentError ? (
+              <div style={{ marginTop: 4, fontSize: 12, color: '#9a3412' }}>{intentError}</div>
+            ) : null}
+          </label>
+
+          <label style={{ gridColumn: '1 / -1' }}>
+            Intent Notes
+            <textarea
+              value={intentNotes}
+              onChange={(e) => setIntentNotes(e.target.value)}
+              disabled={!canCreate || readOnly}
+              style={{ width: '100%' }}
+              placeholder="Optional context to support the intent classification"
+            />
+          </label>
+
+          <label style={{ gridColumn: '1 / -1' }}>
+            Intent Reference
+            <input
+              value={intentReference}
+              onChange={(e) => setIntentReference(e.target.value)}
+              disabled={!canCreate || readOnly}
+              placeholder="Optional reference (e.g. ticket, case, source reference)"
+            />
           </label>
         </div>
       </div>

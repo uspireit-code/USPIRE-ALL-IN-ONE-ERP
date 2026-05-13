@@ -1,6 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import type { AccountingPeriodStatus, SoDRule } from '@prisma/client';
-import { assertCanPost } from '../periods/period-guard';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
 
 export type AuthzUserLike = {
   id: string;
@@ -100,9 +100,16 @@ export function requirePeriodOpen(params: {
 }) {
   // Phase 2: enforcement will be added here (posting/subledger posting/close controls).
   try {
-    // Legacy helper semantics require OPEN.
-    // Use canonical period semantics but preserve legacy error payload/wording below.
-    assertCanPost(params.status, { periodName: params.periodName });
+    assertPeriodAllowsPosting({
+      period: {
+        id: 'LEGACY_REQUIRE_PERIOD_OPEN',
+        name: params.periodName,
+        status: params.status,
+      },
+      // Legacy helper has no permission context; this is intentionally conservative.
+      permissionUsed: 'PERIOD_POST',
+      context: { permissionCodes: [] },
+    });
   } catch {
     throw new ForbiddenException({
       error: 'Action blocked by accounting period control',

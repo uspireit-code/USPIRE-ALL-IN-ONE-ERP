@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Patch,
   Put,
@@ -23,6 +24,8 @@ import { SettingsService } from './settings.service';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
 import { UpdateApControlAccountDto } from './dto/update-ap-control-account.dto';
 import { UpdateSystemConfigDto } from './dto/update-system-config.dto';
+import { UpdateSystemGovernanceDto } from './dto/update-system-governance.dto';
+import { UpdateFinancialGovernanceDto } from './dto/update-financial-governance.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UpdateUserRolesDto } from './dto/update-user-roles.dto';
@@ -35,7 +38,7 @@ export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
   @Get('organisation')
-  @PermissionsAny(PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL)
+  @PermissionsAny(PERMISSIONS.GOVERNANCE.SYSTEM.VIEW, PERMISSIONS.SYSTEM.CONFIG_VIEW)
   async getOrganisation(@Req() req: Request) {
     return this.settings.getOrganisation(req);
   }
@@ -80,7 +83,7 @@ export class SettingsController {
   }
 
   @Get('organisation/logo')
-  @PermissionsAny(PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL)
+  @PermissionsAny(PERMISSIONS.GOVERNANCE.SYSTEM.VIEW, PERMISSIONS.SYSTEM.CONFIG_VIEW)
   async downloadLogo(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadOrganisationLogo(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');
@@ -90,45 +93,97 @@ export class SettingsController {
 
   @Get('system')
   @PermissionsAny(
+    PERMISSIONS.GOVERNANCE.SYSTEM.VIEW,
     PERMISSIONS.SYSTEM.CONFIG_VIEW,
     PERMISSIONS.FINANCE.CONFIG_VIEW,
     PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async getSystemConfig(@Req() req: Request) {
     return this.settings.getSystemConfig(req);
   }
 
-  @Put('system')
+  @Get('governance/system')
   @PermissionsAny(
+    PERMISSIONS.GOVERNANCE.SYSTEM.VIEW,
+    PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+  )
+  async getSystemGovernance(@Req() req: Request) {
+    return this.settings.getSystemGovernance(req);
+  }
+
+  @Put('governance/system')
+  @PermissionsAny(
+    PERMISSIONS.GOVERNANCE.SYSTEM.MANAGE,
     PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+  )
+  async updateSystemGovernance(
+    @Req() req: Request,
+    @Body() dto: UpdateSystemGovernanceDto,
+  ) {
+    return this.settings.updateSystemGovernance(req, dto);
+  }
+
+  @Get('governance/financial')
+  @PermissionsAny(
+    PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW,
+    PERMISSIONS.FINANCE.CONFIG_VIEW,
+    PERMISSIONS.FINANCE.VIEW_ALL,
+  )
+  async getFinancialGovernance(@Req() req: Request) {
+    return this.settings.getFinancialGovernance(req);
+  }
+
+  @Put('governance/financial')
+  @PermissionsAny(
+    PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE,
     PERMISSIONS.FINANCE.CONFIG_UPDATE,
     PERMISSIONS.FINANCE.CONFIG_CHANGE,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
+  )
+  async updateFinancialGovernance(
+    @Req() req: Request,
+    @Body() dto: UpdateFinancialGovernanceDto,
+  ) {
+    return this.settings.updateFinancialGovernance(req, dto);
+  }
+
+  @Put('system')
+  @PermissionsAny(
+    PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE,
+    PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.SUPER_ADMIN_GLOBAL,
   )
   async updateSystemConfig(
     @Req() req: Request,
     @Body() dto: UpdateSystemConfigDto,
   ) {
+    if (process.env.GOVERNANCE_ALLOW_LEGACY_MIXED_SETTINGS_UPDATE !== 'true') {
+      throw new ForbiddenException(
+        'Legacy mixed-domain endpoint is disabled. Use /settings/governance/system and /settings/governance/financial.',
+      );
+    }
+
+    const codes = new Set<string>(
+      Array.isArray((req as any)?.user?.permissions)
+        ? (((req as any).user.permissions ?? []) as string[]).map(String)
+        : [],
+    );
+    const hasOverride =
+      codes.has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE) ||
+      codes.has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.SUPER_ADMIN_GLOBAL);
+    if (!hasOverride) {
+      throw new ForbiddenException('Access denied');
+    }
     return this.settings.updateSystemConfig(req, dto);
   }
 
   @Get('finance/ap-control-account')
-  @PermissionsAny(
-    PERMISSIONS.FINANCE.CONFIG_UPDATE,
-    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
-  )
+  @PermissionsAny(PERMISSIONS.FINANCE.CONFIG_UPDATE)
   async getFinanceApControlAccount(@Req() req: Request) {
     return this.settings.getFinanceApControlAccount(req);
   }
 
   @Put('finance/ap-control-account')
-  @PermissionsAny(
-    PERMISSIONS.FINANCE.CONFIG_UPDATE,
-    PERMISSIONS.SYSTEM.CONFIG_UPDATE,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
-  )
+  @PermissionsAny(PERMISSIONS.FINANCE.CONFIG_UPDATE)
   async updateFinanceApControlAccount(
     @Req() req: Request,
     @Body() dto: UpdateApControlAccountDto,
@@ -149,7 +204,7 @@ export class SettingsController {
   }
 
   @Get('system/favicon')
-  @PermissionsAny(PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL)
+  @PermissionsAny(PERMISSIONS.GOVERNANCE.SYSTEM.VIEW, PERMISSIONS.SYSTEM.CONFIG_VIEW)
   async downloadFavicon(@Req() req: Request, @Res() res: Response) {
     const out = await this.settings.downloadTenantFavicon(req);
     res.setHeader('Content-Type', out.mimeType || 'application/octet-stream');

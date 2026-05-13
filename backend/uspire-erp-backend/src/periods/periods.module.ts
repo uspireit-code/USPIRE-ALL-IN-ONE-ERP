@@ -5,9 +5,10 @@ import { RbacModule } from '../rbac/rbac.module';
 import { SettingsModule } from '../settings/settings.module';
 import { PeriodsController } from './periods.controller';
 import { PeriodsService } from './periods.service';
+import { GovernanceModule } from '../governance/governance.module';
 
 @Module({
-  imports: [AuthModule, GlModule, RbacModule, SettingsModule],
+  imports: [AuthModule, GlModule, RbacModule, SettingsModule, GovernanceModule],
   controllers: [PeriodsController],
   providers: [PeriodsService],
 })

@@ -57,6 +57,10 @@ export function RecurringTemplateEditorPage() {
   const [referenceTemplate, setReferenceTemplate] = useState('');
   const [descriptionTemplate, setDescriptionTemplate] = useState('');
 
+  const [intent, setIntent] = useState('OPERATIONAL');
+  const [intentNotes, setIntentNotes] = useState('');
+  const [intentReference, setIntentReference] = useState('');
+
   const [accounts, setAccounts] = useState<Array<{ id: string; code: string; name: string; isActive: boolean }>>([]);
 
   const [lines, setLines] = useState<EditableLine[]>([
@@ -115,6 +119,9 @@ export function RecurringTemplateEditorPage() {
         setIsActive(Boolean(found.isActive));
         setReferenceTemplate(found.referenceTemplate ?? '');
         setDescriptionTemplate(found.descriptionTemplate ?? '');
+        setIntent(String((found as any).intent ?? 'OPERATIONAL'));
+        setIntentNotes(String((found as any).intentNotes ?? ''));
+        setIntentReference(String((found as any).intentReference ?? ''));
         const loadedLines: EditableLine[] = (found.lines ?? [])
           .slice()
           .sort((a, b) => a.lineOrder - b.lineOrder)
@@ -158,6 +165,9 @@ export function RecurringTemplateEditorPage() {
         isActive,
         referenceTemplate: referenceTemplate.trim(),
         descriptionTemplate: descriptionTemplate.trim() ? descriptionTemplate.trim() : undefined,
+        intent: String(intent ?? '').trim(),
+        intentNotes: intentNotes.trim() ? intentNotes.trim() : undefined,
+        intentReference: intentReference.trim() ? intentReference.trim() : undefined,
         lines: lines
           .slice()
           .sort((a, b) => a.lineOrder - b.lineOrder)
@@ -172,6 +182,7 @@ export function RecurringTemplateEditorPage() {
 
       if (!payload.name) throw new Error('Template name is required');
       if (!payload.referenceTemplate) throw new Error('Reference template is required');
+      if (!payload.intent) throw new Error('Intent is required');
       if (payload.lines.length < 2) throw new Error('At least 2 lines are required');
       if (!balanceOk) throw new Error('Template must be balanced and non-zero');
       if (lineXorErrorsByIndex.size > 0) throw new Error('Fix line debit/credit issues before saving');
@@ -295,6 +306,34 @@ export function RecurringTemplateEditorPage() {
         <label style={{ gridColumn: '1 / -1' }}>
           Reference template
           <input value={referenceTemplate} onChange={(e) => setReferenceTemplate(e.target.value)} disabled={readOnly} />
+        </label>
+
+        <label style={{ gridColumn: '1 / -1' }}>
+          Intent *
+          <select value={intent} onChange={(e) => setIntent(e.target.value)} disabled={readOnly}>
+            <option value="OPERATIONAL">OPERATIONAL</option>
+            <option value="ACCRUAL">ACCRUAL</option>
+            <option value="ADJUSTMENT">ADJUSTMENT</option>
+            <option value="CORRECTION">CORRECTION</option>
+            <option value="REVERSAL">REVERSAL</option>
+            <option value="RECLASSIFICATION">RECLASSIFICATION</option>
+            <option value="OPENING_BALANCE">OPENING_BALANCE</option>
+            <option value="CLOSING">CLOSING</option>
+            <option value="TAX">TAX</option>
+            <option value="INTERCOMPANY">INTERCOMPANY</option>
+            <option value="AUDIT_ADJUSTMENT">AUDIT_ADJUSTMENT</option>
+            <option value="SYSTEM_GENERATED">SYSTEM_GENERATED</option>
+          </select>
+        </label>
+
+        <label style={{ gridColumn: '1 / -1' }}>
+          Intent Notes
+          <textarea value={intentNotes} onChange={(e) => setIntentNotes(e.target.value)} disabled={readOnly} rows={3} />
+        </label>
+
+        <label style={{ gridColumn: '1 / -1' }}>
+          Intent Reference
+          <input value={intentReference} onChange={(e) => setIntentReference(e.target.value)} disabled={readOnly} />
         </label>
 
         <label style={{ gridColumn: '1 / -1' }}>

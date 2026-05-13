@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -49,6 +50,8 @@ type JwtRefreshPayload = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -2244,7 +2247,7 @@ export class AuthService {
 
     if (userAdminLikeRoles.length > 0) {
       const requiredPermissionCodes = [
-        PERMISSIONS.SYSTEM.VIEW_ALL,
+        PERMISSIONS.GOVERNANCE.SYSTEM.VIEW,
         PERMISSIONS.SYSTEM.SETTINGS_VIEW,
         PERMISSIONS.USER.VIEW,
         PERMISSIONS.USER.CREATE,
@@ -2281,39 +2284,178 @@ export class AuthService {
       }
     }
 
-    const permissions = new Set<string>();
-    const roles = new Set<string>();
+    // Ensure governance financial permissions exist in DB (some environments may not have re-run seeds).
+    // Additive-only: create missing Permission rows, no removals.
+    {
+      const requiredPermissionCodes = [
+        PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW,
+        PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE,
+      ] as const;
 
-    if (jwtPermissionCodes.length > 0) {
-      for (const p of jwtPermissionCodes) permissions.add(String(p));
-      for (const r of jwtRoleNames) roles.add(String(r));
-    } else {
-      const userRoles = await this.prisma.userRole.findMany({
-        where: {
-          userId: user.id,
-          role: { tenantId: tenant.id },
-        },
-        select: {
-          role: {
-            select: {
-              name: true,
-              rolePermissions: {
-                select: {
-                  permission: { select: { code: true } },
-                },
-              },
-            },
+      await this.prisma.permission.createMany({
+        data: requiredPermissionCodes.map((code) => ({ code } as any)),
+        skipDuplicates: true,
+      });
+    }
+
+    // Ensure governance automation permissions exist in DB (some environments may not have re-run seeds).
+    // Additive-only: create missing Permission rows, no removals.
+    {
+      const requiredPermissionCodes = [
+        PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.CREATE,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.EXECUTE,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.SUSPEND,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+      ] as const;
+
+      const controllerCodes = [
+        PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.CREATE,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.EXECUTE,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.SUSPEND,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+      ] as const;
+      const managerCodes = [
+        PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+      ] as const;
+      const auditorCodes = [
+        PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
+        PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+      ] as const;
+
+      const txResult = await this.prisma.$transaction(async (tx) => {
+        await tx.permission.createMany({
+          data: requiredPermissionCodes.map((code) => ({ code } as any)),
+          skipDuplicates: true,
+        });
+
+        const perms = await tx.permission.findMany({
+          where: { code: { in: [...requiredPermissionCodes] } },
+          select: { id: true, code: true },
+        });
+        const permIdByCode = new Map(perms.map((p) => [p.code, p.id] as const));
+
+        const rolesToBackfill = await tx.role.findMany({
+          where: {
+            tenantId: tenant.id,
+            name: { in: ['FINANCE_CONTROLLER', 'FINANCE_MANAGER', 'AUDITOR'] },
           },
-        },
+          select: { id: true, name: true },
+        });
+
+        const rolePermissionRows: Array<{ roleId: string; permissionId: string }> = [];
+        for (const role of rolesToBackfill) {
+          const roleName = String(role.name ?? '').trim();
+          const codesForRole =
+            roleName === 'FINANCE_CONTROLLER'
+              ? controllerCodes
+              : roleName === 'FINANCE_MANAGER'
+                ? managerCodes
+                : roleName === 'AUDITOR'
+                  ? auditorCodes
+                  : [];
+
+          for (const code of codesForRole) {
+            const permId = permIdByCode.get(code);
+            if (permId) rolePermissionRows.push({ roleId: role.id, permissionId: permId });
+          }
+        }
+
+        const assignedCount = rolePermissionRows.length
+          ? await tx.rolePermission.createMany({
+              data: rolePermissionRows,
+              skipDuplicates: true,
+            })
+          : { count: 0 };
+
+        return {
+          ensuredPermissionCodes: [...requiredPermissionCodes],
+          roleBackfillCount: assignedCount.count,
+          rolesToBackfill,
+        };
       });
 
-      for (const ur of userRoles) {
-        roles.add(ur.role.name);
-        for (const rp of ur.role.rolePermissions) {
-          permissions.add(rp.permission.code);
+      if (process.env.NODE_ENV !== 'production') {
+        const controllerRole = txResult.rolesToBackfill.find((r) => String(r.name) === 'FINANCE_CONTROLLER');
+        this.logger.log(
+          `[auth.me][automation-permissions-backfill] ${JSON.stringify({
+            tenantId: tenant.id,
+            financeControllerRoleId: controllerRole?.id ?? null,
+            ensuredPermissionCodes: txResult.ensuredPermissionCodes,
+            financeControllerAssignedCodes: [...controllerCodes],
+            rolePermissionRowsInserted: txResult.roleBackfillCount,
+          })}`,
+        );
+      }
+    }
+
+    // Backfill governance visibility for finance governance roles where seeds may not have been re-run.
+    // This is additive-only (no removals) to avoid unexpected RBAC changes.
+    {
+      const financeGovernanceRoleNames = new Set([
+        'FINANCE_MANAGER',
+        'FINANCE_CONTROLLER',
+      ]);
+
+      const userFinanceGovernanceRoles = await this.prisma.userRole.findMany({
+        where: {
+          userId: user.id,
+          role: {
+            tenantId: tenant.id,
+            name: { in: Array.from(financeGovernanceRoleNames) },
+          },
+        },
+        select: { roleId: true, role: { select: { name: true } } },
+      });
+
+      if (userFinanceGovernanceRoles.length > 0) {
+        const requiredPermissionCodes = [
+          PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW,
+          PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE,
+        ] as const;
+
+        const perms = await this.prisma.permission.findMany({
+          where: { code: { in: [...requiredPermissionCodes] } },
+          select: { id: true, code: true },
+        });
+
+        const permIdByCode = new Map(perms.map((p) => [p.code, p.id] as const));
+        const viewPermId = permIdByCode.get(PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW);
+        const managePermId = permIdByCode.get(PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE);
+
+        const rows: Array<{ roleId: string; permissionId: string }> = [];
+        for (const r of userFinanceGovernanceRoles) {
+          if (viewPermId) rows.push({ roleId: r.roleId, permissionId: viewPermId });
+          if (r.role.name === 'FINANCE_CONTROLLER' && managePermId) {
+            rows.push({ roleId: r.roleId, permissionId: managePermId });
+          }
+        }
+
+        if (rows.length > 0) {
+          await this.prisma.rolePermission.createMany({
+            data: rows,
+            skipDuplicates: true,
+          });
         }
       }
     }
+
+    const permissions = new Set<string>();
+    const roles = new Set<string>();
+
+    // Always include JWT-provided roles/permissions (if present), but never rely on them exclusively.
+    // JWTs can be stale across RBAC changes; /auth/me must reflect current DB state.
+    for (const p of jwtPermissionCodes) permissions.add(String(p));
+    for (const r of jwtRoleNames) roles.add(String(r));
+
+    const dbScope = await this.getTenantScopedRolesAndPermissions({
+      tenantId: tenant.id,
+      userId: user.id,
+    });
+    for (const r of dbScope.roles) roles.add(r);
+    for (const p of dbScope.permissions) permissions.add(p);
 
     if (process.env.NODE_ENV !== 'production') {
       const permissionList = Array.from(permissions);

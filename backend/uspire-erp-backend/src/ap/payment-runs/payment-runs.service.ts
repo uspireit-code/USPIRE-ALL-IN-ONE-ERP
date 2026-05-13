@@ -12,7 +12,7 @@ import { PERMISSIONS } from '../../rbac/permission-catalog';
 import { requirePermission } from '../../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../../audit/audit-writer';
 import { validateAccountPostingEligibility } from '../../finance/common/account-posting-eligibility';
-import { assertCanPost } from '../../periods/period-guard';
+import { assertPeriodAllowsPosting } from '../../periods/period-posting-governance';
 import type {
   ExecutePaymentRunDto,
   ListPaymentRunsQueryDto,
@@ -108,6 +108,7 @@ export class PaymentRunsService {
   }
 
   private async resolvePostingPeriodOrThrow(params: {
+    req: Request;
     tx: Prisma.TransactionClient;
     tenantId: string;
     postingDate: Date;
@@ -131,7 +132,11 @@ export class PaymentRunsService {
     }
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req: params.req,
+        period,
+        permissionUsed: PERMISSIONS.PAYMENT.POST,
+      });
     } catch {
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
@@ -150,7 +155,7 @@ export class PaymentRunsService {
       where: {
         tenantId: params.tenantId,
         name: 'Opening Balances',
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
@@ -305,6 +310,7 @@ export class PaymentRunsService {
         }
 
         const period = await this.resolvePostingPeriodOrThrow({
+          req,
           tx,
           tenantId: tenant.id,
           postingDate: executionDate,
@@ -478,9 +484,9 @@ export class PaymentRunsService {
             reference: `PAYMENT_RUN:${run.id}`,
             description: `AP payment run execution: ${run.runNumber}`,
             createdById: user.id,
-            status: 'REVIEWED',
-            reviewedById: user.id,
-            reviewedAt: now,
+            status: 'SUBMITTED',
+            submittedById: user.id,
+            submittedAt: now,
             lines: {
               create: [
                 { accountId: apAccount.id, debit: totalAmount, credit: 0 },
@@ -489,6 +495,15 @@ export class PaymentRunsService {
             },
           },
           include: { lines: true },
+        });
+
+        await this.gl.systemReviewJournal(req, {
+          prisma: tx,
+          journalId: journal.id,
+          sourceType: 'AP_PAYMENT_RUN',
+          sourceId: run.id,
+          permissionUsed: PERMISSIONS.GL.FINAL_POST,
+          validateSource: async () => true,
         });
 
         const postedJournal = await this.gl.postJournalInTx({

@@ -82,9 +82,14 @@ async function bootstrap() {
     const readiness = app.get(ReadinessService);
     const db = await readiness.checkDb();
     const storage = await readiness.checkStorage();
-    if (db !== 'ok' || storage !== 'ok') {
+    const governance = await readiness.checkGovernanceTables();
+    if (db !== 'ok' || storage !== 'ok' || governance.status !== 'ok') {
       throw new Error(
-        `Startup readiness checks failed: db=${db}, storage=${storage}`,
+        `Startup readiness checks failed: db=${db}, storage=${storage}, governanceTables=${governance.status}${
+          governance.missing.length
+            ? ` missing=${governance.missing.join(',')}`
+            : ''
+        }`,
       );
     }
   }

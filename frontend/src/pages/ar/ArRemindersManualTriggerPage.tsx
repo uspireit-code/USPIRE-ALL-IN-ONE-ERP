@@ -11,8 +11,7 @@ export function ArRemindersManualTriggerPage() {
 
   const canView =
     hasPermission(PERMISSIONS.AR.REMINDER.VIEW) ||
-    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
   const canTrigger = hasPermission(PERMISSIONS.AR.REMINDER.TRIGGER);
 
   const [invoiceId, setInvoiceId] = useState('');

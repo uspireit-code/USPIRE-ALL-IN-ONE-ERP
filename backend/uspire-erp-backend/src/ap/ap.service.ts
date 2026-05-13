@@ -14,8 +14,15 @@ import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { translatePrismaError } from '../common/prisma-error.util';
-import { assertCanPost } from '../periods/period-guard';
+import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
 import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
+import { requirePermission, requireOwnership } from '../rbac/finance-authz.helpers';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
+import {
+  assertRetroPostingWithinToleranceOrEscalated,
+  loadTenantRetroPostToleranceDays,
+} from '../periods/retro-posting-governance';
+import { maybeBuildGovernanceOverrideAuditMetadata } from '../governance/governance-enforcement';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { CreateSupplierInvoiceDto } from './dto/create-supplier-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -169,8 +176,7 @@ export class ApService {
 
     const allowed =
       codes.has(PERMISSIONS.REPORT.AP_AGING_VIEW) ||
-      codes.has(PERMISSIONS.FINANCE.VIEW_ALL) ||
-      codes.has(PERMISSIONS.SYSTEM.VIEW_ALL);
+      codes.has(PERMISSIONS.FINANCE.VIEW_ALL);
 
     if (!allowed) {
       throw new ForbiddenException('Access denied');
@@ -179,16 +185,7 @@ export class ApService {
     const roles = new Set((user as any)?.roles ?? []);
     const isAdmin = roles.has('ADMIN');
 
-    // Finance control: if user is an ADMIN and is relying only on SYSTEM_VIEW_ALL,
-    // do not allow bypassing finance visibility controls.
-    if (
-      isAdmin &&
-      codes.has(PERMISSIONS.SYSTEM.VIEW_ALL) &&
-      !codes.has(PERMISSIONS.FINANCE.VIEW_ALL) &&
-      !codes.has(PERMISSIONS.REPORT.AP_AGING_VIEW)
-    ) {
-      throw new ForbiddenException('Access denied');
-    }
+    void isAdmin;
 
     return codes;
   }
@@ -2110,7 +2107,7 @@ export class ApService {
       await writeAuditEventWithPrisma(
         {
           tenantId: tenant.id,
-          eventType: (AuditEventType as any).BILL_REJECTED,
+          eventType: AuditEventType.BILL_REJECTED,
           entityType: AuditEntityType.SUPPLIER_INVOICE,
           entityId: updated.id,
           actorUserId: user.id,
@@ -2258,10 +2255,15 @@ export class ApService {
       });
     }
 
-    // Canonical period semantics: posting is allowed only in OPEN.
+    // Canonical period posting governance: OPEN allowed; SOFT_CLOSED requires override;
+    // HARD_CLOSED/ARCHIVED always blocked.
     // We preserve the existing ForbiddenException payload/messages on failure.
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+      });
     } catch {
       await writeAuditEventWithPrisma(
         {
@@ -2285,6 +2287,17 @@ export class ApService {
         reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
+
+    const retroPostToleranceDays = await loadTenantRetroPostToleranceDays({
+      prisma: this.prisma,
+      tenantId: tenant.id,
+    });
+    assertRetroPostingWithinToleranceOrEscalated({
+      req,
+      postingDate: new Date(inv.invoiceDate),
+      toleranceDays: retroPostToleranceDays,
+      escalationType: 'RETRO_POSTING_OVERRIDE',
+    });
 
     if (period.name === 'Opening Balances') {
       await writeAuditEventWithPrisma(
@@ -2315,7 +2328,7 @@ export class ApService {
       where: {
         tenantId: tenant.id,
         name: 'Opening Balances',
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
@@ -2457,9 +2470,9 @@ export class ApService {
         reference: `AP-INVOICE:${inv.id}`,
         description: `AP invoice posting: ${inv.id}`,
         createdById: inv.createdById,
-        status: 'REVIEWED',
-        reviewedById: inv.approvedById ?? user.id,
-        reviewedAt: now,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: now,
         lines: {
           create: [
             ...inv.lines.map((l) => ({
@@ -2488,6 +2501,14 @@ export class ApService {
       include: { lines: true },
     } as any);
 
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'AP_INVOICE',
+      sourceId: inv.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
+    });
+
     const postedJournal = await this.gl.postJournal(req, journal.id);
 
     const updatedInvoice = await this.prisma.supplierInvoice.update({
@@ -2511,6 +2532,31 @@ export class ApService {
           outcome: 'SUCCESS',
           userId: user.id,
           permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+          reason: JSON.stringify({
+            metadata: {
+              ...(maybeBuildGovernanceOverrideAuditMetadata({
+                req,
+                permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+                actorUserId: user.id,
+                tenantId: tenant.id,
+                changedKeys: ['status'],
+                before: { status: String(inv.status) },
+                after: { status: 'POSTED' },
+              })
+                ? {
+                    governance: maybeBuildGovernanceOverrideAuditMetadata({
+                      req,
+                      permissionUsed: PERMISSIONS.AP.INVOICE_POST,
+                      actorUserId: user.id,
+                      tenantId: tenant.id,
+                      changedKeys: ['status'],
+                      before: { status: String(inv.status) },
+                      after: { status: 'POSTED' },
+                    }),
+                  }
+                : {}),
+            },
+          }),
         },
       })
       .catch(() => undefined);

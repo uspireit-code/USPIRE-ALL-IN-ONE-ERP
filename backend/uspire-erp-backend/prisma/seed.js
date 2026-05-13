@@ -169,6 +169,7 @@ async function main() {
         { code: 'FINANCE_PERIOD_CHECKLIST_COMPLETE', description: 'Complete month-end close checklist items for accounting periods' },
         { code: 'FINANCE_PERIOD_CLOSE', description: 'Close accounting periods' },
         { code: 'FINANCE_PERIOD_CLOSE_APPROVE', description: 'Approve and execute accounting period close' },
+        { code: 'FINANCE_PERIOD_SOFT_CLOSE_POST_OVERRIDE', description: 'Post transactions in SOFT_CLOSED accounting periods (governed override)' },
         { code: 'FINANCE_PERIOD_REOPEN', description: 'Re-open (unlock) an accounting period' },
         { code: 'FINANCE_TB_VIEW', description: 'View Trial Balance' },
         { code: 'FINANCE_PL_VIEW', description: 'View Profit & Loss statement' },

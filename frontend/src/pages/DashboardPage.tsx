@@ -36,8 +36,7 @@ export function DashboardPage() {
   const arVisible =
     hasPermission(PERMISSIONS.AR.INVOICE_VIEW) ||
     hasPermission(PERMISSIONS.AR.INVOICE_CREATE) ||
-    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
   const paymentsVisible =
     hasPermission(PERMISSIONS.PAYMENT.VIEW) ||
     hasPermission(PERMISSIONS.PAYMENT.CREATE);

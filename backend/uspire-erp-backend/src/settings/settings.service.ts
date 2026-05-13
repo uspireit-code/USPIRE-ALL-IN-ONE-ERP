@@ -9,6 +9,13 @@ import { Inject } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
+import {
+  assertNoCrossDomainMutation,
+  buildGovernanceAuditMetadata,
+  detectGovernanceDomainsFromPayload,
+} from '../governance/governance-enforcement';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
 import type { StorageProvider } from '../storage/storage.provider';
 import { STORAGE_PROVIDER } from '../storage/storage.provider';
 import { UpdateOrganisationDto } from './dto/update-organisation.dto';
@@ -923,6 +930,12 @@ export class SettingsService {
 
     const roleIds = dto.roleIds ?? [];
 
+    const beforeRoles = await this.prisma.userRole.findMany({
+      where: { userId: id, role: { tenantId: tenant.id } },
+      select: { roleId: true },
+    });
+    const beforeRoleIds = beforeRoles.map((r) => r.roleId);
+
     const out = await this.applyUserRoles({
       tenantId: tenant.id,
       actorUserId: actor.id,
@@ -931,21 +944,38 @@ export class SettingsService {
       selfUserId: actor.id,
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'USER_ROLE_ASSIGN',
-          entityType: 'USER',
-          entityId: id,
-          action: 'USER_ROLE_ASSIGN',
-          outcome: 'SUCCESS',
-          reason: JSON.stringify({ roleIds }),
-          userId: actor.id,
-          permissionUsed: PERMISSIONS.ROLE.ASSIGN,
+    const afterRoleIds = (out?.roles ?? []).map((r: any) => r.id);
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: 'USER_ROLE_ASSIGN' as any,
+        entityType: 'USER' as any,
+        entityId: id,
+        actorUserId: actor.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'USER_ROLE_ASSIGN',
+        permissionUsed: PERMISSIONS.ROLE.ASSIGN,
+        metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'ROLE_ASSIGNMENT',
+            permissionUsed: PERMISSIONS.ROLE.ASSIGN,
+            actorUserId: actor.id,
+            tenantId: tenant.id,
+            req,
+            changedKeys: ['roleIds'],
+            before: { roleIds: beforeRoleIds },
+            after: { roleIds: afterRoleIds },
+            escalation: (req as any)?.governanceEscalation ?? undefined,
+          }),
+          roleIds,
+          beforeRoleIds,
+          afterRoleIds,
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return out;
   }
@@ -1285,11 +1315,728 @@ export class SettingsService {
     };
   }
 
+  async getSystemGovernance(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    const row = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        id: true,
+        name: true,
+        organisationName: true,
+        organisationShortName: true,
+        legalName: true,
+        defaultCurrency: true,
+        country: true,
+        timezone: true,
+        financialYearStartMonth: true,
+        dateFormat: true,
+        numberFormat: true,
+        defaultLandingPage: true,
+        defaultDashboard: true,
+        defaultLanguage: true,
+        demoModeEnabled: true,
+        defaultUserRoleCode: true,
+        logoUrl: true,
+        faviconUrl: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        secondaryAccentColor: true,
+        receiptBankName: true,
+        receiptBankAccountName: true,
+        receiptBankAccountNumber: true,
+        receiptBankBranch: true,
+        receiptBankSwiftCode: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!row) throw new NotFoundException('Tenant not found');
+
+    return {
+      ...row,
+      logoUrl: row.logoUrl ? '/settings/organisation/logo' : null,
+      faviconUrl: row.faviconUrl ? '/settings/system/favicon' : null,
+    };
+  }
+
+  async updateSystemGovernance(req: Request, dto: any) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user)
+      throw new BadRequestException('Missing tenant or user context');
+
+    const domainsTouched = detectGovernanceDomainsFromPayload({
+      payload: dto ?? {},
+      keyToDomain: {
+        organisationName: 'SYSTEM_GOVERNANCE',
+        organisationShortName: 'SYSTEM_GOVERNANCE',
+        legalName: 'SYSTEM_GOVERNANCE',
+        defaultCurrency: 'SYSTEM_GOVERNANCE',
+        country: 'SYSTEM_GOVERNANCE',
+        timezone: 'SYSTEM_GOVERNANCE',
+        financialYearStartMonth: 'SYSTEM_GOVERNANCE',
+        dateFormat: 'SYSTEM_GOVERNANCE',
+        numberFormat: 'SYSTEM_GOVERNANCE',
+        defaultLandingPage: 'SYSTEM_GOVERNANCE',
+        defaultDashboard: 'SYSTEM_GOVERNANCE',
+        defaultLanguage: 'SYSTEM_GOVERNANCE',
+        demoModeEnabled: 'SYSTEM_GOVERNANCE',
+        defaultUserRoleCode: 'SYSTEM_GOVERNANCE',
+        primaryColor: 'SYSTEM_GOVERNANCE',
+        secondaryColor: 'SYSTEM_GOVERNANCE',
+        accentColor: 'SYSTEM_GOVERNANCE',
+        secondaryAccentColor: 'SYSTEM_GOVERNANCE',
+        receiptBankName: 'SYSTEM_GOVERNANCE',
+        receiptBankAccountName: 'SYSTEM_GOVERNANCE',
+        receiptBankAccountNumber: 'SYSTEM_GOVERNANCE',
+        receiptBankBranch: 'SYSTEM_GOVERNANCE',
+        receiptBankSwiftCode: 'SYSTEM_GOVERNANCE',
+      },
+    });
+    assertNoCrossDomainMutation({
+      actionType: 'SETTINGS_SYSTEM_GOVERNANCE_UPDATE',
+      domainsTouched: domainsTouched.length > 0 ? domainsTouched : ['SYSTEM_GOVERNANCE'],
+    });
+
+    const userPermissionCodes = new Set<string>(
+      Array.isArray((user as any)?.permissions)
+        ? (((user as any).permissions ?? []) as string[]).map((p) => String(p))
+        : [],
+    );
+
+    const permittedByToken =
+      userPermissionCodes.has(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
+      userPermissionCodes.has(PERMISSIONS.SYSTEM.CONFIG_CHANGE);
+
+    if (!permittedByToken) {
+      const hasSystemConfigUpdate = await this.prisma.rolePermission.findFirst({
+        where: {
+          role: {
+            OR: [{ tenantId: tenant.id }, { tenantId: null }],
+            userRoles: { some: { userId: user.id } },
+          } as any,
+          permission: { code: PERMISSIONS.SYSTEM.CONFIG_UPDATE },
+        },
+        select: { roleId: true },
+      });
+
+      if (!hasSystemConfigUpdate) {
+        throw new ForbiddenException({
+          error: 'Access denied',
+          missingPermissions: [PERMISSIONS.SYSTEM.CONFIG_UPDATE],
+        });
+      }
+    }
+
+    if (
+      dto.financialYearStartMonth !== undefined &&
+      dto.financialYearStartMonth !== null
+    ) {
+      if (dto.financialYearStartMonth < 1 || dto.financialYearStartMonth > 12) {
+        throw new BadRequestException(
+          'financialYearStartMonth must be between 1 and 12',
+        );
+      }
+    }
+
+    const before = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        organisationName: true,
+        organisationShortName: true,
+        legalName: true,
+        defaultCurrency: true,
+        country: true,
+        timezone: true,
+        financialYearStartMonth: true,
+        dateFormat: true,
+        numberFormat: true,
+        defaultLandingPage: true,
+        defaultDashboard: true,
+        defaultLanguage: true,
+        demoModeEnabled: true,
+        defaultUserRoleCode: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        secondaryAccentColor: true,
+        receiptBankName: true,
+        receiptBankAccountName: true,
+        receiptBankAccountNumber: true,
+        receiptBankBranch: true,
+        receiptBankSwiftCode: true,
+      },
+    });
+    if (!before) throw new NotFoundException('Tenant not found');
+
+    const updated = await (this.prisma as any).tenant.update({
+      where: { id: tenant.id },
+      data: {
+        organisationName:
+          dto.organisationName === undefined
+            ? undefined
+            : dto.organisationName === null
+              ? undefined
+              : String(dto.organisationName).trim(),
+
+        organisationShortName:
+          dto.organisationShortName === undefined
+            ? undefined
+            : dto.organisationShortName === null
+              ? null
+              : String(dto.organisationShortName).trim() || null,
+
+        legalName:
+          dto.legalName === undefined
+            ? undefined
+            : dto.legalName === null
+              ? null
+              : String(dto.legalName).trim() || null,
+
+        defaultCurrency:
+          dto.defaultCurrency === undefined
+            ? undefined
+            : dto.defaultCurrency === null
+              ? null
+              : String(dto.defaultCurrency).trim() || null,
+
+        country:
+          dto.country === undefined
+            ? undefined
+            : dto.country === null
+              ? null
+              : String(dto.country).trim() || null,
+
+        timezone:
+          dto.timezone === undefined
+            ? undefined
+            : dto.timezone === null
+              ? null
+              : String(dto.timezone).trim() || null,
+
+        financialYearStartMonth:
+          dto.financialYearStartMonth === undefined
+            ? undefined
+            : dto.financialYearStartMonth,
+
+        dateFormat:
+          dto.dateFormat === undefined
+            ? undefined
+            : dto.dateFormat === null
+              ? null
+              : String(dto.dateFormat).trim() || null,
+
+        numberFormat:
+          dto.numberFormat === undefined
+            ? undefined
+            : dto.numberFormat === null
+              ? null
+              : String(dto.numberFormat).trim() || null,
+
+        defaultLandingPage:
+          dto.defaultLandingPage === undefined
+            ? undefined
+            : dto.defaultLandingPage === null
+              ? null
+              : String(dto.defaultLandingPage).trim() || null,
+
+        defaultDashboard:
+          dto.defaultDashboard === undefined
+            ? undefined
+            : dto.defaultDashboard === null
+              ? null
+              : String(dto.defaultDashboard).trim() || null,
+
+        defaultLanguage:
+          dto.defaultLanguage === undefined
+            ? undefined
+            : dto.defaultLanguage === null
+              ? null
+              : String(dto.defaultLanguage).trim() || null,
+
+        demoModeEnabled:
+          dto.demoModeEnabled === undefined
+            ? undefined
+            : dto.demoModeEnabled === null
+              ? null
+              : Boolean(dto.demoModeEnabled),
+
+        defaultUserRoleCode:
+          dto.defaultUserRoleCode === undefined
+            ? undefined
+            : dto.defaultUserRoleCode === null
+              ? null
+              : String(dto.defaultUserRoleCode).trim() || null,
+
+        primaryColor:
+          dto.primaryColor === undefined
+            ? undefined
+            : dto.primaryColor === null
+              ? null
+              : String(dto.primaryColor).trim() || null,
+
+        secondaryColor:
+          dto.secondaryColor === undefined
+            ? undefined
+            : dto.secondaryColor === null
+              ? null
+              : String(dto.secondaryColor).trim() || null,
+
+        accentColor:
+          dto.accentColor === undefined
+            ? undefined
+            : dto.accentColor === null
+              ? null
+              : String(dto.accentColor).trim() || null,
+
+        secondaryAccentColor:
+          dto.secondaryAccentColor === undefined
+            ? undefined
+            : dto.secondaryAccentColor === null
+              ? null
+              : String(dto.secondaryAccentColor).trim() || null,
+
+        receiptBankName:
+          dto.receiptBankName === undefined
+            ? undefined
+            : dto.receiptBankName === null
+              ? null
+              : String(dto.receiptBankName).trim() || null,
+        receiptBankAccountName:
+          dto.receiptBankAccountName === undefined
+            ? undefined
+            : dto.receiptBankAccountName === null
+              ? null
+              : String(dto.receiptBankAccountName).trim() || null,
+        receiptBankAccountNumber:
+          dto.receiptBankAccountNumber === undefined
+            ? undefined
+            : dto.receiptBankAccountNumber === null
+              ? null
+              : String(dto.receiptBankAccountNumber).trim() || null,
+        receiptBankBranch:
+          dto.receiptBankBranch === undefined
+            ? undefined
+            : dto.receiptBankBranch === null
+              ? null
+              : String(dto.receiptBankBranch).trim() || null,
+        receiptBankSwiftCode:
+          dto.receiptBankSwiftCode === undefined
+            ? undefined
+            : dto.receiptBankSwiftCode === null
+              ? null
+              : String(dto.receiptBankSwiftCode).trim() || null,
+      },
+      select: {
+        id: true,
+        name: true,
+        organisationName: true,
+        organisationShortName: true,
+        legalName: true,
+        defaultCurrency: true,
+        country: true,
+        timezone: true,
+        financialYearStartMonth: true,
+        dateFormat: true,
+        numberFormat: true,
+        defaultLandingPage: true,
+        defaultDashboard: true,
+        defaultLanguage: true,
+        demoModeEnabled: true,
+        defaultUserRoleCode: true,
+        logoUrl: true,
+        faviconUrl: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        secondaryAccentColor: true,
+        receiptBankName: true,
+        receiptBankAccountName: true,
+        receiptBankAccountNumber: true,
+        receiptBankBranch: true,
+        receiptBankSwiftCode: true,
+        updatedAt: true,
+      },
+    });
+
+    const changedKeys = Object.keys(dto ?? {}).filter(
+      (k) => (dto as any)?.[k] !== undefined,
+    );
+
+    const governanceMeta = buildGovernanceAuditMetadata({
+      actionType: 'SETTINGS_SYSTEM_GOVERNANCE_UPDATE',
+      permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+      actorUserId: user.id,
+      tenantId: tenant.id,
+      req,
+      changedKeys,
+      before,
+      after: updated,
+    });
+
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'ORGANISATION_UPDATE',
+          entityType: 'TENANT',
+          entityId: tenant.id,
+          action: 'SYSTEM_GOVERNANCE_UPDATE',
+          outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            governanceDomain: 'SYSTEM_GOVERNANCE',
+            permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+            governance: governanceMeta,
+            before,
+            after: updated,
+            changedKeys,
+          }),
+          userId: user.id,
+          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+          requestId: (req as any)?.requestId ?? null,
+        },
+      })
+      .catch(() => undefined);
+
+    return {
+      ...updated,
+      logoUrl: (updated as any).logoUrl ? '/settings/organisation/logo' : null,
+      faviconUrl: (updated as any).faviconUrl ? '/settings/system/favicon' : null,
+    };
+  }
+
+  async getFinancialGovernance(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) throw new BadRequestException('Missing tenant context');
+
+    const row = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        id: true,
+        allowSelfPosting: true,
+        retroPostToleranceDays: true,
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
+        arControlAccountId: true,
+        apControlAccountId: true,
+        defaultBankClearingAccountId: true,
+        cashClearingAccountId: true,
+        unappliedReceiptsAccountId: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!row) throw new NotFoundException('Tenant not found');
+
+    const cfg = await (this.prisma as any).tenantJournalNumberingConfig.findUnique({
+      where: { tenantId: tenant.id },
+      select: { scope: true },
+    });
+
+    return {
+      ...row,
+      journalNumberingScope: (cfg?.scope ?? 'TENANT_GLOBAL') as any,
+    };
+  }
+
+  async updateFinancialGovernance(req: Request, dto: any) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user)
+      throw new BadRequestException('Missing tenant or user context');
+
+    const domainsTouched = detectGovernanceDomainsFromPayload({
+      payload: dto ?? {},
+      keyToDomain: {
+        allowSelfPosting: 'FINANCIAL_GOVERNANCE',
+        retroPostToleranceDays: 'FINANCIAL_GOVERNANCE',
+        requiresDepartmentOnInvoices: 'FINANCIAL_GOVERNANCE',
+        requiresProjectOnInvoices: 'FINANCIAL_GOVERNANCE',
+        requiresFundOnInvoices: 'FINANCIAL_GOVERNANCE',
+        arControlAccountId: 'FINANCIAL_GOVERNANCE',
+        apControlAccountId: 'FINANCIAL_GOVERNANCE',
+        defaultBankClearingAccountId: 'FINANCIAL_GOVERNANCE',
+        arRefundClearingAccountId: 'FINANCIAL_GOVERNANCE',
+        cashClearingAccountId: 'FINANCIAL_GOVERNANCE',
+        arCashClearingAccountId: 'FINANCIAL_GOVERNANCE',
+        unappliedReceiptsAccountId: 'FINANCIAL_GOVERNANCE',
+        journalNumberingScope: 'FINANCIAL_GOVERNANCE',
+      },
+    });
+    assertNoCrossDomainMutation({
+      actionType: 'SETTINGS_FINANCIAL_GOVERNANCE_UPDATE',
+      domainsTouched: domainsTouched.length > 0 ? domainsTouched : ['FINANCIAL_GOVERNANCE'],
+    });
+
+    const userPermissionCodes = new Set<string>(
+      Array.isArray((user as any)?.permissions)
+        ? (((user as any).permissions ?? []) as string[]).map((p) => String(p))
+        : [],
+    );
+
+    const permittedByToken =
+      userPermissionCodes.has(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
+      userPermissionCodes.has(PERMISSIONS.FINANCE.CONFIG_CHANGE);
+
+    if (!permittedByToken) {
+      const hasFinanceConfig = await this.prisma.rolePermission.findFirst({
+        where: {
+          role: {
+            OR: [{ tenantId: tenant.id }, { tenantId: null }],
+            userRoles: { some: { userId: user.id } },
+          } as any,
+          permission: {
+            code: {
+              in: [PERMISSIONS.FINANCE.CONFIG_UPDATE, PERMISSIONS.FINANCE.CONFIG_CHANGE],
+            },
+          },
+        },
+        select: { roleId: true },
+      });
+
+      if (!hasFinanceConfig) {
+        throw new ForbiddenException({
+          error: 'Access denied',
+          missingPermissions: [PERMISSIONS.FINANCE.CONFIG_UPDATE],
+        });
+      }
+    }
+
+    const before = await (this.prisma as any).tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        allowSelfPosting: true,
+        retroPostToleranceDays: true,
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
+        arControlAccountId: true,
+        apControlAccountId: true,
+        defaultBankClearingAccountId: true,
+        arRefundClearingAccountId: true,
+        cashClearingAccountId: true,
+        arCashClearingAccountId: true,
+        unappliedReceiptsAccountId: true,
+      },
+    });
+    if (!before) throw new NotFoundException('Tenant not found');
+
+    const beforeNumbering = await (this.prisma as any).tenantJournalNumberingConfig.findUnique({
+      where: { tenantId: tenant.id },
+      select: { scope: true },
+    });
+
+    const updated = await (this.prisma as any).tenant.update({
+      where: { id: tenant.id },
+      data: {
+        allowSelfPosting:
+          dto.allowSelfPosting === undefined
+            ? undefined
+            : dto.allowSelfPosting === null
+              ? undefined
+              : Boolean(dto.allowSelfPosting),
+        retroPostToleranceDays:
+          dto.retroPostToleranceDays === undefined
+            ? undefined
+            : dto.retroPostToleranceDays === null
+              ? undefined
+              : Math.max(0, Math.floor(Number(dto.retroPostToleranceDays))),
+        requiresDepartmentOnInvoices:
+          dto.requiresDepartmentOnInvoices === undefined
+            ? undefined
+            : dto.requiresDepartmentOnInvoices === null
+              ? null
+              : Boolean(dto.requiresDepartmentOnInvoices),
+        requiresProjectOnInvoices:
+          dto.requiresProjectOnInvoices === undefined
+            ? undefined
+            : dto.requiresProjectOnInvoices === null
+              ? null
+              : Boolean(dto.requiresProjectOnInvoices),
+        requiresFundOnInvoices:
+          dto.requiresFundOnInvoices === undefined
+            ? undefined
+            : dto.requiresFundOnInvoices === null
+              ? null
+              : Boolean(dto.requiresFundOnInvoices),
+        arControlAccountId:
+          dto.arControlAccountId === undefined
+            ? undefined
+            : dto.arControlAccountId === null
+              ? null
+              : String(dto.arControlAccountId).trim() || null,
+        apControlAccountId:
+          dto.apControlAccountId === undefined
+            ? undefined
+            : dto.apControlAccountId === null
+              ? null
+              : String(dto.apControlAccountId).trim() || null,
+        defaultBankClearingAccountId:
+          dto.defaultBankClearingAccountId === undefined
+            ? undefined
+            : dto.defaultBankClearingAccountId === null
+              ? null
+              : String(dto.defaultBankClearingAccountId).trim() || null,
+        arRefundClearingAccountId:
+          dto.arRefundClearingAccountId === undefined
+            ? undefined
+            : dto.arRefundClearingAccountId === null
+              ? null
+              : String(dto.arRefundClearingAccountId).trim() || null,
+        cashClearingAccountId:
+          dto.cashClearingAccountId === undefined
+            ? undefined
+            : dto.cashClearingAccountId === null
+              ? null
+              : String(dto.cashClearingAccountId).trim() || null,
+        arCashClearingAccountId:
+          dto.arCashClearingAccountId === undefined
+            ? undefined
+            : dto.arCashClearingAccountId === null
+              ? null
+              : String(dto.arCashClearingAccountId).trim() || null,
+        unappliedReceiptsAccountId:
+          dto.unappliedReceiptsAccountId === undefined
+            ? undefined
+            : dto.unappliedReceiptsAccountId === null
+              ? null
+              : String(dto.unappliedReceiptsAccountId).trim() || null,
+      },
+      select: {
+        id: true,
+        allowSelfPosting: true,
+        retroPostToleranceDays: true,
+        requiresDepartmentOnInvoices: true,
+        requiresProjectOnInvoices: true,
+        requiresFundOnInvoices: true,
+        arControlAccountId: true,
+        apControlAccountId: true,
+        defaultBankClearingAccountId: true,
+        arRefundClearingAccountId: true,
+        cashClearingAccountId: true,
+        arCashClearingAccountId: true,
+        unappliedReceiptsAccountId: true,
+        updatedAt: true,
+      },
+    });
+
+    const rawScope = dto?.journalNumberingScope;
+    const scopeTouched = rawScope !== undefined && rawScope !== null;
+    const nextScope = scopeTouched ? String(rawScope).trim() : null;
+
+    if (scopeTouched) {
+      await (this.prisma as any).tenantJournalNumberingConfig.upsert({
+        where: { tenantId: tenant.id },
+        create: {
+          tenantId: tenant.id,
+          scope: nextScope,
+          updatedById: user.id,
+        },
+        update: {
+          scope: nextScope,
+          updatedById: user.id,
+        },
+      });
+
+      const beforeScope = String(beforeNumbering?.scope ?? 'TENANT_GLOBAL');
+      if (beforeScope !== nextScope) {
+        const governance = buildGovernanceAuditMetadata({
+          actionType: 'JOURNAL_NUMBERING_CONFIGURATION_CHANGED',
+          permissionUsed: PERMISSIONS.FINANCE.CONFIG_CHANGE,
+          actorUserId: user.id,
+          tenantId: tenant.id,
+          req,
+          changedKeys: ['journalNumberingScope'],
+          before: { journalNumberingScope: beforeScope },
+          after: { journalNumberingScope: nextScope },
+        });
+
+        await writeAuditEventWithPrisma(
+          {
+            tenantId: tenant.id,
+            eventType: AuditEventType.JOURNAL_NUMBERING_CONFIGURATION_CHANGED,
+            entityType: AuditEntityType.TENANT,
+            entityId: tenant.id,
+            actorUserId: user.id,
+            timestamp: new Date(),
+            outcome: 'SUCCESS' as any,
+            action: 'JOURNAL_NUMBERING_CONFIGURATION_CHANGED',
+            permissionUsed: PERMISSIONS.FINANCE.CONFIG_CHANGE,
+            metadata: { governance },
+          },
+          this.prisma,
+        );
+      }
+    }
+
+    const afterCfg = await (this.prisma as any).tenantJournalNumberingConfig.findUnique({
+      where: { tenantId: tenant.id },
+      select: { scope: true },
+    });
+    const afterScope = String(afterCfg?.scope ?? 'TENANT_GLOBAL');
+
+    const changedKeys = Object.keys(dto ?? {}).filter(
+      (k) => (dto as any)?.[k] !== undefined,
+    );
+
+    const governanceMeta = buildGovernanceAuditMetadata({
+      actionType: 'SETTINGS_FINANCIAL_GOVERNANCE_UPDATE',
+      permissionUsed: PERMISSIONS.FINANCE.CONFIG_UPDATE,
+      actorUserId: user.id,
+      tenantId: tenant.id,
+      req,
+      changedKeys,
+      before,
+      after: updated,
+    });
+
+    await this.prisma.auditEvent
+      .create({
+        data: {
+          tenantId: tenant.id,
+          eventType: 'ORGANISATION_UPDATE',
+          entityType: 'TENANT',
+          entityId: tenant.id,
+          action: 'FINANCIAL_GOVERNANCE_UPDATE',
+          outcome: 'SUCCESS',
+          reason: JSON.stringify({
+            governanceDomain: 'FINANCIAL_GOVERNANCE',
+            permissionUsed: PERMISSIONS.FINANCE.CONFIG_UPDATE,
+            governance: governanceMeta,
+            before,
+            after: updated,
+            changedKeys,
+          }),
+          userId: user.id,
+          permissionUsed: PERMISSIONS.FINANCE.CONFIG_UPDATE,
+          requestId: (req as any)?.requestId ?? null,
+        },
+      })
+      .catch(() => undefined);
+
+    return {
+      ...updated,
+      journalNumberingScope: afterScope as any,
+    };
+  }
+
   async updateSystemConfig(req: Request, dto: UpdateSystemConfigDto) {
     const tenant = req.tenant;
     const user = req.user;
     if (!tenant || !user)
       throw new BadRequestException('Missing tenant or user context');
+
+    const userPermissionCodes = new Set<string>(
+      Array.isArray((user as any)?.permissions)
+        ? (((user as any).permissions ?? []) as string[]).map((p) => String(p))
+        : [],
+    );
+
+    const hasPerm = (code: string) => userPermissionCodes.has(code);
 
     const financeSensitiveKeys: Array<keyof UpdateSystemConfigDto> = [
       'allowSelfPosting',
@@ -1314,43 +2061,68 @@ export class SettingsService {
       return !financeSensitiveKeys.includes(k as any);
     });
 
-    if (isChangingNonFinanceControls) {
-      const hasSystemConfigUpdate = await this.prisma.rolePermission.findFirst({
-        where: {
-          role: {
-            tenantId: tenant.id,
-            userRoles: { some: { userId: user.id } },
-          },
-          permission: { code: PERMISSIONS.SYSTEM.CONFIG_UPDATE },
-        },
-        select: { roleId: true },
-      });
+    const permissionUsedForAudit = isChangingFinanceControls
+      ? PERMISSIONS.FINANCE.CONFIG_UPDATE
+      : PERMISSIONS.SYSTEM.CONFIG_UPDATE;
 
-      if (!hasSystemConfigUpdate) {
-        throw new ForbiddenException({
-          error: 'Access denied',
-          missingPermissions: [PERMISSIONS.SYSTEM.CONFIG_UPDATE],
+    if (isChangingNonFinanceControls) {
+      const permittedByToken =
+        hasPerm(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
+        hasPerm(PERMISSIONS.SYSTEM.CONFIG_CHANGE);
+      if (permittedByToken) {
+        // ok
+      } else {
+        const hasSystemConfigUpdate = await this.prisma.rolePermission.findFirst({
+          where: {
+            role: {
+              OR: [{ tenantId: tenant.id }, { tenantId: null }],
+              userRoles: { some: { userId: user.id } },
+            } as any,
+            permission: { code: PERMISSIONS.SYSTEM.CONFIG_UPDATE },
+          },
+          select: { roleId: true },
         });
+
+        if (!hasSystemConfigUpdate) {
+          throw new ForbiddenException({
+            error: 'Access denied',
+            missingPermissions: [PERMISSIONS.SYSTEM.CONFIG_UPDATE],
+          });
+        }
       }
     }
 
     if (isChangingFinanceControls) {
-      const hasFinanceConfig = await this.prisma.rolePermission.findFirst({
-        where: {
-          role: {
-            tenantId: tenant.id,
-            userRoles: { some: { userId: user.id } },
+      const permittedByToken =
+        hasPerm(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
+        hasPerm(PERMISSIONS.FINANCE.CONFIG_CHANGE);
+      if (permittedByToken) {
+        // ok
+      } else {
+        const hasFinanceConfig = await this.prisma.rolePermission.findFirst({
+          where: {
+            role: {
+              OR: [{ tenantId: tenant.id }, { tenantId: null }],
+              userRoles: { some: { userId: user.id } },
+            } as any,
+            permission: {
+              code: {
+                in: [
+                  PERMISSIONS.FINANCE.CONFIG_UPDATE,
+                  PERMISSIONS.FINANCE.CONFIG_CHANGE,
+                ],
+              },
+            },
           },
-          permission: { code: { in: [PERMISSIONS.FINANCE.CONFIG_UPDATE, PERMISSIONS.FINANCE.CONFIG_CHANGE] } },
-        },
-        select: { roleId: true },
-      });
-
-      if (!hasFinanceConfig) {
-        throw new ForbiddenException({
-          error: 'Access denied',
-          missingPermissions: [PERMISSIONS.FINANCE.CONFIG_UPDATE],
+          select: { roleId: true },
         });
+
+        if (!hasFinanceConfig) {
+          throw new ForbiddenException({
+            error: 'Access denied',
+            missingPermissions: [PERMISSIONS.FINANCE.CONFIG_UPDATE],
+          });
+        }
       }
     }
 
@@ -1718,7 +2490,7 @@ export class SettingsService {
           outcome: 'SUCCESS',
           reason: JSON.stringify({ before, after }),
           userId: user.id,
-          permissionUsed: PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+          permissionUsed: permissionUsedForAudit,
         },
       })
       .catch(() => undefined);

@@ -9,7 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, PaymentProposalStatus } from '@prisma/client';
 import { writeAuditEventWithPrisma } from '../../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
-import { assertCanPost } from '../../periods/period-guard';
+import { assertPeriodAllowsPosting } from '../../periods/period-posting-governance';
 import { PERMISSIONS } from '../../rbac/permission-catalog';
 import type {
   CreatePaymentProposalDto,
@@ -120,6 +120,7 @@ export class PaymentProposalsService {
 
       for (const l of computedLines) {
         await this.assertInvoicePeriodOpen({
+          req,
           tenantId: tenant.id,
           invoiceDate: l.invoiceDate as any,
           tx,
@@ -266,6 +267,7 @@ export class PaymentProposalsService {
   }
 
   private async assertInvoicePeriodOpen(params: {
+    req: Request;
     tenantId: string;
     invoiceDate: Date;
     tx: Prisma.TransactionClient;
@@ -287,7 +289,11 @@ export class PaymentProposalsService {
     }
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req: params.req,
+        period,
+        permissionUsed: PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE,
+      });
     } catch {
       throw new ForbiddenException({
         error: 'Blocked by accounting period control',
@@ -578,6 +584,7 @@ export class PaymentProposalsService {
       // Period-open validation per invoice.
       for (const l of computedLines) {
         await this.assertInvoicePeriodOpen({
+          req,
           tenantId: tenant.id,
           invoiceDate: l.invoiceDate as any,
           tx,
@@ -682,6 +689,7 @@ export class PaymentProposalsService {
         }
 
         await this.assertInvoicePeriodOpen({
+          req,
           tenantId: tenant.id,
           invoiceDate: inv.invoiceDate,
           tx,
@@ -817,6 +825,7 @@ export class PaymentProposalsService {
         }
 
         await this.assertInvoicePeriodOpen({
+          req,
           tenantId: tenant.id,
           invoiceDate: inv.invoiceDate,
           tx,
@@ -952,7 +961,7 @@ export class PaymentProposalsService {
       await writeAuditEventWithPrisma(
         {
           tenantId: tenant.id,
-          eventType: (AuditEventType as any).PAYMENT_PROPOSAL_REJECTED,
+          eventType: AuditEventType.PAYMENT_PROPOSAL_REJECTED,
           entityType: AuditEntityType.PAYMENT_PROPOSAL,
           entityId: updated.id,
           actorUserId: user.id,

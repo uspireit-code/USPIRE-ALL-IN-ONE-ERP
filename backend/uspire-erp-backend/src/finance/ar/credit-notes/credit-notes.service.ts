@@ -854,6 +854,7 @@ export class FinanceArCreditNotesService {
     const creditNoteDate = new Date(cn.creditNoteDate);
     try {
       await assertPeriodIsOpen({
+        req,
         prisma: this.prisma,
         tenantId: tenant.id,
         date: creditNoteDate,
@@ -945,9 +946,9 @@ export class FinanceArCreditNotesService {
         reference: `AR-CN:${cn.id}`,
         description: `AR credit note posting: ${cn.creditNoteNumber}`,
         createdById: cn.createdById,
-        status: 'REVIEWED',
-        reviewedById: cn.approvedById ?? user.id,
-        reviewedAt: cn.approvedAt ?? new Date(),
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: new Date(),
         lines: {
           create: [
             ...(cn.lines ?? []).map((l: any) => ({
@@ -979,6 +980,14 @@ export class FinanceArCreditNotesService {
         },
       } as any,
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'AR_CREDIT_NOTE',
+      sourceId: cn.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const postedJournal = await this.gl.postJournal(req, journal.id);
@@ -1031,6 +1040,7 @@ export class FinanceArCreditNotesService {
 
     const creditNoteDate = new Date(cn.creditNoteDate);
     await assertPeriodIsOpen({
+      req,
       prisma: this.prisma,
       tenantId: tenant.id,
       date: creditNoteDate,
@@ -1069,9 +1079,9 @@ export class FinanceArCreditNotesService {
         description: `Void AR credit note: ${cn.creditNoteNumber}`,
         createdById: cn.createdById,
         journalType: 'REVERSING',
-        status: 'REVIEWED',
-        reviewedById: cn.approvedById ?? cn.createdById,
-        reviewedAt: new Date(),
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: new Date(),
         lines: {
           create: [
             {
@@ -1103,6 +1113,14 @@ export class FinanceArCreditNotesService {
         },
       } as any,
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: reversal.id,
+      sourceType: 'AR_CREDIT_NOTE_VOID',
+      sourceId: cn.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     await this.gl.postJournal(req, reversal.id);

@@ -7,6 +7,7 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { GlModule } from '../gl/gl.module';
 import { ReportsModule } from '../reports/reports.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { CoaController } from './coa.controller';
 import { CoaService } from './coa.service';
 import { CoaNamingPolicyService } from './coa-naming-policy.service';
@@ -34,7 +35,7 @@ import { CoaStructuralResolverService } from './coa-structural-resolver.service'
 import { CoaHealthService } from './coa-health.service';
 
 @Module({
-  imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule, GlModule, ReportsModule],
+  imports: [ConfigModule, JwtModule.register({}), RbacModule, PrismaModule, GlModule, ReportsModule, NotificationsModule],
   controllers: [
     CoaRootCategoriesController,
     CoaController,

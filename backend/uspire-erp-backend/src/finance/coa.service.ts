@@ -16,11 +16,14 @@ import {
   CoaImportBatchStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notifications/notification.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { CoaRootCategoriesService } from './coa-root-categories.service';
 import { CreateCoaAccountDto, UpdateCoaAccountDto } from './coa.dto';
 import { CoaNamingPolicyService } from './coa-naming-policy.service';
 import { CoaStructuralResolverService } from './coa-structural-resolver.service';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { buildGovernanceAuditMetadata } from '../governance/governance-enforcement';
 
 type RequestContext = Request;
 
@@ -31,6 +34,7 @@ export class CoaService {
     private readonly namingPolicy: CoaNamingPolicyService,
     private readonly rootCategories: CoaRootCategoriesService,
     private readonly structuralResolver: CoaStructuralResolverService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async getIndustryImportTemplate(
@@ -920,6 +924,12 @@ export class CoaService {
 
     const now = new Date();
 
+    const notifyPayload: { title: string; message: string; type: string; entityType?: string; entityId?: string } = {
+      title: 'Request Approved',
+      message: 'Your request was approved',
+      type: 'APPROVAL',
+    };
+
     await this.prisma.$transaction(async (tx) => {
       const rt = String(existing.requestType);
       const isAccountRequest = String(existing.entityType) === String(AuditEntityType.ACCOUNT);
@@ -944,6 +954,12 @@ export class CoaService {
         });
 
         if (!account) throw new NotFoundException('Account not found');
+
+        notifyPayload.title = 'Account Approved';
+        notifyPayload.message = `Account ${String((account as any).code ?? '')} - ${String((account as any).name ?? '')} approved`;
+        notifyPayload.type = 'APPROVAL';
+        notifyPayload.entityType = 'ACCOUNT';
+        notifyPayload.entityId = String((account as any).id);
 
         const code = String((account as any).code ?? '').trim();
         const name = String((account as any).name ?? '').trim();
@@ -1085,6 +1101,20 @@ export class CoaService {
       }
     });
 
+    try {
+      await this.notifications.create({
+        tenantId: String(tenant.id),
+        userId: String(existing.requestedById),
+        title: notifyPayload.title,
+        message: notifyPayload.message,
+        type: notifyPayload.type,
+        entityType: notifyPayload.entityType,
+        entityId: notifyPayload.entityId,
+      });
+    } catch {
+      // swallow notification errors
+    }
+
     return { ok: true, requestId };
   }
 
@@ -1111,6 +1141,26 @@ export class CoaService {
       throw new ForbiddenException('Maker-checker rule: requester cannot reject');
     }
 
+    let rejectTitle = 'Request Rejected';
+    let rejectMessage = `Your request was rejected${dto?.rejectionReason ? `: ${dto.rejectionReason}` : ''}`;
+    let rejectEntityType: string | undefined;
+    let rejectEntityId: string | undefined;
+
+    if (String(existing.requestType) === String(COAApprovalRequestType.CREATE_ACCOUNT)
+      || String(existing.requestType) === String(COAApprovalRequestType.UPDATE_ACCOUNT)
+      || String(existing.requestType) === String(COAApprovalRequestType.STATUS_CHANGE)) {
+      const acct = await this.prisma.account.findFirst({
+        where: { tenantId: tenant.id, id: existing.entityId },
+        select: { id: true, code: true, name: true },
+      });
+      if (acct) {
+        rejectTitle = 'Account Rejected';
+        rejectMessage = `Account ${String((acct as any).code ?? '')} - ${String((acct as any).name ?? '')} was rejected${dto?.rejectionReason ? `: ${dto.rejectionReason}` : ''}`;
+        rejectEntityType = 'ACCOUNT';
+        rejectEntityId = String((acct as any).id);
+      }
+    }
+
     const now = new Date();
     await this.prisma.cOAApprovalRequest.update({
       where: { id: existing.id },
@@ -1132,6 +1182,20 @@ export class CoaService {
           rejectionReason: dto?.rejectionReason ?? null,
         } as any,
       });
+    }
+
+    try {
+      await this.notifications.create({
+        tenantId: String(tenant.id),
+        userId: String(existing.requestedById),
+        title: rejectTitle,
+        message: rejectMessage,
+        type: 'REJECTION',
+        entityType: rejectEntityType,
+        entityId: rejectEntityId,
+      });
+    } catch {
+      // swallow notification errors
     }
 
     return { ok: true, requestId };
@@ -4025,20 +4089,33 @@ export class CoaService {
       select: { id: true, coaLockedAt: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'COA_LOCKED',
-          entityType: 'TENANT',
-          entityId: updated.id,
-          action: 'COA_LOCKED',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: PERMISSIONS.COA.FREEZE,
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: 'COA_LOCKED' as any,
+        entityType: 'TENANT' as any,
+        entityId: updated.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'COA_LOCKED',
+        permissionUsed: PERMISSIONS.COA.UNLOCK,
+        metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'COA_LOCK',
+            permissionUsed: PERMISSIONS.COA.UNLOCK,
+            actorUserId: user.id,
+            tenantId: tenant.id,
+            req,
+            changedKeys: ['coaLockedAt'],
+            before: { coaLockedAt: 'LOCKED' },
+            after: updated,
+            escalation: (req as any)?.governanceEscalation ?? undefined,
+          }),
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return updated;
   }
@@ -4056,20 +4133,33 @@ export class CoaService {
       select: { id: true, coaLockedAt: true },
     });
 
-    await this.prisma.auditEvent
-      .create({
-        data: {
-          tenantId: tenant.id,
-          eventType: 'COA_UNLOCKED',
-          entityType: 'TENANT',
-          entityId: updated.id,
-          action: 'COA_UNLOCKED',
-          outcome: 'SUCCESS',
-          userId: user.id,
-          permissionUsed: PERMISSIONS.COA.FREEZE,
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType: 'COA_UNLOCKED' as any,
+        entityType: 'TENANT' as any,
+        entityId: updated.id,
+        actorUserId: user.id,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: 'COA_UNLOCKED',
+        permissionUsed: PERMISSIONS.COA.UNLOCK,
+        metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'COA_UNLOCK',
+            permissionUsed: PERMISSIONS.COA.UNLOCK,
+            actorUserId: user.id,
+            tenantId: tenant.id,
+            req,
+            changedKeys: ['coaLockedAt'],
+            before: { coaLockedAt: 'LOCKED' },
+            after: updated,
+            escalation: (req as any)?.governanceEscalation ?? undefined,
+          }),
         },
-      })
-      .catch(() => undefined);
+      },
+      this.prisma,
+    );
 
     return updated;
   }

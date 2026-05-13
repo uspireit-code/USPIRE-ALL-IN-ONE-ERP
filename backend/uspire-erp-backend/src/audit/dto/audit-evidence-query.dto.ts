@@ -2,6 +2,7 @@ import { IsIn, IsOptional, IsString } from 'class-validator';
 
 const ENTITY_TYPES = [
   'JOURNAL_ENTRY',
+  'JOURNAL_UPLOAD_BATCH',
   'ACCOUNTING_PERIOD',
   'ACCOUNTING_PERIOD_CHECKLIST_ITEM',
   'SUPPLIER_INVOICE',

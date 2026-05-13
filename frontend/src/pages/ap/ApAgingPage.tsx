@@ -19,8 +19,7 @@ export function ApAgingPage() {
 
   const canView =
     hasPermission(PERMISSIONS.REPORT.VIEW.AP_AGING) ||
-    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
 
   const [asOfDate, setAsOfDate] = useState(todayIsoDate());
   const [supplierId, setSupplierId] = useState('');

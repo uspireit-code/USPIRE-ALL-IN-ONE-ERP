@@ -15,8 +15,7 @@ export function ArRemindersTemplatesPage() {
 
   const canView =
     hasPermission(PERMISSIONS.AR.REMINDER.VIEW) ||
-    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
   const canConfigure = hasPermission(PERMISSIONS.AR.REMINDER.CONFIGURE);
 
   const [templates, setTemplates] = useState<ArReminderTemplate[]>([]);

@@ -13,6 +13,8 @@ import {
 } from './period-validation';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { buildGovernanceAuditMetadata } from '../governance/governance-enforcement';
+import { assertEvidenceGovernance } from '../governance/evidence-governance-engine';
 
 @Injectable()
 export class PeriodsService {
@@ -28,7 +30,22 @@ export class PeriodsService {
     outcome: 'SUCCESS' | 'BLOCKED' | 'FAILED';
     reason?: string | null;
     payload?: any;
+    req?: Request;
+    before?: any;
+    after?: any;
+    changedKeys?: string[];
   }) {
+    const governance = buildGovernanceAuditMetadata({
+      actionType: 'PERIOD_CORRECT',
+      permissionUsed: PERMISSIONS.PERIOD.CORRECT,
+      actorUserId: params.userId,
+      tenantId: params.tenantId,
+      req: params.req,
+      changedKeys: params.changedKeys,
+      before: params.before,
+      after: params.after,
+    });
+
     await writeAuditEventWithPrisma(
       {
         tenantId: params.tenantId,
@@ -41,7 +58,10 @@ export class PeriodsService {
         action: 'FINANCE_PERIOD_CORRECT',
         permissionUsed: PERMISSIONS.PERIOD.CORRECT,
         reason: params.reason ?? undefined,
-        metadata: params.payload ?? undefined,
+        metadata: {
+          ...(params.payload ?? {}),
+          governance,
+        },
         lifecycleType: 'PERIOD_CORRECT',
       },
       this.prisma,
@@ -83,6 +103,16 @@ export class PeriodsService {
         permissionUsed: PERMISSIONS.PERIOD.CREATE,
         lifecycleType: 'PERIOD_OPEN',
         metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'PERIOD_CREATE',
+            permissionUsed: PERMISSIONS.PERIOD.CREATE,
+            actorUserId: user.id,
+            tenantId: tenant.id,
+            req,
+            changedKeys: ['period'],
+            before: null,
+            after: created,
+          }),
           periodId: created.id,
           code: (created as any).code ?? null,
           name: (created as any).name ?? null,
@@ -156,6 +186,16 @@ export class PeriodsService {
         permissionUsed: PERMISSIONS.PERIOD.CLOSE,
         lifecycleType: 'PERIOD_CLOSE',
         metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'PERIOD_CLOSE',
+            permissionUsed: PERMISSIONS.PERIOD.CLOSE,
+            actorUserId: user.id,
+            tenantId: tenant.id,
+            req,
+            changedKeys: ['status'],
+            before,
+            after: updated,
+          }),
           periodId: id,
           code: beforeAny?.code ?? null,
           type: beforeAny?.type ?? null,
@@ -177,6 +217,41 @@ export class PeriodsService {
     if (!tenant || !user) {
       throw new BadRequestException('Missing tenant or user context');
     }
+
+    const evidenceLinks = await (this.prisma as any).auditEvidenceLink.findMany({
+      where: {
+        tenantId: tenant.id,
+        entityType: 'ACCOUNTING_PERIOD',
+        entityId: id,
+      },
+      select: {
+        evidence: {
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+            evidenceCategory: true,
+          },
+        },
+      },
+    });
+    const attachments = (evidenceLinks ?? []).map((l: any) => l.evidence);
+
+    assertEvidenceGovernance({
+      req,
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      permissionUsed: PERMISSIONS.PERIOD.REOPEN,
+      mode: 'PERIOD_REOPEN',
+      entityType: 'ACCOUNTING_PERIOD',
+      entityId: id,
+      journalType: null,
+      governanceActions: ['PERIOD_REOPEN'],
+      escalation: (req as any)?.governanceEscalation ?? null,
+      justificationText: String(dto?.reason ?? '').trim() || null,
+      attachments,
+    });
 
     const before = await (this.prisma.accountingPeriod as any).findFirst({
       where: { id, tenantId: tenant.id },
@@ -207,6 +282,17 @@ export class PeriodsService {
         permissionUsed: PERMISSIONS.PERIOD.REOPEN,
         lifecycleType: 'PERIOD_REOPEN',
         metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'PERIOD_REOPEN',
+            permissionUsed: PERMISSIONS.PERIOD.REOPEN,
+            actorUserId: user.id,
+            tenantId: tenant.id,
+            req,
+            changedKeys: ['status'],
+            before,
+            after: updated,
+            escalation: (req as any)?.governanceEscalation ?? undefined,
+          }),
           periodId: id,
           reopenReason: String(dto?.reason ?? '').trim() || null,
           code: beforeAny?.code ?? null,
@@ -260,7 +346,7 @@ export class PeriodsService {
       throw new NotFoundException('Accounting period not found');
     }
 
-    if (period.status === 'CLOSED') {
+    if (period.status === 'CLOSED' || (period.status as any) === 'HARD_CLOSED') {
       await this.auditPeriodCorrection({
         tenantId: tenant.id,
         userId: user.id,

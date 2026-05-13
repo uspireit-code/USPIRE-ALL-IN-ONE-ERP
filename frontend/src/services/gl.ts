@@ -129,9 +129,30 @@ export type JournalLine = {
   credit: number;
 };
 
-export type JournalStatus = 'DRAFT' | 'SUBMITTED' | 'REVIEWED' | 'REJECTED' | 'PARKED' | 'POSTED';
+export type JournalStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'REVIEWED'
+  | 'REJECTED'
+  | 'PARKED'
+  | 'POSTED'
+  | 'VOIDED';
 export type JournalBudgetStatus = 'OK' | 'WARN' | 'BLOCK';
 export type JournalType = 'STANDARD' | 'ADJUSTING' | 'ACCRUAL' | 'REVERSING';
+
+export type JournalIntent =
+  | 'OPERATIONAL'
+  | 'ACCRUAL'
+  | 'ADJUSTMENT'
+  | 'CORRECTION'
+  | 'REVERSAL'
+  | 'RECLASSIFICATION'
+  | 'OPENING_BALANCE'
+  | 'CLOSING'
+  | 'TAX'
+  | 'INTERCOMPANY'
+  | 'AUDIT_ADJUSTMENT'
+  | 'SYSTEM_GENERATED';
 
 export type JournalEntry = {
   id: string;
@@ -143,6 +164,9 @@ export type JournalEntry = {
   description?: string | null;
   journalDate: string;
   status: JournalStatus;
+  intent?: JournalIntent | null;
+  intentNotes?: string | null;
+  intentReference?: string | null;
   createdById: string;
   correctsJournalId?: string | null;
   riskScore?: number | null;
@@ -215,6 +239,9 @@ export type JournalDetailResponse = {
   description: string | null;
   journalDate: string;
   status: JournalStatus;
+  intent?: JournalIntent | null;
+  intentNotes?: string | null;
+  intentReference?: string | null;
   correctsJournalId?: string | null;
   riskScore?: number | null;
   riskFlags?: string[] | null;
@@ -332,6 +359,9 @@ export type JournalBrowserRow = {
   description: string | null;
   totalDebit: number;
   totalCredit: number;
+  intent?: JournalIntent | null;
+  intentNotes?: string | null;
+  intentReference?: string | null;
   riskScore?: number | null;
   riskFlags?: string[] | null;
   budgetStatus?: JournalBudgetStatus | null;
@@ -506,6 +536,9 @@ export async function createJournal(params: {
   reference?: string;
   description?: string;
   correctsJournalId?: string;
+  intent: JournalIntent;
+  intentNotes?: string;
+  intentReference?: string;
   lines: Array<{ lineNumber?: number; accountId: string; legalEntityId?: string | null; departmentId?: string | null; projectId?: string | null; fundId?: string | null; description?: string; debit: number; credit: number }>;
 }) {
   return apiFetch<JournalEntry>('/gl/journals', {
@@ -521,6 +554,9 @@ export async function updateJournal(
     journalType?: JournalType;
     reference?: string;
     description?: string;
+    intent?: JournalIntent;
+    intentNotes?: string;
+    intentReference?: string;
     budgetOverrideJustification?: string;
     lines: Array<{ lineNumber?: number; accountId: string; legalEntityId?: string | null; departmentId?: string | null; projectId?: string | null; fundId?: string | null; description?: string; debit: number; credit: number }>;
   },

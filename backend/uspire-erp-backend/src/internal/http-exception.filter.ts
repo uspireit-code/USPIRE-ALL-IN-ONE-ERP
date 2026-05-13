@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { Request, Response } from 'express';
 
 @Catch()
@@ -14,17 +15,45 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const req = ctx.getRequest<Request>();
     const res = ctx.getResponse<Response>();
 
-    const isProd = process.env.NODE_ENV === 'production';
-
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const requestId = (req as any)?.requestId;
+    const tenantId = (req as any)?.tenant?.id ?? null;
 
     if (requestId) {
       res.setHeader('x-request-id', requestId);
+    }
+
+    const isPrismaError =
+      exception instanceof Prisma.PrismaClientKnownRequestError ||
+      exception instanceof Prisma.PrismaClientUnknownRequestError ||
+      exception instanceof Prisma.PrismaClientValidationError ||
+      exception instanceof Prisma.PrismaClientInitializationError ||
+      exception instanceof Prisma.PrismaClientRustPanicError;
+
+    if (isPrismaError) {
+      // eslint-disable-next-line no-console
+      console.error('[PRISMA ERROR]', {
+        path: req.path,
+        method: req.method,
+        requestId,
+        tenantId,
+        message: (exception as any)?.message,
+        name: (exception as any)?.name,
+        code: (exception as any)?.code,
+        stack: (exception as any)?.stack,
+      });
+
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        error: 'INTERNAL_SERVER_ERROR',
+        message:
+          'A system configuration issue was detected. Please contact your administrator.',
+        requestId,
+      });
+      return;
     }
 
     if (exception instanceof HttpException) {
@@ -61,6 +90,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: req.path,
       method: req.method,
       requestId,
+      tenantId,
       message: (exception as any)?.message,
       name: (exception as any)?.name,
       stack: (exception as any)?.stack,
@@ -68,9 +98,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     res.status(status).json({
       error: 'INTERNAL_SERVER_ERROR',
-      message: isProd
-        ? 'Internal server error'
-        : ((exception as any)?.message ?? 'Internal server error'),
+      message: 'Internal server error',
       requestId,
     });
   }

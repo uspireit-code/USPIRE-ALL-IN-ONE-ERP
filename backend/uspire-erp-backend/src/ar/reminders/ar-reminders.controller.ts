@@ -15,7 +15,6 @@ export class ArRemindersController {
   @PermissionsAny(
     PERMISSIONS.AR_REMINDER.VIEW,
     PERMISSIONS.FINANCE.VIEW_ALL,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async listRules(@Req() req: Request) {
     return this.reminders.listRules(req);
@@ -42,7 +41,6 @@ export class ArRemindersController {
   @PermissionsAny(
     PERMISSIONS.AR_REMINDER.VIEW,
     PERMISSIONS.FINANCE.VIEW_ALL,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async listTemplates(@Req() req: Request) {
     return this.reminders.listTemplates(req);

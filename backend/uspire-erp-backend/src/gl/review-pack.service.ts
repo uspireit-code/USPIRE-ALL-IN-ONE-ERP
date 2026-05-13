@@ -67,7 +67,11 @@ export class ReviewPackService {
 
     if (!period) throw new NotFoundException('Accounting period not found');
 
-    if (period.status !== 'CLOSED') {
+    if (
+      period.status !== 'CLOSED' &&
+      (period.status as any) !== 'HARD_CLOSED' &&
+      (period.status as any) !== 'ARCHIVED'
+    ) {
       throw new BadRequestException(
         'Review packs can only be generated for CLOSED accounting periods',
       );

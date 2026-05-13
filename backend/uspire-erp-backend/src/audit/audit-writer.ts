@@ -1,6 +1,7 @@
 import type { AuditOutcome } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuditEventPayload } from './audit-contract';
+import { assertGovernanceMetadataComplete } from '../governance/governance-enforcement';
 
 function assertNonEmptyString(value: unknown, label: string): asserts value is string {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -54,6 +55,11 @@ export async function writeAuditEventWithPrisma(
     lifecycleType: payload.lifecycleType ?? null,
     timestamp: ts.toISOString(),
   };
+
+  const governanceMeta = (baseMeta as any)?.governance;
+  if (governanceMeta) {
+    assertGovernanceMetadataComplete(governanceMeta, 'AUDIT_EVENT');
+  }
 
   const reasonParts: any = {
     ...(payload.reason ? { reason: payload.reason } : {}),

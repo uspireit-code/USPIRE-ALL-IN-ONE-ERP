@@ -355,8 +355,10 @@ export class FinanceArInvoicesService {
     tenantId: string;
     invoiceDate: Date;
     action: 'create' | 'post';
+    req?: Request;
   }) {
     const period = await assertPeriodIsOpen({
+      req: params.req,
       prisma: this.prisma,
       tenantId: params.tenantId,
       date: params.invoiceDate,
@@ -375,7 +377,7 @@ export class FinanceArInvoicesService {
       where: {
         tenantId: params.tenantId,
         name: this.OPENING_PERIOD_NAME,
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
@@ -1091,6 +1093,7 @@ export class FinanceArInvoicesService {
       tenantId: tenant.id,
       invoiceDate: (inv as any).invoiceDate,
       action: 'post',
+      req,
     });
 
     const invoiceCategoryId = String((inv as any).invoiceCategoryId ?? '').trim() || null;
@@ -1207,9 +1210,9 @@ export class FinanceArInvoicesService {
           reference: `AR-INVOICE:${(inv as any).id}`,
           description: `AR invoice posting: ${(inv as any).invoiceNumber}`,
           createdById: (inv as any).createdById,
-          status: 'REVIEWED',
-          reviewedById: user.id,
-          reviewedAt: now,
+          status: 'SUBMITTED',
+          submittedById: user.id,
+          submittedAt: now,
           lines: {
             create: [
               {
@@ -1245,6 +1248,14 @@ export class FinanceArInvoicesService {
         } as any,
         include: { lines: true } as any,
       } as any);
+
+      await this.gl.systemReviewJournal(req, {
+        journalId: (journal as any).id,
+        sourceType: 'AR_INVOICE',
+        sourceId: String((inv as any).id),
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        validateSource: async () => true,
+      });
 
       postedJournal = await this.gl.postJournal(req, (journal as any).id);
 

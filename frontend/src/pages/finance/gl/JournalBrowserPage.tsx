@@ -38,6 +38,26 @@ function BudgetBadge(props: { status: string | null | undefined }) {
   );
 }
 
+function IntentBadge(props: { intent: JournalBrowserRow['intent'] }) {
+  const label = props.intent ? String(props.intent).replaceAll('_', ' ') : '—';
+  return (
+    <span
+      style={{
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: tokens.colors.surface.subtle,
+        border: `1px solid ${tokens.colors.border.subtle}`,
+        color: tokens.colors.text.primary,
+        fontSize: 12,
+        fontWeight: 750,
+        textTransform: 'capitalize',
+      }}
+    >
+      {label.toLowerCase()}
+    </span>
+  );
+}
+
 function parseNumber(v: string | null) {
   if (!v) return undefined;
   const n = Number(v);
@@ -405,6 +425,7 @@ export function JournalBrowserPage() {
                 <DataTable.Th>Description</DataTable.Th>
                 <DataTable.Th align="right">Debit</DataTable.Th>
                 <DataTable.Th align="right">Credit</DataTable.Th>
+                {!workbench ? <DataTable.Th>Intent</DataTable.Th> : null}
                 <DataTable.Th>Status</DataTable.Th>
                 {!workbench ? <DataTable.Th>Budget</DataTable.Th> : null}
                 {!workbench ? <DataTable.Th>Risk</DataTable.Th> : null}
@@ -414,7 +435,7 @@ export function JournalBrowserPage() {
               </tr>
             </DataTable.Head>
             <DataTable.Body>
-              {rows.length === 0 ? <DataTable.Empty colSpan={workbench ? 6 : 11} title="No journals found." /> : null}
+              {rows.length === 0 ? <DataTable.Empty colSpan={workbench ? 6 : 12} title="No journals found." /> : null}
               {rows.map((j, idx) => (
                 <DataTable.Row
                   key={j.id}
@@ -441,6 +462,11 @@ export function JournalBrowserPage() {
                   </DataTable.Td>
                   <DataTable.Td align="right">{Number(j.totalDebit ?? 0).toLocaleString()}</DataTable.Td>
                   <DataTable.Td align="right">{Number(j.totalCredit ?? 0).toLocaleString()}</DataTable.Td>
+                  {!workbench ? (
+                    <DataTable.Td>
+                      <IntentBadge intent={j.intent} />
+                    </DataTable.Td>
+                  ) : null}
                   <DataTable.Td>{j.status}</DataTable.Td>
                   {!workbench ? (
                     <DataTable.Td>

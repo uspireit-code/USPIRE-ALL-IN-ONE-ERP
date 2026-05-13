@@ -17,6 +17,7 @@ import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { requirePermission, requireOwnership } from '../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
 import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
 import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
 import {
@@ -229,12 +230,11 @@ export class ImprestService {
       });
     }
 
-    if ((period.status as string) !== 'OPEN') {
-      throw new ForbiddenException({
-        error: 'Posting blocked by accounting period control',
-        reason: 'Accounting period is not OPEN for the settlement date',
-      });
-    }
+    assertPeriodAllowsPosting({
+      req,
+      period,
+      permissionUsed: PERMISSIONS.IMPREST.CASE_SETTLE,
+    });
 
     const accountIds = Array.from(new Set(args.lines.map((l) => l.accountId)));
     const accounts: Array<{
@@ -302,9 +302,9 @@ export class ImprestService {
         journalType: 'STANDARD',
         sourceType: 'IMPREST_SETTLEMENT',
         sourceId: args.sourceId,
-        status: 'REVIEWED',
-        reviewedById: args.actorUserId,
-        reviewedAt: now,
+        status: 'SUBMITTED',
+        submittedById: args.actorUserId,
+        submittedAt: now,
         lines: {
           create: args.lines.map((l) => ({
             accountId: l.accountId,
@@ -319,6 +319,15 @@ export class ImprestService {
         },
       },
       include: { lines: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      prisma: tx,
+      journalId: journal.id,
+      sourceType: 'IMPREST_SETTLEMENT',
+      sourceId: args.sourceId,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     return this.gl.postJournalInTx({
@@ -1293,12 +1302,11 @@ export class ImprestService {
       });
     }
 
-    if ((period.status as string) !== 'OPEN') {
-      throw new ForbiddenException({
-        error: 'Posting blocked by accounting period control',
-        reason: 'Accounting period is not OPEN for the issuance date',
-      });
-    }
+    assertPeriodAllowsPosting({
+      req,
+      period,
+      permissionUsed: PERMISSIONS.IMPREST.CASE_ISSUE,
+    });
 
     const accounts = await this.prisma.account.findMany({
       where: {
@@ -1365,9 +1373,9 @@ export class ImprestService {
           journalType: 'STANDARD',
           sourceType: 'IMPREST_ISSUANCE',
           sourceId: args.sourceId,
-          status: 'REVIEWED',
-          reviewedById: args.actorUserId,
-          reviewedAt: now,
+          status: 'SUBMITTED',
+          submittedById: args.actorUserId,
+          submittedAt: now,
           lines: {
             create: [
               {
@@ -1394,6 +1402,15 @@ export class ImprestService {
           },
         },
         include: { lines: true },
+      });
+
+      await this.gl.systemReviewJournal(req, {
+        prisma: tx,
+        journalId: journal.id,
+        sourceType: 'IMPREST_ISSUANCE',
+        sourceId: args.sourceId,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        validateSource: async () => true,
       });
 
       return this.gl.postJournalInTx({

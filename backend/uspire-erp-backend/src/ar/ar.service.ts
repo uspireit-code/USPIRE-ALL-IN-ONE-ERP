@@ -334,6 +334,7 @@ export class ArService {
     let period: any = null;
     try {
       period = await assertPeriodIsOpen({
+        req,
         prisma: this.prisma,
         tenantId: tenant.id,
         date: new Date(inv.invoiceDate),
@@ -419,7 +420,7 @@ export class ArService {
       where: {
         tenantId: tenant.id,
         name: 'Opening Balances',
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
@@ -488,9 +489,9 @@ export class ArService {
         reference: `AR-INVOICE:${inv.id}`,
         description: `AR invoice posting: ${inv.id}`,
         createdById: inv.createdById,
-        status: 'REVIEWED',
-        reviewedById: user.id,
-        reviewedAt: now,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: now,
         lines: {
           create: [
             {
@@ -513,6 +514,14 @@ export class ArService {
         },
       },
       include: { lines: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'AR_INVOICE',
+      sourceId: inv.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const postedJournal = await this.gl.postJournal(req, journal.id);

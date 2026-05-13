@@ -19,6 +19,9 @@ export type RecurringJournalTemplate = {
   journalType: 'STANDARD';
   referenceTemplate: string;
   descriptionTemplate?: string | null;
+  intent?: string | null;
+  intentNotes?: string | null;
+  intentReference?: string | null;
   frequency: RecurringJournalFrequency;
   startDate: string;
   endDate?: string | null;
@@ -53,6 +56,9 @@ export async function createRecurringTemplate(params: {
   journalType?: 'STANDARD';
   referenceTemplate: string;
   descriptionTemplate?: string;
+  intent: string;
+  intentNotes?: string;
+  intentReference?: string;
   frequency: RecurringJournalFrequency;
   startDate: string;
   endDate?: string;
@@ -79,6 +85,9 @@ export async function updateRecurringTemplate(
     journalType: 'STANDARD';
     referenceTemplate: string;
     descriptionTemplate: string;
+    intent: string;
+    intentNotes: string;
+    intentReference: string;
     frequency: RecurringJournalFrequency;
     startDate: string;
     endDate: string | null;

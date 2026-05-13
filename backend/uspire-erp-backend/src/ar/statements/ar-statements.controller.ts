@@ -15,7 +15,6 @@ export class ArStatementsController {
   @PermissionsAny(
     PERMISSIONS.AR_STATEMENT.VIEW,
     PERMISSIONS.FINANCE.VIEW_ALL,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async customers(@Req() req: Request) {
     return this.statements.listCustomersForStatements(req);
@@ -25,7 +24,6 @@ export class ArStatementsController {
   @PermissionsAny(
     PERMISSIONS.AR_STATEMENT.VIEW,
     PERMISSIONS.FINANCE.VIEW_ALL,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async get(
     @Req() req: Request,

@@ -13,7 +13,9 @@ import { validateSegmentCompleteness } from '../finance/common/segment-completen
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { AuditEntityType, AuditEventType } from '@prisma/client';
-import { assertCanPost } from '../periods/period-guard';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
+import { assertRetroPostingWithinToleranceOrEscalated, loadTenantRetroPostToleranceDays } from '../periods/retro-posting-governance';
+import { maybeBuildGovernanceOverrideAuditMetadata } from '../governance/governance-enforcement';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 
@@ -493,10 +495,15 @@ export class PaymentsService {
       });
     }
 
-    // Canonical period semantics: posting is allowed only in OPEN.
+    // Canonical period posting governance: OPEN allowed; SOFT_CLOSED requires override;
+    // HARD_CLOSED/ARCHIVED always blocked.
     // We preserve the existing ForbiddenException payload/messages on failure.
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.PAYMENT.POST,
+      });
     } catch {
       await writeAuditEventWithPrisma(
         {
@@ -527,6 +534,17 @@ export class PaymentsService {
         reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
+
+    const retroPostToleranceDays = await loadTenantRetroPostToleranceDays({
+      prisma: this.prisma,
+      tenantId: tenant.id,
+    });
+    assertRetroPostingWithinToleranceOrEscalated({
+      req,
+      postingDate: new Date(p.paymentDate),
+      toleranceDays: retroPostToleranceDays,
+      escalationType: 'RETRO_POSTING_OVERRIDE',
+    });
 
     if (period.name === 'Opening Balances') {
       await writeAuditEventWithPrisma(
@@ -564,7 +582,7 @@ export class PaymentsService {
       where: {
         tenantId: tenant.id,
         name: 'Opening Balances',
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
@@ -942,9 +960,9 @@ export class PaymentsService {
         reference: `PAYMENT:${p.id}`,
         description: `Payment posting: ${p.id}`,
         createdById: p.createdById,
-        status: 'REVIEWED',
-        reviewedById: user.id,
-        reviewedAt: now,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: now,
         lines: {
           create: journalLines.map((l) => ({
             accountId: l.accountId,
@@ -957,6 +975,14 @@ export class PaymentsService {
         },
       },
       include: { lines: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'PAYMENT',
+      sourceId: p.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const postedJournal = await this.gl.postJournal(req, journal.id);
@@ -984,6 +1010,27 @@ export class PaymentsService {
         permissionUsed: PERMISSIONS.PAYMENT.POST,
         lifecycleType: 'POST',
         metadata: {
+          ...(maybeBuildGovernanceOverrideAuditMetadata({
+            req,
+            permissionUsed: PERMISSIONS.PAYMENT.POST,
+            actorUserId: user.id,
+            tenantId: tenant.id,
+            changedKeys: ['status'],
+            before: { status: String(p.status) },
+            after: { status: 'POSTED' },
+          })
+            ? {
+                governance: maybeBuildGovernanceOverrideAuditMetadata({
+                  req,
+                  permissionUsed: PERMISSIONS.PAYMENT.POST,
+                  actorUserId: user.id,
+                  tenantId: tenant.id,
+                  changedKeys: ['status'],
+                  before: { status: String(p.status) },
+                  after: { status: 'POSTED' },
+                }),
+              }
+            : {}),
           entityTypeRaw: 'PAYMENT',
           paymentId: updatedPayment.id,
           journalId: postedJournal.id,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { getFirstEnv } from './env.util';
 
@@ -36,6 +37,35 @@ export class ReadinessService {
       return 'ok';
     } catch {
       return 'fail';
+    }
+  }
+
+  async checkGovernanceTables(): Promise<{
+    status: 'ok' | 'fail';
+    missing: string[];
+  }> {
+    const required = [
+      'GovernanceOverrideSession',
+      'GovernanceAutomationSchedule',
+      'GovernanceAutomationExecutionSession',
+    ];
+
+    try {
+      const rows = await this.prisma.$queryRaw<{ table_name: string }[]>`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name IN (${Prisma.join(required)})
+      `;
+
+      const existing = new Set(
+        (rows ?? []).map((r) => String((r as any)?.table_name ?? '').trim()),
+      );
+      const missing = required.filter((t) => !existing.has(t));
+
+      return { status: missing.length === 0 ? 'ok' : 'fail', missing };
+    } catch {
+      return { status: 'fail', missing: required };
     }
   }
 }

@@ -9,10 +9,18 @@ import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
-import { requirePermission } from '../rbac/finance-authz.helpers';
+import { requirePermission, requireOwnership } from '../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
 import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
-import { assertCanPost } from '../periods/period-guard';
+import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
+import { resolveArControlAccount } from '../finance/common/resolve-ar-control-account';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
+import {
+  assertRetroPostingWithinToleranceOrEscalated,
+  loadTenantRetroPostToleranceDays,
+} from '../periods/retro-posting-governance';
+import { maybeBuildGovernanceOverrideAuditMetadata } from '../governance/governance-enforcement';
 import { CreateReceiptDto } from './dto/create-receipt.dto';
 import { SetReceiptAllocationsDto } from './dto/set-receipt-allocations.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
@@ -1412,16 +1420,32 @@ export class ArReceiptsService {
       });
     }
 
-    // Canonical period semantics: posting is allowed only in OPEN.
-    // We preserve the existing ForbiddenException payload/messages on failure.
+    // Canonical period posting governance: OPEN allowed; SOFT_CLOSED requires override;
+    // HARD_CLOSED/ARCHIVED always blocked.
+    // Preserve the existing error payload/messages on failure.
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.AR.RECEIPT_POST,
+      });
     } catch {
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
         reason: `Accounting period is not OPEN: ${period.name}`,
       });
     }
+
+    const retroPostToleranceDays = await loadTenantRetroPostToleranceDays({
+      prisma: this.prisma,
+      tenantId: tenant.id,
+    });
+    assertRetroPostingWithinToleranceOrEscalated({
+      req,
+      postingDate: new Date(existing.receiptDate),
+      toleranceDays: retroPostToleranceDays,
+      escalationType: 'RETRO_POSTING_OVERRIDE',
+    });
 
     if (period.name === this.OPENING_PERIOD_NAME) {
       throw new ForbiddenException({
@@ -1435,7 +1459,7 @@ export class ArReceiptsService {
       where: {
         tenantId: tenant.id,
         name: this.OPENING_PERIOD_NAME,
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
@@ -1702,9 +1726,9 @@ export class ArReceiptsService {
           reference: `AR-RECEIPT:${id}`,
           description: `AR receipt posting: ${receiptNumber || id}`,
           createdById: existing.createdById,
-          status: 'REVIEWED',
-          reviewedById: user.id,
-          reviewedAt: now,
+          status: 'SUBMITTED',
+          submittedById: user.id,
+          submittedAt: now,
           lines: {
             create: [
               {
@@ -1757,6 +1781,15 @@ export class ArReceiptsService {
         include: { lines: true },
       });
 
+      await this.gl.systemReviewJournal(req, {
+        prisma: tx,
+        journalId: journal.id,
+        sourceType: 'AR_RECEIPT',
+        sourceId: id,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        validateSource: async () => true,
+      });
+
       const postedJournal = await this.gl.postJournalInTx({
         tx,
         req,
@@ -1784,6 +1817,29 @@ export class ArReceiptsService {
             action: 'RECEIPT_POSTED',
             outcome: 'SUCCESS',
             reason: JSON.stringify({
+              metadata: {
+                ...(maybeBuildGovernanceOverrideAuditMetadata({
+                  req,
+                  permissionUsed: PERMISSIONS.AR.RECEIPT_POST,
+                  actorUserId: user.id,
+                  tenantId: tenant.id,
+                  changedKeys: ['status'],
+                  before: { status: String(existing.status) },
+                  after: { status: 'POSTED' },
+                })
+                  ? {
+                      governance: maybeBuildGovernanceOverrideAuditMetadata({
+                        req,
+                        permissionUsed: PERMISSIONS.AR.RECEIPT_POST,
+                        actorUserId: user.id,
+                        tenantId: tenant.id,
+                        changedKeys: ['status'],
+                        before: { status: String(existing.status) },
+                        after: { status: 'POSTED' },
+                      }),
+                    }
+                  : {}),
+              },
               receiptId: id,
               previousStatus: String(existing.status),
               newStatus: 'POSTED',

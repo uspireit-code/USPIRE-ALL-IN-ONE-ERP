@@ -6,6 +6,26 @@ import { Alert } from './Alert';
 import { Button } from './Button';
 import { DataTable } from './DataTable';
 
+function IntentBadge(props: { intent: JournalDetailResponse['intent'] }) {
+  const label = props.intent ? String(props.intent).replaceAll('_', ' ') : '—';
+  return (
+    <span
+      style={{
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: tokens.colors.surface.subtle,
+        border: `1px solid ${tokens.colors.border.subtle}`,
+        color: tokens.colors.text.primary,
+        fontSize: 12,
+        fontWeight: 750,
+        textTransform: 'capitalize',
+      }}
+    >
+      {label.toLowerCase()}
+    </span>
+  );
+}
+
 function money(n: number) {
   return Number(n).toFixed(2);
 }
@@ -106,6 +126,32 @@ export function JournalDetailModal(props: {
                   'Journal detail'
                 )}
               </div>
+              {data ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: 'flex',
+                    gap: 10,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    fontSize: 12,
+                    color: tokens.colors.text.secondary,
+                  }}
+                >
+                  <span style={{ fontWeight: 650 }}>Intent:</span>
+                  <IntentBadge intent={data.intent} />
+                  {data.intentReference ? (
+                    <span>
+                      <span style={{ fontWeight: 650 }}>Ref:</span> {data.intentReference}
+                    </span>
+                  ) : null}
+                  {data.intentNotes ? (
+                    <span style={{ maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontWeight: 650 }}>Notes:</span> {data.intentNotes}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <Button variant="ghost" onClick={props.onBack}>
               Back

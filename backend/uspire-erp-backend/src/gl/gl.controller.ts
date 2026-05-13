@@ -24,6 +24,8 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { CreateAccountingPeriodDto } from './dto/create-accounting-period.dto';
 import { CreateJournalDto } from './dto/create-journal.dto';
 import { CreateRecurringTemplateDto } from './dto/create-recurring-template.dto';
+import { ExecuteRecurringAutomationDto } from './dto/execute-recurring-automation.dto';
+import { ExecuteReversalAutomationDto } from './dto/execute-reversal-automation.dto';
 import { GenerateRecurringTemplateDto } from './dto/generate-recurring-template.dto';
 import { OpeningBalancesQueryDto } from './dto/opening-balances-query.dto';
 import { ReopenPeriodDto } from './dto/reopen-period.dto';
@@ -34,6 +36,7 @@ import { TrialBalanceQueryDto } from './dto/trial-balance-query.dto';
 import { UpdateJournalDto } from './dto/update-journal.dto';
 import { UpdateRecurringTemplateDto } from './dto/update-recurring-template.dto';
 import { UpsertOpeningBalancesJournalDto } from './dto/upsert-opening-balances-journal.dto';
+import { VoidJournalDto } from './dto/void-journal.dto';
 import { ReportExportQueryDto } from '../reports/dto/report-export-query.dto';
 import { ReportExportService } from '../reports/report-export.service';
 import { GlService } from './gl.service';
@@ -139,8 +142,12 @@ export class GlController {
       limits: { fileSize: 25 * 1024 * 1024 },
     }),
   )
-  async uploadJournals(@Req() req: Request, @UploadedFile() file: any) {
-    return this.gl.uploadJournals(req, file);
+  async uploadJournals(
+    @Req() req: Request,
+    @UploadedFile() file: any,
+    @Query('batchId') batchId?: string,
+  ) {
+    return this.gl.uploadJournals(req, file, { batchId });
   }
 
   @Get('journals/upload/template.csv')
@@ -226,6 +233,16 @@ export class GlController {
     return this.gl.generateJournalFromRecurringTemplate(req, id, dto);
   }
 
+  @Post('recurring-templates/:id/automation/execute')
+  @Permissions(PERMISSIONS.GL.RECURRING_GENERATE)
+  async executeRecurringAutomation(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: ExecuteRecurringAutomationDto,
+  ) {
+    return this.gl.executeRecurringAutomation(req, id, dto);
+  }
+
   @Get('recurring-templates/:id/history')
   @PermissionsAny(
     PERMISSIONS.GL.RECURRING_MANAGE,
@@ -288,10 +305,35 @@ export class GlController {
     return this.gl.parkJournal(req, id);
   }
 
+  @Post('journals/:id/void')
+  @PermissionsAny(
+    PERMISSIONS.GL.JOURNAL_VOID,
+    PERMISSIONS.GL.JOURNAL_VOID_REVIEWED,
+  )
+  async voidJournal(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: VoidJournalDto,
+  ) {
+    return this.gl.voidJournal(req, id, dto);
+  }
+
   @Post('journals/:id/post')
   @Permissions(PERMISSIONS.GL.FINAL_POST)
   async postJournal(@Req() req: Request, @Param('id') id: string) {
     return this.gl.postJournal(req, id);
+  }
+
+  @Post('journals/:id/post-override')
+  @Permissions(PERMISSIONS.GL.OVERRIDE_POST)
+  async postJournalOverride(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { overrideSessionId?: string },
+  ) {
+    return this.gl.postJournalOverride(req, id, {
+      overrideSessionId: body?.overrideSessionId,
+    });
   }
 
   @Post('journals/:id/return-to-review')
@@ -312,6 +354,16 @@ export class GlController {
     @Body() dto: ReverseJournalDto,
   ) {
     return this.gl.reversePostedJournal(req, id, dto);
+  }
+
+  @Post('journals/:id/reverse/automation/execute')
+  @Permissions(PERMISSIONS.GL.FINAL_POST)
+  async executeReversalAutomation(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: ExecuteReversalAutomationDto,
+  ) {
+    return this.gl.executeReversalAutomation(req, id, dto);
   }
 
   @Get('journals')
@@ -357,7 +409,8 @@ export class GlController {
       status === 'REVIEWED' ||
       status === 'REJECTED' ||
       status === 'PARKED' ||
-      status === 'POSTED'
+      status === 'POSTED' ||
+      status === 'VOIDED'
         ? (status as any)
         : undefined;
 

@@ -15,8 +15,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GlService } from '../gl/gl.service';
 import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
 import { PERMISSIONS } from '../rbac/permission-catalog';
+import { requirePermission, requireOwnership } from '../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
-import { assertCanPost } from '../periods/period-guard';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
 import { CreateFixedAssetCategoryDto } from './dto/create-fa-category.dto';
 import { CreateFixedAssetDto } from './dto/create-fa-asset.dto';
 import { CapitalizeFixedAssetDto } from './dto/capitalize-fa-asset.dto';
@@ -204,7 +205,11 @@ export class FaService {
     }
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.FA.ASSET_CAPITALIZE,
+      });
     } catch {
       await writeAuditEventWithPrisma(
         {
@@ -260,6 +265,9 @@ export class FaService {
         reference,
         description,
         createdById: journalCreatedById,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: new Date(),
         lines: {
           create: [
             { accountId: dto.assetAccountId, debit: asset.cost, credit: 0 },
@@ -268,6 +276,14 @@ export class FaService {
         },
       },
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'FA_CAPITALIZE',
+      sourceId: asset.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const posted = await this.gl.postJournal(req, journal.id);
@@ -328,7 +344,11 @@ export class FaService {
     if (!period) throw new NotFoundException('Accounting period not found');
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.FA.DEPRECIATION_RUN,
+      });
     } catch {
       await writeAuditEventWithPrisma(
         {
@@ -563,6 +583,9 @@ export class FaService {
         reference,
         description,
         createdById: preparerUserId,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: new Date(),
         lines: {
           create: lines.map((l) => ({
             accountId: l.accountId,
@@ -572,6 +595,14 @@ export class FaService {
         },
       },
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'FA_DEPRECIATION_RUN',
+      sourceId: run.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const posted = await this.gl.postJournal(req, journal.id);
@@ -703,7 +734,11 @@ export class FaService {
     }
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.FA.DISPOSE,
+      });
     } catch {
       await writeAuditEventWithPrisma(
         {
@@ -819,6 +854,9 @@ export class FaService {
         reference,
         description,
         createdById: preparerUserId,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: new Date(),
         lines: {
           create: lines.map((l) => ({
             accountId: l.accountId,
@@ -828,6 +866,14 @@ export class FaService {
         },
       },
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'FA_DISPOSE',
+      sourceId: asset.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const posted = await this.gl.postJournal(req, journal.id);

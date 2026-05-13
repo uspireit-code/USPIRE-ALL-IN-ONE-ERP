@@ -20,6 +20,132 @@ type PermissionRequirement =
       permissions: string[];
     };
 
+function isMutatingHttpMethod(method: string | undefined): boolean {
+  const m = String(method ?? '').toUpperCase();
+  return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
+}
+
+function readGovernanceReason(req: Request): string {
+  const header = String(req.header('x-governance-reason') ?? '').trim();
+  if (header) return header;
+
+  // Secondary fallback for existing override endpoints that already use a reason in body.
+  const bodyReason = String((req as any)?.body?.reason ?? '').trim();
+  return bodyReason;
+}
+
+export function resolveCompatibilityPermissionsForUser(params: {
+  userPermissionCodes: Set<string>;
+}): Set<string> {
+  const out = new Set<string>();
+  const has = (p: string) => params.userPermissionCodes.has(p);
+
+  const hasGlobalOverride =
+    has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.SUPER_ADMIN_GLOBAL) ||
+    has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE);
+
+  if (hasGlobalOverride) {
+    out.add(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE);
+  }
+
+  // Canonical governance domain permissions (new model)
+  const sysGov = has(PERMISSIONS.GOVERNANCE.SYSTEM.MANAGE)
+    ? 'manage'
+    : has(PERMISSIONS.GOVERNANCE.SYSTEM.VIEW) || has(PERMISSIONS.SYSTEM.VIEW_ALL)
+      ? 'view'
+      : null;
+  const finGov = has(PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE)
+    ? 'manage'
+    : has(PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW)
+      ? 'view'
+      : null;
+  const secGov = has(PERMISSIONS.GOVERNANCE.SECURITY.MANAGE)
+    ? 'manage'
+    : has(PERMISSIONS.GOVERNANCE.SECURITY.VIEW)
+      ? 'view'
+      : null;
+
+  // SYSTEM_VIEW_ALL semantics: system governance visibility only.
+  // It does not imply financial or security authority.
+  if (sysGov === 'manage') {
+    out.add(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
+    out.add(PERMISSIONS.SYSTEM.CONFIG_CHANGE);
+    out.add(PERMISSIONS.SYSTEM.CONFIG_VIEW);
+    out.add(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
+    out.add(PERMISSIONS.USER.VIEW);
+    out.add(PERMISSIONS.USER.CREATE);
+    out.add(PERMISSIONS.USER.EDIT);
+    out.add(PERMISSIONS.ROLE.VIEW);
+    out.add(PERMISSIONS.ROLE.ASSIGN);
+    out.add(PERMISSIONS.SECURITY.DELEGATION_MANAGE);
+  } else if (sysGov === 'view') {
+    out.add(PERMISSIONS.SYSTEM.CONFIG_VIEW);
+    out.add(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
+    out.add(PERMISSIONS.USER.VIEW);
+    out.add(PERMISSIONS.ROLE.VIEW);
+  }
+
+  if (finGov === 'manage') {
+    out.add(PERMISSIONS.FINANCE.CONFIG_VIEW);
+    out.add(PERMISSIONS.FINANCE.CONFIG_UPDATE);
+    out.add(PERMISSIONS.FINANCE.CONFIG_CHANGE);
+    out.add(PERMISSIONS.FINANCE.VIEW_ALL);
+  } else if (finGov === 'view') {
+    out.add(PERMISSIONS.FINANCE.CONFIG_VIEW);
+  }
+
+  if (secGov === 'manage') {
+    out.add(PERMISSIONS.USER.VIEW);
+    out.add(PERMISSIONS.USER.CREATE);
+    out.add(PERMISSIONS.USER.EDIT);
+    out.add(PERMISSIONS.ROLE.VIEW);
+    out.add(PERMISSIONS.ROLE.ASSIGN);
+    out.add(PERMISSIONS.SECURITY.DELEGATION_MANAGE);
+  } else if (secGov === 'view') {
+    out.add(PERMISSIONS.USER.VIEW);
+    out.add(PERMISSIONS.ROLE.VIEW);
+  }
+
+  // Backwards-compat: legacy permissions satisfy canonical permissions.
+  if (
+    has(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
+    has(PERMISSIONS.SYSTEM.CONFIG_CHANGE)
+  ) {
+    out.add(PERMISSIONS.GOVERNANCE.SYSTEM.MANAGE);
+  }
+  if (
+    has(PERMISSIONS.SYSTEM.CONFIG_VIEW) ||
+    has(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW) ||
+    has(PERMISSIONS.SYSTEM.VIEW_ALL)
+  ) {
+    out.add(PERMISSIONS.GOVERNANCE.SYSTEM.VIEW);
+  }
+
+  if (
+    has(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
+    has(PERMISSIONS.FINANCE.CONFIG_CHANGE)
+  ) {
+    out.add(PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE);
+  }
+  if (has(PERMISSIONS.FINANCE.CONFIG_VIEW) || has(PERMISSIONS.FINANCE.VIEW_ALL)) {
+    out.add(PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW);
+  }
+
+  if (
+    has(PERMISSIONS.USER.CREATE) ||
+    has(PERMISSIONS.USER.EDIT) ||
+    has(PERMISSIONS.ROLE.ASSIGN) ||
+    has(PERMISSIONS.SECURITY.DELEGATION_MANAGE)
+  ) {
+    out.add(PERMISSIONS.GOVERNANCE.SECURITY.MANAGE);
+  }
+  if (has(PERMISSIONS.USER.VIEW) || has(PERMISSIONS.ROLE.VIEW)) {
+    out.add(PERMISSIONS.GOVERNANCE.SECURITY.VIEW);
+  }
+
+  return out;
+}
+
 function permissionIsView(code: string): boolean {
   return (code || '').toUpperCase().endsWith('_VIEW');
 }
@@ -128,7 +254,11 @@ export class PermissionsGuard implements CanActivate {
       : [];
     if (jwtPermissionCodes.length > 0) {
       for (const p of jwtPermissionCodes) codes.add(String(p));
-    } else {
+    }
+
+    const jwtSatisfied = required.every((p) => codes.has(p));
+
+    if (jwtPermissionCodes.length === 0 || !jwtSatisfied) {
       const userRoles = await this.prisma.userRole.findMany({
         where: {
           userId: permissionUserId,
@@ -155,6 +285,42 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const satisfiedBySystemView = new Set<string>();
+
+    const compatibilityCodes = resolveCompatibilityPermissionsForUser({
+      userPermissionCodes: codes,
+    });
+    for (const p of compatibilityCodes) codes.add(p);
+
+    // Governance escalation enforcement:
+    // If the actor has global override authority and is making a mutating request,
+    // require an explicit reason to prevent silent cross-domain overrides.
+    const routeRequiresGlobalOverride = required.some(
+      (p) =>
+        p === PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.SUPER_ADMIN_GLOBAL ||
+        p === PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE,
+    );
+    const hasGlobalOverride =
+      codes.has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.SUPER_ADMIN_GLOBAL) ||
+      codes.has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE);
+
+    if (
+      routeRequiresGlobalOverride &&
+      hasGlobalOverride &&
+      isMutatingHttpMethod((req as any)?.method)
+    ) {
+      const reason = readGovernanceReason(req);
+      if (!reason || reason.length < 3) {
+        throw new ForbiddenException(
+          'Governance escalation reason is required. Provide x-governance-reason header.',
+        );
+      }
+      (req as any).governanceEscalation = {
+        type: codes.has(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.SUPER_ADMIN_GLOBAL)
+          ? 'SUPER_ADMIN_GLOBAL'
+          : 'GLOBAL_GOVERNANCE_OVERRIDE',
+        reason,
+      };
+    }
 
     if (mode === 'all') {
       const missing = required.filter(

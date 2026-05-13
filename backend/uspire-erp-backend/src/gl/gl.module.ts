@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { RbacModule } from '../rbac/rbac.module';
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../rbac/jwt-auth.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { ReportsModule } from '../reports/reports.module';
 import { StorageModule } from '../storage/storage.module';
+import { GovernanceModule } from '../governance/governance.module';
 import { GlController } from './gl.controller';
 import { GlRiskController } from './gl.risk.controller';
 import { GlService } from './gl.service';
@@ -18,6 +19,7 @@ import { ReviewPackService } from './review-pack.service';
     RbacModule,
     StorageModule,
     ReportsModule,
+    forwardRef(() => GovernanceModule),
   ],
   controllers: [GlController, GlRiskController],
   providers: [GlService, ReviewPackService, JwtAuthGuard, PermissionsGuard],

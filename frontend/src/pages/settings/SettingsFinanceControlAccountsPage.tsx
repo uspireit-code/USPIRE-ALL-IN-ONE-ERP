@@ -12,8 +12,7 @@ export function SettingsFinanceControlAccountsPage() {
 
   const canEdit =
     hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
-    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
 
   const [coa, setCoa] = useState<CoaAccount[]>([]);
   const [loading, setLoading] = useState(true);

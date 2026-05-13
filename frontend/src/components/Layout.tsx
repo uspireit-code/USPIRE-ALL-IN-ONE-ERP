@@ -1,12 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BarChart3,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  Gauge,
+  Landmark,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  Receipt,
+  Settings,
+  User,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { canAny } from '../auth/permissions';
 import { PERMISSIONS } from '../auth/permission-catalog';
 import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
 import { AuthBootstrapGate } from './AuthBootstrapGate';
-import { globalSearch, type GlobalSearchResponse, type GlobalSearchResultItem } from '../services/search';
-import { getApiErrorMessage, pingSession } from '../services/api';
+import type React from 'react';
+import { apiFetch, getApiErrorMessage, pingSession } from '../services/api';
 import { changeMyPassword, updateMyProfile, uploadMyAvatar } from '../services/users';
 import { tokens } from '../designTokens';
 
@@ -16,6 +32,17 @@ export function Layout() {
   const brand = useBranding();
   const { effective } = brand;
   const [brandLogoOk, setBrandLogoOk] = useState(true);
+
+  function formatRoleLabel(input: unknown): string {
+    const raw = String(input ?? '').trim();
+    if (!raw) return '';
+    return raw
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+
   const Icon = (props: { children: React.ReactNode }) => {
     return (
       <span
@@ -37,12 +64,21 @@ export function Layout() {
 
   const [profileOpen, setProfileOpen] = useState(false);
 
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuWrapRef = useRef<HTMLDivElement | null>(null);
+
   const [searchValue, setSearchValue] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<GlobalSearchResultItem[]>([]);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
+
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const notificationsWrapRef = useRef<HTMLDivElement | null>(null);
 
   const { state, logout, hasPermission, refreshMe } = useAuth();
 
@@ -163,6 +199,24 @@ export function Layout() {
   const userEmail = state.me?.user?.email ?? '';
   const userRoles = Array.isArray(state.me?.user?.roles) ? state.me?.user?.roles : [];
 
+  const userFullName = String(state.me?.user?.name ?? '').trim();
+  const userFirstName = userFullName ? userFullName.split(/\s+/).filter(Boolean)[0] ?? '' : '';
+  const userDisplayName = (userFullName || userFirstName || userEmail).trim();
+  const userInitials = (() => {
+    const src = userFullName || userEmail;
+    const parts = String(src)
+      .trim()
+      .split(/\s+|\.|@|_/)
+      .filter(Boolean);
+    const a = parts[0]?.[0] ?? '';
+    const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? '';
+    const out = `${a}${b}`.toUpperCase();
+    return out || 'U';
+  })();
+
+  const primaryRole = userRoles[0] ?? '';
+  const primaryRoleLabel = primaryRole ? formatRoleLabel(primaryRole) : '';
+
   const isDelegated = Boolean(state.delegation?.delegationId);
   const actingAsName = state.delegation?.actingAsUserName;
   const realUserName = state.me?.user?.name ?? userEmail;
@@ -178,6 +232,60 @@ export function Layout() {
     return avatarUrl;
   }, [avatarUrl]);
 
+  type NavSearchItem = {
+    title: string;
+    category: string;
+    route: string;
+    icon: React.ReactNode;
+    keywords?: string[];
+  };
+
+  const NAV_SEARCH_INDEX: NavSearchItem[] = useMemo(
+    () => [
+      { title: 'Dashboard', category: 'Home', route: '/', icon: <LayoutDashboard size={16} aria-hidden /> },
+      { title: 'Chart of Accounts', category: 'Finance & Accounting', route: '/finance/coa', icon: <Landmark size={16} aria-hidden />, keywords: ['coa', 'accounts', 'ledger'] },
+      { title: 'COA Health', category: 'Finance & Accounting', route: '/finance/coa-health', icon: <Gauge size={16} aria-hidden />, keywords: ['coa', 'health', 'validation'] },
+      { title: 'COA Submissions', category: 'Finance & Accounting', route: '/finance/coa-submissions', icon: <FileText size={16} aria-hidden />, keywords: ['coa', 'submissions', 'approval'] },
+      { title: 'General Ledger', category: 'Finance & Accounting', route: '/finance/gl', icon: <Wallet size={16} aria-hidden />, keywords: ['gl', 'journals', 'ledger'] },
+      { title: 'Journals', category: 'Finance & Accounting', route: '/finance/gl/journals', icon: <Receipt size={16} aria-hidden />, keywords: ['journal', 'entries', 'posting'] },
+      { title: 'Accounts Payable', category: 'Finance & Accounting', route: '/ap', icon: <CreditCard size={16} aria-hidden />, keywords: ['ap', 'suppliers', 'bills'] },
+      { title: 'Accounts Receivable', category: 'Finance & Accounting', route: '/ar', icon: <Receipt size={16} aria-hidden />, keywords: ['ar', 'customers', 'invoices'] },
+      { title: 'Cash & Bank', category: 'Finance & Accounting', route: '/cash', icon: <Landmark size={16} aria-hidden />, keywords: ['bank', 'cashbook', 'cash book', 'reconciliation'] },
+      { title: 'Budgets', category: 'Planning', route: '/budgets', icon: <BarChart3 size={16} aria-hidden />, keywords: ['budget', 'planning', 'forecast'] },
+      { title: 'Reports', category: 'Analytics & Reporting', route: '/reports', icon: <FileText size={16} aria-hidden />, keywords: ['report', 'analytics'] },
+      { title: 'Tax Rates', category: 'Master Data', route: '/settings/tax-rates', icon: <Receipt size={16} aria-hidden />, keywords: ['vat', 'tax', 'rates'] },
+      { title: 'Users', category: 'Administration', route: '/settings/users', icon: <Users size={16} aria-hidden />, keywords: ['user', 'roles', 'access'] },
+      { title: 'Settings', category: 'Administration', route: '/settings', icon: <Settings size={16} aria-hidden />, keywords: ['configuration', 'admin'] },
+      { title: 'Override Sessions', category: 'Administration', route: '/settings/governance/override-sessions', icon: <ClipboardList size={16} aria-hidden />, keywords: ['governance', 'override', 'approval', 'exceptions'] },
+      { title: 'Preferences', category: 'Account', route: '/preferences', icon: <Settings size={16} aria-hidden />, keywords: ['theme', 'compact', 'language'] },
+      { title: 'Change Password', category: 'Account', route: '/change-password', icon: <Lock size={16} aria-hidden />, keywords: ['security', 'password'] },
+      { title: 'Activity Log', category: 'Account', route: '/activity-log', icon: <ClipboardList size={16} aria-hidden />, keywords: ['audit', 'security'] },
+    ],
+    [],
+  );
+
+  const filteredNavResults = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    if (!q) return [] as NavSearchItem[];
+
+    const scored = NAV_SEARCH_INDEX.map((item) => {
+      const haystack = [item.title, item.category, item.route, ...(item.keywords ?? [])]
+        .join(' ')
+        .toLowerCase();
+
+      if (!haystack.includes(q)) return { item, score: -1 };
+      let score = 1;
+      if (item.title.toLowerCase().startsWith(q)) score += 4;
+      if ((item.keywords ?? []).some((k) => k.toLowerCase().startsWith(q))) score += 2;
+      if (item.route.toLowerCase().includes(q)) score += 1;
+      return { item, score };
+    })
+      .filter((x) => x.score >= 0)
+      .sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title));
+
+    return scored.slice(0, 14).map((s) => s.item);
+  }, [NAV_SEARCH_INDEX, searchValue]);
+
   useEffect(() => {
     if (!searchOpen) return;
     function onDown(e: MouseEvent) {
@@ -189,6 +297,93 @@ export function Layout() {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!notificationOpen) return;
+
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node | null;
+      if (notificationOpen && notificationsWrapRef.current && t && !notificationsWrapRef.current.contains(t)) {
+        setNotificationOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [notificationOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node | null;
+      if (userMenuOpen && userMenuWrapRef.current && t && !userMenuWrapRef.current.contains(t)) {
+        setUserMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setUserMenuOpen(false);
+    }
+
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [userMenuOpen]);
+
+  async function fetchUnreadCount() {
+    try {
+      const res = await apiFetch<{ count: number }>('/notifications/unread-count');
+      setUnreadCount(Number((res as any)?.count ?? 0) || 0);
+    } catch {
+      setUnreadCount(0);
+    }
+  }
+
+  async function fetchNotifications() {
+    setNotificationError(null);
+    try {
+      const res = await apiFetch<any[]>('/notifications');
+      setNotifications(Array.isArray(res) ? res : []);
+    } catch (e) {
+      setNotificationError(getApiErrorMessage(e, 'Failed to load notifications'));
+      setNotifications([]);
+    }
+  }
+
+  async function markAllAsRead() {
+    try {
+      await apiFetch('/notifications/read-all', { method: 'PATCH' });
+    } catch {
+      // ignore
+    }
+    void fetchNotifications();
+    void fetchUnreadCount();
+  }
+
+  useEffect(() => {
+    if (!state.isAuthenticated || isGatewayRoute) return;
+    void fetchUnreadCount();
+  }, [state.isAuthenticated, isGatewayRoute]);
+
+  async function handleNotificationClick(n: any) {
+    try {
+      await apiFetch(`/notifications/${String(n?.id ?? '')}/read`, { method: 'PATCH' });
+    } catch {
+      // ignore
+    }
+
+    const entityType = String(n?.entityType ?? '');
+    const entityId = String(n?.entityId ?? '');
+    if (entityType === 'ACCOUNT' && entityId) {
+      navigate(`/finance/coa?highlight=${encodeURIComponent(entityId)}`);
+    }
+
+    setNotificationOpen(false);
+    void fetchNotifications();
+    void fetchUnreadCount();
+  }
 
   function ProfileDrawer() {
     const [saving, setSaving] = useState(false);
@@ -721,31 +916,13 @@ export function Layout() {
     ) : null;
   }
 
-  async function runSearch(term: string) {
-    const q = term.trim();
+  function openNavResult(item: NavSearchItem) {
+    setSearchOpen(false);
+    setSearchValue('');
     setSearchError(null);
-    setSearchLoading(true);
-    try {
-      const resp: GlobalSearchResponse = await globalSearch(q);
-      setSearchResults(Array.isArray(resp.results) ? resp.results : []);
-      setSearchOpen(true);
-    } catch (e: any) {
-      setSearchError('Search failed');
-      setSearchResults([]);
-      setSearchOpen(true);
-    } finally {
-      setSearchLoading(false);
-    }
-  }
-
-  function groupResults(items: GlobalSearchResultItem[]) {
-    const groups: Record<string, GlobalSearchResultItem[]> = {};
-    for (const r of items) {
-      const k = String(r.type);
-      if (!groups[k]) groups[k] = [];
-      groups[k].push(r);
-    }
-    return groups;
+    setSearchLoading(false);
+    setActiveSearchIndex(0);
+    navigate(item.route);
   }
 
   type NavLevel = 1 | 2 | 3;
@@ -1176,7 +1353,6 @@ export function Layout() {
 
   const SIDEBAR_WIDTH = 280;
 
-  const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
   const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
   const hasSystemConfigView = hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
   const hasSystemSettingsView = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
@@ -1184,18 +1360,26 @@ export function Layout() {
   const hasUserView = hasPermission(PERMISSIONS.USER.VIEW);
   const hasRoleView = hasPermission(PERMISSIONS.ROLE.VIEW);
 
-  const showAudit = hasPermission(PERMISSIONS.AUDIT_VIEW) || hasSystemViewAll;
+  const hasFinancialGovernanceView =
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW) ||
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE);
+
+  const hasSystemGovView =
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW) ||
+    hasSystemConfigView ||
+    hasSystemSettingsView;
+
+  const showAudit = hasPermission(PERMISSIONS.AUDIT_VIEW);
 
   const showArAging =
-    hasPermission(PERMISSIONS.AR_AGING.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.AR_AGING.VIEW) || hasFinanceViewAll;
   const showArStatements =
-    hasPermission(PERMISSIONS.AR_STATEMENT.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.AR_STATEMENT.VIEW) || hasFinanceViewAll;
   const showSupplierStatements =
     hasPermission(PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW) ||
-    hasFinanceViewAll ||
-    hasSystemViewAll;
+    hasFinanceViewAll;
   const showApAging =
-    hasPermission(PERMISSIONS.REPORT.AP_AGING_VIEW) || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.REPORT.AP_AGING_VIEW) || hasFinanceViewAll;
   const showPaymentProposals =
     hasPermission(PERMISSIONS.AP.PAYMENT_PROPOSAL_VIEW) ||
     hasPermission(PERMISSIONS.AP.PAYMENT_PROPOSAL_CREATE) ||
@@ -1204,9 +1388,9 @@ export function Layout() {
   const showPaymentRuns =
     hasPermission(PERMISSIONS.AP.PAYMENT_RUN_VIEW) || hasFinanceViewAll;
   const showArReminders =
-    hasPermission(PERMISSIONS.AR_REMINDER.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.AR_REMINDER.VIEW) || hasFinanceViewAll;
   const showGlCreate = hasPermission(PERMISSIONS.GL.CREATE);
-  const showGlView = hasPermission(PERMISSIONS.GL.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showGlView = hasPermission(PERMISSIONS.GL.VIEW) || hasFinanceViewAll;
   const showGlReviewQueue = hasPermission(PERMISSIONS.GL.APPROVE);
   const showGlPostQueue = hasPermission(PERMISSIONS.GL.FINAL_POST);
   const showGlRecurring =
@@ -1215,17 +1399,17 @@ export function Layout() {
   const showGlRiskIntelligence = showGlView;
   const showGlRegister = showGlView;
   const showGlDrafts = showGlCreate;
-  const showCoa = hasPermission(PERMISSIONS.COA.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+  const showCoa = hasPermission(PERMISSIONS.COA.VIEW) || hasFinanceViewAll;
   const showCoaSubmissions =
     hasPermission(PERMISSIONS.COA.DRAFT_CREATE)
     || hasPermission(PERMISSIONS.COA.DRAFT_EDIT)
     || hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT)
     || hasFinanceViewAll
-    || hasSystemViewAll;
-  const showCoaApprovals = hasPermission(PERMISSIONS.COA.APPROVE) || hasFinanceViewAll || hasSystemViewAll;
+    ;
+  const showCoaApprovals = hasPermission(PERMISSIONS.COA.APPROVE) || hasFinanceViewAll;
   const showPeriods =
     hasFinanceViewAll ||
-    hasSystemViewAll ||
+    hasSystemGovView ||
     hasPermission(PERMISSIONS.PERIOD.VIEW) ||
     hasPermission(PERMISSIONS.PERIOD.CLOSE_APPROVE) ||
     hasPermission(PERMISSIONS.PERIOD.REOPEN);
@@ -1252,34 +1436,30 @@ export function Layout() {
   }, [showCoaSubmissions, showCoaApprovals]);
 
   const showArCustomers =
-    hasPermission(PERMISSIONS.CUSTOMERS.VIEW) || hasFinanceViewAll || hasSystemViewAll;
+    hasPermission(PERMISSIONS.CUSTOMERS.VIEW) || hasFinanceViewAll;
   const showArInvoices =
     hasPermission(PERMISSIONS.AR.INVOICE_VIEW) ||
     hasPermission(PERMISSIONS.AR.INVOICE_CREATE) ||
-    hasFinanceViewAll ||
-    hasSystemViewAll;
+    hasFinanceViewAll;
   const showArReceipts =
     hasPermission(PERMISSIONS.AR.RECEIPT_VIEW) ||
     hasPermission(PERMISSIONS.AR.RECEIPT_POST) ||
     hasPermission(PERMISSIONS.AR.RECEIPT_CREATE) ||
-    hasFinanceViewAll ||
-    hasSystemViewAll;
+    hasFinanceViewAll;
   const showArCreditNotes =
     canAny(state.me, [
       PERMISSIONS.AR.CREDIT_NOTE_VIEW,
       PERMISSIONS.AR.CREDIT_NOTE_CREATE,
       PERMISSIONS.AR.CREDIT_NOTE_POST,
     ]) ||
-    hasFinanceViewAll ||
-    hasSystemViewAll;
+    hasFinanceViewAll;
   const showArRefunds =
     canAny(state.me, [
       PERMISSIONS.AR.REFUND_VIEW,
       PERMISSIONS.AR.REFUND_CREATE,
       PERMISSIONS.AR.REFUND_POST,
     ]) ||
-    hasFinanceViewAll ||
-    hasSystemViewAll;
+    hasFinanceViewAll;
 
   const showFixedAssets =
     hasPermission(PERMISSIONS.FA.CATEGORY_MANAGE) ||
@@ -1293,12 +1473,10 @@ export function Layout() {
   const showApBills =
     hasPermission(PERMISSIONS.AP.INVOICE_VIEW) ||
     hasPermission(PERMISSIONS.AP.INVOICE_CREATE) ||
-    hasFinanceViewAll ||
-    hasSystemViewAll;
+    hasFinanceViewAll;
 
   const showImprest =
     hasFinanceViewAll ||
-    hasSystemViewAll ||
     canAny(state.me, [
       PERMISSIONS.IMPREST.TYPE_POLICY_VIEW,
       PERMISSIONS.IMPREST.TYPE_POLICY_CREATE,
@@ -1317,17 +1495,17 @@ export function Layout() {
     ]);
 
   const showSettings =
-    hasSystemViewAll ||
+    hasSystemGovView ||
     hasSystemConfigView ||
     hasSystemSettingsView ||
     hasFinanceConfigView ||
+    hasFinancialGovernanceView ||
     hasUserView ||
     hasRoleView ||
     hasPermission(PERMISSIONS.SECURITY.DELEGATION_MANAGE);
 
   const showFinanceNav =
     hasFinanceViewAll ||
-    hasSystemViewAll ||
     showCoa ||
     showGlView ||
     showPeriods ||
@@ -1832,6 +2010,7 @@ export function Layout() {
 
       {showTopBar ? (
         <div
+          className="header-container"
           style={{
             position: 'fixed',
             top: 0,
@@ -1911,22 +2090,39 @@ export function Layout() {
 
           <div ref={searchWrapRef} style={{ flex: '0 1 520px', padding: '0 18px', position: 'relative' }}>
             <input
-              placeholder="Search modules, menus, reference numbers…"
+              placeholder="Search modules, menus, reference numbers..."
               aria-label="Global search"
+              type="search"
+              name="global-search"
+              autoComplete="off"
               value={searchValue}
               onChange={(e) => {
-                setSearchValue(e.target.value);
-                if (!e.target.value.trim()) {
-                  setSearchResults([]);
-                  setSearchOpen(false);
-                  setSearchError(null);
-                }
+                const next = e.target.value;
+                setSearchValue(next);
+                setSearchError(null);
+                setSearchLoading(false);
+                setActiveSearchIndex(0);
+                setSearchOpen(Boolean(next.trim()));
               }}
               onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setSearchOpen(Boolean(searchValue.trim()));
+                  setActiveSearchIndex((i) => {
+                    const max = Math.max(0, filteredNavResults.length - 1);
+                    return Math.min(max, i + 1);
+                  });
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setSearchOpen(Boolean(searchValue.trim()));
+                  setActiveSearchIndex((i) => Math.max(0, i - 1));
+                }
                 if (e.key === 'Enter') {
                   const q = searchValue.trim();
                   if (!q) return;
-                  runSearch(q);
+                  const item = filteredNavResults[activeSearchIndex];
+                  if (item) openNavResult(item);
                 }
                 if (e.key === 'Escape') {
                   setSearchOpen(false);
@@ -1935,7 +2131,7 @@ export function Layout() {
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = tokens.focusRing.borderColor;
                 e.currentTarget.style.boxShadow = tokens.focusRing.ring;
-                if (searchResults.length > 0 || searchError) setSearchOpen(true);
+                if (searchValue.trim()) setSearchOpen(true);
               }}
               onBlur={(e) => {
                 e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
@@ -1972,70 +2168,78 @@ export function Layout() {
                 }}
               >
                 <div style={{ padding: '10px 12px', fontSize: 12, opacity: 0.9, borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-                  {searchLoading ? 'Searching…' : searchError ? searchError : `Results for “${searchValue.trim()}”`}
+                  {searchError ? searchError : searchLoading ? 'Searching…' : 'Navigate'}
                 </div>
-                {searchLoading ? null : (
-                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-                    {(() => {
-                      const groups = groupResults(searchResults);
-                      const groupOrder: Array<{ key: GlobalSearchResultItem['type']; label: string }> = [
-                        { key: 'ROUTE', label: 'Menu' },
-                        { key: 'JOURNAL', label: 'Journals' },
-                        { key: 'BANK_STATEMENT', label: 'Bank Statements' },
-                        { key: 'IMPREST', label: 'Imprest' },
-                      ];
 
-                      const sections = groupOrder.filter((g) => (groups[g.key] ?? []).length > 0);
-                      if (sections.length === 0) {
-                        return <div style={{ padding: 12, fontSize: 13, opacity: 0.88 }}>No results found.</div>;
-                      }
-
-                      return sections.map((g) => (
-                        <div key={g.key}>
-                          <div style={{ padding: '10px 12px', fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', opacity: 0.75 }}>
-                            {g.label}
-                          </div>
-                          {(groups[g.key] ?? []).map((r, idx) => (
-                            <button
-                              key={`${g.key}-${idx}-${r.targetUrl}`}
-                              type="button"
-                              role="option"
-                              onClick={() => {
-                                setSearchOpen(false);
-                                setSearchValue('');
-                                setSearchResults([]);
-                                navigate(r.targetUrl);
-                              }}
+                <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+                  {!searchValue.trim() ? (
+                    <div style={{ padding: 12, fontSize: 13, opacity: 0.88 }}>Type to search modules and menus.</div>
+                  ) : filteredNavResults.length === 0 ? (
+                    <div style={{ padding: 12, fontSize: 13, opacity: 0.88 }}>No results found.</div>
+                  ) : (
+                    <div style={{ padding: 6 }}>
+                      {filteredNavResults.map((r, idx) => {
+                        const active = idx === activeSearchIndex;
+                        return (
+                          <button
+                            key={`${r.route}-${idx}`}
+                            type="button"
+                            role="option"
+                            aria-selected={active ? 'true' : 'false'}
+                            onMouseEnter={() => setActiveSearchIndex(idx)}
+                            onClick={() => openNavResult(r)}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '10px 10px',
+                              border: 0,
+                              borderRadius: 10,
+                              background: active ? 'rgba(231,158,19,0.16)' : 'transparent',
+                              color: COLORS.white,
+                              cursor: 'pointer',
+                              fontSize: 13,
+                              display: 'grid',
+                              gridTemplateColumns: '22px 1fr',
+                              gap: 10,
+                              alignItems: 'start',
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!active) e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <span
+                              aria-hidden
                               style={{
-                                width: '100%',
-                                textAlign: 'left',
-                                padding: '10px 12px',
-                                border: 0,
-                                background: 'transparent',
-                                color: COLORS.white,
-                                cursor: 'pointer',
-                                fontSize: 13,
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent';
+                                width: 22,
+                                height: 22,
+                                borderRadius: 8,
+                                display: 'grid',
+                                placeItems: 'center',
+                                background: active ? 'rgba(231,158,19,0.24)' : 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                color: active ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.90)',
+                                marginTop: 1,
                               }}
                             >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                )}
+                              {r.icon}
+                            </span>
+                            <span style={{ minWidth: 0 }}>
+                              <span style={{ display: 'block', fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</span>
+                              <span style={{ display: 'block', marginTop: 2, fontSize: 12, opacity: 0.82, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {r.category}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
                 height: 24,
@@ -2055,72 +2259,170 @@ export function Layout() {
               {envBadge.env}
             </div>
 
-            <button
-              type="button"
-              title="Notifications (coming soon)"
-              disabled
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                display: 'grid',
-                placeItems: 'center',
-                color: 'rgba(255,255,255,0.55)',
-                cursor: 'not-allowed',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            <div ref={notificationsWrapRef} className="notification-wrapper" style={{ position: 'relative' }}>
+              <button
+                type="button"
+                title="Notifications"
+                onClick={() => {
+                  const next = !notificationOpen;
+                  setNotificationOpen(next);
+                  if (next) {
+                    void fetchNotifications();
+                    void fetchUnreadCount();
+                  }
+                }}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: 'rgba(255,255,255,0.92)',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {unreadCount > 0 ? (
+                <span className="notification-badge">{Math.min(99, unreadCount)}</span>
+              ) : null}
+
+              {notificationOpen ? (
+                <div className="notification-dropdown" role="menu" aria-label="Notifications">
+                  <div className="notification-header">
+                    <span className="notification-title">Notifications</span>
+                    <button type="button" className="mark-all-read" onClick={markAllAsRead}>Mark all as read</button>
+                  </div>
+
+                  <div className="notification-list">
+                    {notificationError ? (
+                      <div className="notification-empty">{notificationError}</div>
+                    ) : notifications.length === 0 ? (
+                      <div className="notification-empty">No notifications yet</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <button
+                          key={String(n?.id ?? '')}
+                          type="button"
+                          className={`notification-item ${n?.isRead ? '' : 'unread'}`}
+                          onClick={() => handleNotificationClick(n)}
+                        >
+                          <div className="notification-title">{String(n?.title ?? '')}</div>
+                          <div className="notification-message">{String(n?.message ?? '')}</div>
+                          <div className="notification-time">{n?.createdAt ? new Date(String(n.createdAt)).toLocaleString() : ''}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             <div style={{ fontSize: 12, opacity: 0.92, whiteSpace: 'nowrap' }} title={tenantName ? `Tenant: ${tenantName}` : ''}>
               {tenantName ? `Tenant: ${tenantName}` : ''}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setProfileOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                border: 0,
-                background: 'transparent',
-                color: COLORS.white,
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            >
-              <div
-                aria-hidden
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 12,
-                  background: 'rgba(255,255,255,0.10)',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  overflow: 'hidden',
-                }}
+            <div ref={userMenuWrapRef} className="user-menu-wrapper">
+              <button
+                type="button"
+                className="user-trigger"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen((v) => !v)}
+                title={userEmail}
               >
-                {avatarSrc ? (
-                  <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                )}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 750, whiteSpace: 'nowrap' }}>{userEmail}</div>
-              </div>
-            </button>
+                <div className="user-avatar" aria-hidden>
+                  {avatarSrc ? <img src={avatarSrc} alt="" /> : <span>{userInitials}</span>}
+                  <span className="user-online" aria-hidden />
+                </div>
+                <div className="user-identity">
+                  <div className="user-name">{userDisplayName}</div>
+                </div>
+                <svg className="user-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {userMenuOpen ? (
+                <div className="user-dropdown" role="menu" aria-label="User menu">
+                  <div className="user-dropdown-summary">
+                    <div className="user-dropdown-name" title={userFullName || userDisplayName}>{userFullName || userDisplayName}</div>
+                    <div className="user-dropdown-meta" title={primaryRoleLabel || ''}>{primaryRoleLabel || '—'}</div>
+                    <div className="user-dropdown-meta" title={tenantName || ''}>{tenantName || '—'}</div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="user-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      setProfileOpen(true);
+                    }}
+                  >
+                    <User size={16} className="user-dropdown-icon" aria-hidden />
+                    My Profile
+                  </button>
+                  <button
+                    type="button"
+                    className="user-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate('/preferences');
+                    }}
+                  >
+                    <Settings size={16} className="user-dropdown-icon" aria-hidden />
+                    My Preferences
+                  </button>
+                  <button
+                    type="button"
+                    className="user-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate('/change-password');
+                    }}
+                  >
+                    <Lock size={16} className="user-dropdown-icon" aria-hidden />
+                    Change Password
+                  </button>
+                  <button
+                    type="button"
+                    className="user-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      navigate('/activity-log');
+                    }}
+                  >
+                    <ClipboardList size={16} className="user-dropdown-icon" aria-hidden />
+                    Activity Log
+                  </button>
+
+                  <div className="user-dropdown-divider" />
+
+                  <button
+                    type="button"
+                    className="user-dropdown-item user-dropdown-logout"
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      handleLogoutNow();
+                    }}
+                  >
+                    <LogOut size={16} className="user-dropdown-icon" aria-hidden />
+                    Logout
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -2136,7 +2438,7 @@ export function Layout() {
           boxSizing: 'border-box',
         }}
       >
-        <div className="pageContent" style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div className="pageContent" style={{ width: '100%', maxWidth: 1400, margin: '0 auto' }}>
           <AuthBootstrapGate>
             <Outlet />
           </AuthBootstrapGate>

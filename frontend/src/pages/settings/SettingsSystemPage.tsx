@@ -29,13 +29,17 @@ export function SettingsSystemPage() {
   const { setPreviewOverrides, clearPreviewOverrides, refresh: refreshBranding } = useBranding();
   const brand = useBrandColors();
   const { hasPermission } = useAuth();
-  const canSystemConfigView =
+  const canView =
     hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW) ||
     hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW) ||
     hasPermission(PERMISSIONS.FINANCE.CONFIG_VIEW) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
-  const canSystemConfigUpdate = hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
-  const canFinanceConfigChange = hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE);
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW);
+  const canSystemConfigUpdate =
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_CHANGE);
+  const canFinanceConfigChange =
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_CHANGE);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,7 +48,7 @@ export function SettingsSystemPage() {
 
   const [system, setSystem] = useState<TenantSystemConfig | null>(null);
 
-  if (!canSystemConfigView) {
+  if (!canView) {
     return (
       <Alert tone="error" title="Access denied">
         You do not have permission to view system settings.

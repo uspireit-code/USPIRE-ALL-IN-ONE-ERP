@@ -6,7 +6,7 @@ import { Alert } from '../../../components/Alert';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
-import { listJournals, type JournalEntry, type JournalStatus } from '../../../services/gl';
+import { listJournals, type JournalEntry, type JournalIntent, type JournalStatus } from '../../../services/gl';
 
 function StatusBadge(props: { status: JournalStatus }) {
   const label = statusLabel(props.status);
@@ -34,6 +34,26 @@ function StatusBadge(props: { status: JournalStatus }) {
   return (
     <span style={{ padding: '2px 8px', borderRadius: 999, background: bg, color, fontSize: 12, fontWeight: 750 }}>
       {label}
+    </span>
+  );
+}
+
+function IntentBadge(props: { intent: JournalIntent | null | undefined }) {
+  const label = props.intent ? String(props.intent).replaceAll('_', ' ') : '—';
+  return (
+    <span
+      style={{
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: tokens.colors.surface.subtle,
+        border: `1px solid ${tokens.colors.border.subtle}`,
+        color: tokens.colors.text.primary,
+        fontSize: 12,
+        fontWeight: 750,
+        textTransform: 'capitalize',
+      }}
+    >
+      {label.toLowerCase()}
     </span>
   );
 }
@@ -206,6 +226,7 @@ export function JournalsListPage() {
               <DataTable.Th>Type</DataTable.Th>
               <DataTable.Th>Reference</DataTable.Th>
               <DataTable.Th>Description</DataTable.Th>
+              <DataTable.Th>Intent</DataTable.Th>
               <DataTable.Th>Status</DataTable.Th>
             </tr>
           </DataTable.Head>
@@ -222,6 +243,9 @@ export function JournalsListPage() {
                 </DataTable.Td>
                 <DataTable.Td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {j.description ?? ''}
+                </DataTable.Td>
+                <DataTable.Td>
+                  <IntentBadge intent={j.intent} />
                 </DataTable.Td>
                 <DataTable.Td>
                   <StatusBadge status={j.status} />

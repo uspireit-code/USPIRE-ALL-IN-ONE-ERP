@@ -39,6 +39,7 @@ import { SearchModule } from './search/search.module';
 import { UsersModule } from './users/users.module';
 import { BrandingModule } from './branding/branding.module';
 import { DelegationsModule } from './delegations/delegations.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { DelegationsModule } from './delegations/delegations.module';
     UsersModule,
     BrandingModule,
     DelegationsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

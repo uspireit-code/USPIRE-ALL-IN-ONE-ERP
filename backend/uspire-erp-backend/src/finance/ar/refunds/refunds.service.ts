@@ -693,6 +693,7 @@ export class FinanceArRefundsService {
     const refundDate = new Date(refund.refundDate);
     try {
       await assertPeriodIsOpen({
+        req,
         prisma: this.prisma,
         tenantId: tenant.id,
         date: refundDate,
@@ -770,9 +771,9 @@ export class FinanceArRefundsService {
         reference: `AR-REFUND:${refund.id}`,
         description: `AR refund posting: ${refund.refundNumber}`,
         createdById: refund.createdById,
-        status: 'REVIEWED',
-        reviewedById: user.id,
-        reviewedAt: now,
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: now,
         lines: {
           create: [
             {
@@ -806,6 +807,14 @@ export class FinanceArRefundsService {
         },
       } as any,
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: journal.id,
+      sourceType: 'AR_REFUND',
+      sourceId: refund.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     const postedJournal = await this.gl.postJournal(req, journal.id);
@@ -870,6 +879,7 @@ export class FinanceArRefundsService {
 
     const refundDate = new Date(refund.refundDate);
     await assertPeriodIsOpen({
+      req,
       prisma: this.prisma,
       tenantId: tenant.id,
       date: refundDate,
@@ -925,9 +935,9 @@ export class FinanceArRefundsService {
         description: `Void AR refund: ${refund.refundNumber}`,
         createdById: refund.createdById,
         journalType: 'REVERSING',
-        status: 'REVIEWED',
-        reviewedById: refund.approvedById ?? refund.createdById,
-        reviewedAt: new Date(),
+        status: 'SUBMITTED',
+        submittedById: user.id,
+        submittedAt: new Date(),
         lines: {
           create: [
             {
@@ -961,6 +971,14 @@ export class FinanceArRefundsService {
         },
       } as any,
       select: { id: true },
+    });
+
+    await this.gl.systemReviewJournal(req, {
+      journalId: reversal.id,
+      sourceType: 'AR_REFUND_VOID',
+      sourceId: refund.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
 
     await this.gl.postJournal(req, reversal.id);

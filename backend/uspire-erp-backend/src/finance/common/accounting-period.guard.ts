@@ -1,10 +1,12 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { assertCanPost } from '../../periods/period-guard';
+import { assertPeriodAllowsPosting } from '../../periods/period-posting-governance';
+import type { Request } from 'express';
 
 export type AccountingPeriodGuardAction = 'create' | 'post';
 
 export async function assertPeriodIsOpen(params: {
+  req?: Request;
   prisma: PrismaService;
   tenantId: string;
   date: Date;
@@ -36,9 +38,30 @@ export async function assertPeriodIsOpen(params: {
   }
 
   try {
-    // Legacy helper semantics require OPEN for both create and post.
-    // We use canonical period semantics but preserve the legacy error message below.
-    assertCanPost(period.status, { periodName: period.name });
+    if (params.action === 'post') {
+      assertPeriodAllowsPosting({
+        ...(params.req ? { req: params.req } : {}),
+        period,
+        // Best-effort: this utility enforces posting controls; individual services should
+        // supply the actual permissionUsed in their own audit events.
+        permissionUsed: 'PERIOD_POST',
+        ...(params.req
+          ? {}
+          : {
+              // No req -> no permissions/reason headers -> conservative: no override.
+              context: { permissionCodes: [] },
+            }),
+      });
+    } else {
+      // Legacy helper semantics require OPEN for create.
+      // We use canonical period semantics but preserve the legacy error message below.
+      assertPeriodAllowsPosting({
+        ...(params.req ? { req: params.req } : {}),
+        period,
+        permissionUsed: 'PERIOD_POST',
+        ...(params.req ? {} : { context: { permissionCodes: [] } }),
+      });
+    }
   } catch {
     const code = String(period.code ?? period.name ?? '').trim() || 'UNKNOWN';
     const status = String(period.status);

@@ -13,34 +13,33 @@ export function SettingsPage() {
   const cardHoverShadow = '0 2px 4px rgba(11,12,30,0.08), 0 16px 34px rgba(11,12,30,0.12)';
 
   const canSystemConfigView =
-    hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW) ||
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
   const canFinanceConfigView =
     hasPermission(PERMISSIONS.FINANCE.CONFIG_VIEW) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
+
+  const canFinancialGovernanceView =
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW) ||
+    hasPermission((PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE);
   const canUserView =
-    hasPermission(PERMISSIONS.USER.VIEW) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.USER.VIEW);
   const canRoleView =
-    hasPermission(PERMISSIONS.ROLE.VIEW) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.ROLE.VIEW);
 
   const canDelegationManage =
-    hasPermission(PERMISSIONS.SECURITY.DELEGATION_MANAGE) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.SECURITY.DELEGATION_MANAGE);
 
-  const canManageUnlockRequests = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW) || hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canManageUnlockRequests = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
 
   const canFinanceConfigEdit =
     hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
-    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
 
   const canFinanceConfigChange =
-    hasPermission(PERMISSIONS.FINANCE.CONFIG_CHANGE) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.CONFIG_CHANGE);
 
-  const canManageCoaRootCategories = hasPermission(PERMISSIONS.COA.UNLOCK) || hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+  const canManageCoaRootCategories = hasPermission(PERMISSIONS.COA.UNLOCK);
 
   const sections: Array<{ key: string; title: string; description: string; to: string; icon: React.ReactNode }> = [
     ...((canSystemConfigView || canFinanceConfigView)
@@ -55,6 +54,72 @@ export function SettingsPage() {
                 <path d="M3 21h18" />
                 <path d="M5 21V7l7-4 7 4v14" />
                 <path d="M9 21v-8h6v8" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+
+    ...(canFinancialGovernanceView
+      ? [
+          {
+            key: 'automation-governance',
+            title: 'Automation Governance',
+            description: 'Operational governance visibility for lifecycle-governed automation schedules and executions.',
+            to: '/settings/governance/automation',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v4" />
+                <path d="M12 18v4" />
+                <path d="M4 12h4" />
+                <path d="M16 12h4" />
+                <path d="M7.5 7.5l2.5 2.5" />
+                <path d="M14 14l2.5 2.5" />
+                <path d="M16.5 7.5L14 10" />
+                <path d="M10 14l-2.5 2.5" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            ),
+          },
+          {
+            key: 'governance-analytics',
+            title: 'Governance Analytics',
+            description: 'KPI registry, trends, drill-through analytics, backlog aging, and governance observability.',
+            to: '/settings/governance/analytics',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 19V5" />
+                <path d="M4 19h16" />
+                <path d="M8 17v-5" />
+                <path d="M12 17V7" />
+                <path d="M16 17v-3" />
+              </svg>
+            ),
+          },
+          {
+            key: 'override-sessions',
+            title: 'Override Sessions',
+            description: 'Request and approve governed exception sessions (audited).',
+            to: '/settings/governance/override-sessions',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l8 4v6c0 5-3.4 9.4-8 10-4.6-.6-8-5-8-10V6l8-4Z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            ),
+          },
+          {
+            key: 'exception-registers',
+            title: 'Exception Registers',
+            description: 'Operational registers for blocked actions, overrides, and evidence (drill-through).',
+            to: '/settings/governance/exception-registers',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6h16" />
+                <path d="M4 12h16" />
+                <path d="M4 18h16" />
+                <path d="M7 6v12" />
+                <path d="M17 6v12" />
               </svg>
             ),
           },
@@ -125,13 +190,13 @@ export function SettingsPage() {
           },
         ]
       : []),
-    ...((canSystemConfigView || canFinanceConfigView)
+    ...(canSystemConfigView
       ? [
           {
-            key: 'system',
-            title: 'System Configuration',
-            description: 'System configuration, environment details, and security settings.',
-            to: '/settings/system-configuration',
+            key: 'system-governance',
+            title: 'System Governance',
+            description: 'Tenant system configuration and branding governance.',
+            to: '/settings/governance/system',
             icon: (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2v2" />
@@ -143,6 +208,24 @@ export function SettingsPage() {
                 <path d="M4.93 19.07l1.41-1.41" />
                 <path d="M17.66 6.34l1.41-1.41" />
                 <circle cx="12" cy="12" r="4" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+
+    ...(canFinanceConfigView
+      ? [
+          {
+            key: 'financial-governance',
+            title: 'Financial Governance',
+            description: 'Posting controls, control accounts, and finance governance settings.',
+            to: '/settings/governance/financial',
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3h18v4H3z" />
+                <path d="M3 9h18v4H3z" />
+                <path d="M3 15h18v6H3z" />
               </svg>
             ),
           },

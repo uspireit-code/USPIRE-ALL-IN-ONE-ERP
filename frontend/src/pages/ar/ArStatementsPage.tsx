@@ -21,8 +21,7 @@ export function ArStatementsPage() {
 
   const canView =
     hasPermission(PERMISSIONS.AR.STATEMENT.VIEW) ||
-    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
 
   const { customers, isLoading: customersLoading } = useCustomers({ enabled: canView, source: 'statements' });
 

@@ -3,6 +3,8 @@ import type { Request } from 'express';
 import { randomUUID } from 'crypto';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { buildGovernanceAuditMetadata } from '../governance/governance-enforcement';
 
 @Injectable()
 export class UnlockRequestsService {
@@ -35,6 +37,16 @@ export class UnlockRequestsService {
     const requestId = (params.req.header('x-request-id') ? String(params.req.header('x-request-id')) : '').trim() || randomUUID();
     const meta = this.getRequestAuditMeta(params.req, requestId);
 
+    const actor = params.actorUserId ?? 'SYSTEM';
+    const governance = buildGovernanceAuditMetadata({
+      actionType: 'USER_UNLOCK',
+      permissionUsed: PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+      actorUserId: actor,
+      tenantId: params.tenantId,
+      req: params.req,
+      escalation: (params.req as any)?.governanceEscalation ?? undefined,
+    });
+
     await writeAuditEventWithPrisma(
       {
         tenantId: params.tenantId,
@@ -46,7 +58,10 @@ export class UnlockRequestsService {
         outcome: (params.outcome ?? 'SUCCESS') as any,
         action: params.action,
         reason: params.reason,
-        metadata: params.metadata,
+        metadata: {
+          ...(params.metadata ?? {}),
+          governance,
+        },
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
         requestId: meta.requestId,

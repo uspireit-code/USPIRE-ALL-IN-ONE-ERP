@@ -18,12 +18,10 @@ import {
 export function PeriodsPage() {
   const { hasPermission } = useAuth();
 
-  const hasSystemViewAll = hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
   const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
 
   const canView =
     hasFinanceViewAll ||
-    hasSystemViewAll ||
     hasPermission(PERMISSIONS.PERIOD.VIEW) ||
     hasPermission(PERMISSIONS.GL.VIEW) ||
     hasPermission(PERMISSIONS.PERIOD.REVIEW) ||

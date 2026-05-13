@@ -8,8 +8,12 @@ import { Layout } from './components/Layout';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ManagementDashboardPage } from './pages/ManagementDashboardPage';
+import { ActivityLogPage } from './pages/ActivityLogPage';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { PreferencesPage } from './pages/PreferencesPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { ForcePasswordResetPage } from './pages/ForcePasswordResetPage';
 import { ApHomePage } from './pages/ap/ApHomePage';
@@ -104,12 +108,19 @@ import { ForecastEditPage } from './pages/forecasts/ForecastEditPage';
 import { ForecastsListPage } from './pages/forecasts/ForecastsListPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { SettingsOrganisationPage } from './pages/settings/SettingsOrganisationPage';
+import { SettingsSystemGovernancePage } from './pages/settings/SettingsSystemGovernancePage';
+import { SettingsFinancialGovernancePage } from './pages/settings/SettingsFinancialGovernancePage';
+import { SettingsFinanceControlAccountsPage } from './pages/settings/SettingsFinanceControlAccountsPage';
 import { SettingsUsersPage } from './pages/settings/SettingsUsersPage';
 import { SettingsRolesPage } from './pages/settings/SettingsRolesPage';
-import { SettingsSystemPage } from './pages/settings/SettingsSystemPage';
-import { SettingsMasterDataPage } from './pages/settings/SettingsMasterDataPage';
+import { SettingsCoaRootCategoriesPage } from './pages/settings/SettingsCoaRootCategoriesPage';
+import { SettingsIfrsReportingStructurePage } from './pages/settings/SettingsIfrsReportingStructurePage';
 import { UnlockRequestsPage } from './pages/settings/UnlockRequestsPage';
 import { DelegationsPage } from './pages/settings/security/DelegationsPage';
+import { OverrideSessionsPage } from './pages/settings/governance/OverrideSessionsPage';
+import { GovernanceAnalyticsPage } from './pages/settings/governance/GovernanceAnalyticsPage';
+import { ExceptionRegistersPage } from './pages/settings/governance/ExceptionRegistersPage';
+import { SettingsMasterDataPage } from './pages/settings/SettingsMasterDataPage';
 import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPage';
 import { SettingsDepartmentMembersPage } from './pages/settings/SettingsDepartmentMembersPage';
 import { SettingsProjectsPage } from './pages/settings/SettingsProjectsPage';
@@ -117,10 +128,9 @@ import { SettingsFundsPage } from './pages/settings/SettingsFundsPage';
 import { SettingsInvoiceCategoriesPage } from './pages/settings/SettingsInvoiceCategoriesPage';
 import { SettingsTaxRatesPage } from './pages/settings/SettingsTaxRatesPage';
 import { SettingsTaxConfigurationPage } from './pages/settings/SettingsTaxConfigurationPage';
-import { SettingsFinanceControlAccountsPage } from './pages/settings/SettingsFinanceControlAccountsPage';
-import { SettingsCoaRootCategoriesPage } from './pages/settings/SettingsCoaRootCategoriesPage';
-import { SettingsIfrsReportingStructurePage } from './pages/settings/SettingsIfrsReportingStructurePage';
-
+import { AutomationGovernancePage } from './pages/settings/governance/AutomationGovernancePage';
+import { AutomationScheduleDetailPage } from './pages/settings/governance/AutomationScheduleDetailPage';
+import { AutomationExecutionDetailPage } from './pages/settings/governance/AutomationExecutionDetailPage';
 import { CreditNotesListPage } from './pages/ar/CreditNotesListPage';
 import { CreditNoteCreatePage } from './pages/ar/CreditNoteCreatePage';
 import { CreditNoteDetailsPage } from './pages/ar/CreditNoteDetailsPage';
@@ -137,7 +147,9 @@ import { ArRemindersTemplatesPage } from './pages/ar/ArRemindersTemplatesPage';
 function SettingsVisibleRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
   const has = canAny(state.me, [
-    PERMISSIONS.SYSTEM.VIEW_ALL,
+    (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
+    (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+    (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
     PERMISSIONS.SYSTEM.CONFIG_VIEW,
     PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
     PERMISSIONS.FINANCE.CONFIG_VIEW,
@@ -149,12 +161,14 @@ function SettingsVisibleRoute(props: { children: React.ReactNode }) {
     return (
       <AccessDeniedPage
         requiredAnyPermissions={[
+          (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
+          (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+          (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
           PERMISSIONS.SYSTEM.CONFIG_VIEW,
           PERMISSIONS.FINANCE.CONFIG_VIEW,
           PERMISSIONS.FINANCE.CONFIG_CHANGE,
           PERMISSIONS.USER.VIEW,
           PERMISSIONS.ROLE.VIEW,
-          PERMISSIONS.SYSTEM.VIEW_ALL,
         ]}
       />
     );
@@ -218,6 +232,12 @@ export default function App() {
             >
               <Route index element={<DashboardPage />} />
               <Route path="dashboard" element={<ManagementDashboardPage />} />
+
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="preferences" element={<PreferencesPage />} />
+              <Route path="change-password" element={<ChangePasswordPage />} />
+              <Route path="activity-log" element={<ActivityLogPage />} />
+
               <Route path="ap" element={<ApHomePage />} />
               <Route path="ap/suppliers" element={<SuppliersListPage />} />
               <Route path="ap/suppliers/import" element={<ImportSuppliersPage />} />
@@ -341,7 +361,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.AR_AGING.VIEW,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <ArAgingReportPage />
@@ -356,7 +375,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.AR_STATEMENT.VIEW,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <ArStatementsPage />
@@ -371,7 +389,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.AR_REMINDER.VIEW,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <ArRemindersManualTriggerPage />
@@ -386,7 +403,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.AR_REMINDER.VIEW,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <ArRemindersRulesPage />
@@ -401,7 +417,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.AR_REMINDER.VIEW,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <ArRemindersTemplatesPage />
@@ -417,7 +432,6 @@ export default function App() {
                       PERMISSIONS.AR.CREDIT_NOTE_VIEW,
                       PERMISSIONS.AR.CREDIT_NOTE_CREATE,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <CreditNotesListPage />
@@ -440,7 +454,6 @@ export default function App() {
                       PERMISSIONS.AR.CREDIT_NOTE_VIEW,
                       PERMISSIONS.AR.CREDIT_NOTE_CREATE,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <CreditNoteDetailsPage />
@@ -456,7 +469,6 @@ export default function App() {
                       PERMISSIONS.AR.REFUND_VIEW,
                       PERMISSIONS.AR.REFUND_CREATE,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <RefundsListPage />
@@ -479,7 +491,6 @@ export default function App() {
                       PERMISSIONS.AR.REFUND_VIEW,
                       PERMISSIONS.AR.REFUND_CREATE,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <RefundDetailsPage />
@@ -545,7 +556,12 @@ export default function App() {
               <Route
                 path="settings/organisation"
                 element={
-                  <PermissionAnyRoute permissions={[PERMISSIONS.SYSTEM.CONFIG_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
+                      PERMISSIONS.SYSTEM.CONFIG_VIEW,
+                    ]}
+                  >
                     <SettingsOrganisationPage />
                   </PermissionAnyRoute>
                 }
@@ -553,7 +569,7 @@ export default function App() {
               <Route
                 path="settings/users"
                 element={
-                  <PermissionAnyRoute permissions={[PERMISSIONS.USER.VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.USER.VIEW]}>
                     <SettingsUsersPage />
                   </PermissionAnyRoute>
                 }
@@ -561,7 +577,7 @@ export default function App() {
               <Route
                 path="settings/roles"
                 element={
-                  <PermissionAnyRoute permissions={[PERMISSIONS.ROLE.VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.ROLE.VIEW]}>
                     <SettingsRolesPage />
                   </PermissionAnyRoute>
                 }
@@ -580,13 +596,12 @@ export default function App() {
                 element={
                   <PermissionAnyRoute
                     permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
                       PERMISSIONS.SYSTEM.CONFIG_VIEW,
-                      PERMISSIONS.FINANCE.CONFIG_VIEW,
                       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
-                    <SettingsSystemPage />
+                    <SettingsSystemGovernancePage />
                   </PermissionAnyRoute>
                 }
               />
@@ -596,20 +611,132 @@ export default function App() {
                 element={
                   <PermissionAnyRoute
                     permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
                       PERMISSIONS.SYSTEM.CONFIG_VIEW,
-                      PERMISSIONS.FINANCE.CONFIG_VIEW,
                       PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
-                    <SettingsSystemPage />
+                    <SettingsSystemGovernancePage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/governance/system"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
+                      PERMISSIONS.SYSTEM.CONFIG_VIEW,
+                      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+                    ]}
+                  >
+                    <SettingsSystemGovernancePage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/governance/financial"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.FINANCE.CONFIG_VIEW,
+                      PERMISSIONS.FINANCE.VIEW_ALL,
+                      PERMISSIONS.FINANCE.CONFIG_UPDATE,
+                      PERMISSIONS.FINANCE.CONFIG_CHANGE,
+                    ]}
+                  >
+                    <SettingsFinancialGovernancePage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/governance/override-sessions"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
+                    ]}
+                  >
+                    <OverrideSessionsPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/governance/automation"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
+                    ]}
+                  >
+                    <AutomationGovernancePage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/governance/analytics"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
+                    ]}
+                  >
+                    <GovernanceAnalyticsPage />
+                  </PermissionAnyRoute>
+                }
+              />
+
+              <Route
+                path="settings/governance/exception-registers"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
+                    ]}
+                  >
+                    <ExceptionRegistersPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="settings/governance/automation/schedules/:id"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
+                    ]}
+                  >
+                    <AutomationScheduleDetailPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="settings/governance/automation/executions/:id"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
+                      (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
+                    ]}
+                  >
+                    <AutomationExecutionDetailPage />
                   </PermissionAnyRoute>
                 }
               />
               <Route
                 path="settings/unlock-requests"
                 element={
-                  <PermissionAnyRoute permissions={[PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW, PERMISSIONS.SYSTEM.VIEW_ALL]}>
+                  <PermissionAnyRoute permissions={[PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW]}>
                     <UnlockRequestsPage />
                   </PermissionAnyRoute>
                 }
@@ -621,7 +748,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.FINANCE.CONFIG_UPDATE,
                       PERMISSIONS.SYSTEM.CONFIG_UPDATE,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <SettingsFinanceControlAccountsPage />
@@ -1004,7 +1130,6 @@ export default function App() {
                     permissions={[
                       PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
                       PERMISSIONS.FINANCE.VIEW_ALL,
-                      PERMISSIONS.SYSTEM.VIEW_ALL,
                     ]}
                   >
                     <SupplierStatementsPage />

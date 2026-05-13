@@ -1,7 +1,8 @@
-import { IsIn, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 const ENTITY_TYPES = [
   'JOURNAL_ENTRY',
+  'JOURNAL_UPLOAD_BATCH',
   'ACCOUNTING_PERIOD',
   'ACCOUNTING_PERIOD_CHECKLIST_ITEM',
   'SUPPLIER_INVOICE',
@@ -19,4 +20,28 @@ export class AuditEvidenceUploadDto {
 
   @IsString()
   entityId!: string;
+
+  @IsOptional()
+  @IsString()
+  governanceDomain?: string;
+
+  @IsOptional()
+  @IsString()
+  governanceActionType?: string;
+
+  @IsOptional()
+  @IsString()
+  evidenceCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  retentionClassification?: string;
+
+  @IsOptional()
+  @IsString()
+  auditSensitivity?: string;
+
+  @IsOptional()
+  @IsString()
+  justificationText?: string;
 }

@@ -8,7 +8,8 @@ import {
 import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import { Prisma } from '@prisma/client';
-import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { AuditEntityType, AuditEventType, JournalReviewMode } from '@prisma/client';
+import type { JournalType } from '@prisma/client';
 import {
   sortBy,
   sumBy,
@@ -25,21 +26,39 @@ import { CacheService } from '../cache/cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CoaReclassificationResolverService } from '../reports/coa-reclassification-resolver.service';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import {
+  buildGovernanceAuditMetadata,
+  maybeBuildGovernanceOverrideAuditMetadata,
+} from '../governance/governance-enforcement';
+import { assertOverrideGovernance } from '../governance/override-governance-engine';
+import { getOverridePolicy } from '../governance/override-governance-registry';
+import { GovernanceOverrideSessionService } from '../governance/governance-override-session.service';
+import { GovernanceAutomationExecutionSessionService } from '../governance/governance-automation-execution-session.service';
+import { GovernanceAutomationScheduleService } from '../governance/governance-automation-schedule.service';
+import { assertEvidenceGovernance } from '../governance/evidence-governance-engine';
+import { assertIntercompanyGovernance } from '../governance/intercompany-governance-engine';
 import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
 import { PeriodStatus } from '../periods/period-semantics';
-import { assertCanPost } from '../periods/period-guard';
 import {
   requireOwnership,
   requirePermission,
-  requireSoDSeparation,
 } from '../rbac/finance-authz.helpers';
 import { PERMISSIONS } from '../rbac/permission-catalog';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
+import {
+  assertRetroPostingWithinToleranceOrEscalated,
+  loadTenantRetroPostToleranceDays,
+} from '../periods/retro-posting-governance';
 import { getEffectiveActorContext } from '../auth/actor-context';
+import { SoDService } from '../sod/sod.service';
+import { withGlLifecycleBypass } from '../internal/request-context.store';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { CreateAccountingPeriodDto } from './dto/create-accounting-period.dto';
 import { CreateJournalDto } from './dto/create-journal.dto';
 import { CreateRecurringTemplateDto } from './dto/create-recurring-template.dto';
+import { ExecuteRecurringAutomationDto } from './dto/execute-recurring-automation.dto';
+import { ExecuteReversalAutomationDto } from './dto/execute-reversal-automation.dto';
 import { GenerateRecurringTemplateDto } from './dto/generate-recurring-template.dto';
 import { OpeningBalancesQueryDto } from './dto/opening-balances-query.dto';
 import { ReturnToReviewDto } from './dto/return-to-review.dto';
@@ -48,6 +67,14 @@ import { TrialBalanceQueryDto } from './dto/trial-balance-query.dto';
 import { UpdateJournalDto } from './dto/update-journal.dto';
 import { UpdateRecurringTemplateDto } from './dto/update-recurring-template.dto';
 import { UpsertOpeningBalancesJournalDto } from './dto/upsert-opening-balances-journal.dto';
+import { VoidJournalDto } from './dto/void-journal.dto';
+import {
+  assertJournalTypePolicy,
+  buildJournalTypePolicyContextFromEntry,
+  resolveJournalPolicyType,
+} from './journal-type-policy-engine';
+import { getJournalTypePolicy } from './journal-type-registry';
+import { assertCombinationGovernance } from './combination-governance-engine';
 
 export enum DepartmentRequirement {
   REQUIRED = 'REQUIRED',
@@ -105,7 +132,344 @@ export class GlService {
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
     private readonly coaReclass: CoaReclassificationResolverService,
+    private readonly sod: SoDService,
+    private readonly overrideSessions: GovernanceOverrideSessionService,
+    private readonly automationExecutions: GovernanceAutomationExecutionSessionService,
+    private readonly automationSchedules: GovernanceAutomationScheduleService,
   ) {}
+
+  async executeRecurringAutomation(
+    req: Request,
+    templateId: string,
+    dto: ExecuteRecurringAutomationDto,
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const runDateRaw = String(dto?.runDate ?? '').trim();
+    if (!runDateRaw) {
+      throw new BadRequestException('runDate is required');
+    }
+    const runDate = new Date(runDateRaw);
+    if (Number.isNaN(runDate.getTime())) {
+      throw new BadRequestException('Invalid runDate');
+    }
+
+    const evidenceRefs = Array.isArray(dto?.evidenceRefs) ? dto.evidenceRefs : [];
+    const overrideSessionId = String(dto?.overrideSessionId ?? '').trim() || null;
+    const scheduleId = String((dto as any)?.scheduleId ?? '').trim() || null;
+
+    const scheduleRow = scheduleId
+      ? await this.automationSchedules.getSchedule({ tenantId: tenant.id, scheduleId })
+      : null;
+
+    if (scheduleId) {
+      await this.automationSchedules.markAttempt({
+        tenantId: tenant.id,
+        scheduleId,
+        now: new Date(),
+      });
+    }
+
+    const execution = await this.automationExecutions.startExecution({
+      tenantId: tenant.id,
+      automationCode: 'RECURRING_JOURNAL_AUTOMATION',
+      scheduleId,
+      actorType: 'USER',
+      actorUserId: user.id,
+      permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+      req,
+      journalType: 'STANDARD',
+      evidenceRefs: evidenceRefs.map((e) => ({
+        id: String(e.id),
+        evidenceCategory: (e as any)?.evidenceCategory ?? null,
+        fileName: (e as any)?.fileName ?? null,
+      })),
+      overrideSessionId,
+      overrideCodesUsed: overrideSessionId ? ['GL_POST_OVERRIDE'] : [],
+      lastExecutionAt: scheduleRow ? (scheduleRow as any).lastRunAt : null,
+      isSuspended: scheduleRow ? String((scheduleRow as any).scheduleStatus) === 'SUSPENDED' : false,
+    });
+
+    try {
+      // Ensure downstream governance validators have a reason available for audit metadata
+      const governanceReason = String(dto?.governanceReason ?? '').trim();
+      if (governanceReason) {
+        (req as any).headers = (req as any).headers ?? {};
+        (req as any).headers['x-governance-reason'] = governanceReason;
+      }
+
+      // Generate DRAFT journal (no posting) using existing generation pipeline.
+      const created = await this.generateJournalFromRecurringTemplate(req, templateId, {
+        runDate: runDate.toISOString(),
+      });
+
+      // Attach automation linkage metadata onto the journal for traceability.
+      await (this.prisma.journalEntry as any).update({
+        where: { id: created.id },
+        data: {
+          sourceType: 'AUTOMATION',
+          sourceId: execution.id,
+        },
+        select: { id: true },
+      });
+
+      if (dto?.autoSubmitForReview) {
+        // Still governed; moves DRAFT->SUBMITTED via existing lifecycle.
+        await this.submitJournal(req, created.id);
+      }
+
+      await this.automationExecutions.completeExecution({
+        tenantId: tenant.id,
+        executionId: execution.id,
+        completedById: user.id,
+        req,
+        permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+        executionResult: {
+          generatedJournalId: created.id,
+          autoSubmitForReview: Boolean(dto?.autoSubmitForReview),
+        },
+      });
+
+      if (scheduleId) {
+        const nextRunAt = this.automationSchedules.computeNextRunAt({
+          schedule: scheduleRow,
+          automationCode: 'RECURRING_JOURNAL_AUTOMATION',
+          now: runDate,
+        });
+        await this.automationSchedules.markSuccess({
+          tenantId: tenant.id,
+          scheduleId,
+          nextRunAt,
+        });
+      }
+
+      return {
+        execution,
+        generatedJournal: created,
+      };
+    } catch (e: any) {
+      if (scheduleId) {
+        await this.automationSchedules.markFailure({
+          tenantId: tenant.id,
+          scheduleId,
+          failureReason: String(e?.message ?? 'Recurring automation failed'),
+          automationCode: 'RECURRING_JOURNAL_AUTOMATION',
+        });
+      }
+      await this.automationExecutions.failExecution({
+        tenantId: tenant.id,
+        executionId: execution.id,
+        failedById: user.id,
+        req,
+        permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+        failureReason: String(e?.message ?? 'Recurring automation failed'),
+        executionResult: {
+          error: e?.message ?? null,
+        },
+      });
+      throw e;
+    }
+  }
+
+  async executeReversalAutomation(
+    req: Request,
+    originalJournalId: string,
+    dto: ExecuteReversalAutomationDto,
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const evidenceRefs = Array.isArray(dto?.evidenceRefs) ? dto.evidenceRefs : [];
+    const overrideSessionId = String(dto?.overrideSessionId ?? '').trim() || null;
+    const scheduleId = String((dto as any)?.scheduleId ?? '').trim() || null;
+
+    const scheduleRow = scheduleId
+      ? await this.automationSchedules.getSchedule({ tenantId: tenant.id, scheduleId })
+      : null;
+
+    if (scheduleId) {
+      await this.automationSchedules.markAttempt({
+        tenantId: tenant.id,
+        scheduleId,
+        now: new Date(),
+      });
+    }
+
+    const execution = await this.automationExecutions.startExecution({
+      tenantId: tenant.id,
+      automationCode: 'REVERSAL_AUTOMATION',
+      scheduleId,
+      actorType: 'USER',
+      actorUserId: user.id,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      req,
+      journalType: 'REVERSING',
+      evidenceRefs: evidenceRefs.map((e) => ({
+        id: String(e.id),
+        evidenceCategory: (e as any)?.evidenceCategory ?? null,
+        fileName: (e as any)?.fileName ?? null,
+      })),
+      overrideSessionId,
+      overrideCodesUsed: overrideSessionId ? ['PERIOD_SOFT_CLOSE_OVERRIDE', 'RETRO_POSTING_OVERRIDE'] : [],
+      lastExecutionAt: scheduleRow ? (scheduleRow as any).lastRunAt : null,
+      isSuspended: scheduleRow ? String((scheduleRow as any).scheduleStatus) === 'SUSPENDED' : false,
+    });
+
+    try {
+      const governanceReason = String(dto?.governanceReason ?? '').trim();
+      if (governanceReason) {
+        (req as any).headers = (req as any).headers ?? {};
+        (req as any).headers['x-governance-reason'] = governanceReason;
+      }
+
+      const created = await this.reversePostedJournal(req, originalJournalId, {
+        journalDate: dto.journalDate,
+        reason: dto.reason,
+        reference: dto.reference,
+        description: dto.description,
+      });
+
+      await (this.prisma.journalEntry as any).update({
+        where: { id: created.id },
+        data: {
+          sourceType: 'AUTOMATION',
+          sourceId: execution.id,
+        },
+        select: { id: true },
+      });
+
+      if (dto?.autoSubmitForReview) {
+        await this.submitJournal(req, created.id);
+      }
+
+      await this.automationExecutions.completeExecution({
+        tenantId: tenant.id,
+        executionId: execution.id,
+        completedById: user.id,
+        req,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        executionResult: {
+          reversalJournalId: created.id,
+          reversalOfId: originalJournalId,
+          autoSubmitForReview: Boolean(dto?.autoSubmitForReview),
+        },
+      });
+
+      if (scheduleId) {
+        const runAt = dto?.journalDate ? new Date(String(dto.journalDate)) : new Date();
+        const nextRunAt = this.automationSchedules.computeNextRunAt({
+          schedule: scheduleRow,
+          automationCode: 'REVERSAL_AUTOMATION',
+          now: Number.isNaN(runAt.getTime()) ? new Date() : runAt,
+        });
+        await this.automationSchedules.markSuccess({
+          tenantId: tenant.id,
+          scheduleId,
+          nextRunAt,
+        });
+      }
+
+      return {
+        execution,
+        reversalJournal: created,
+      };
+    } catch (e: any) {
+      if (scheduleId) {
+        await this.automationSchedules.markFailure({
+          tenantId: tenant.id,
+          scheduleId,
+          failureReason: String(e?.message ?? 'Reversal automation failed'),
+          automationCode: 'REVERSAL_AUTOMATION',
+        });
+      }
+      await this.automationExecutions.failExecution({
+        tenantId: tenant.id,
+        executionId: execution.id,
+        failedById: user.id,
+        req,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        failureReason: String(e?.message ?? 'Reversal automation failed'),
+        executionResult: {
+          error: e?.message ?? null,
+        },
+      });
+      throw e;
+    }
+  }
+
+  private async loadActorRoleCodes(params: {
+    tenantId: string;
+    actorUserId: string;
+  }): Promise<string[]> {
+    const rows = await (this.prisma as any).userRole.findMany({
+      where: {
+        userId: params.actorUserId,
+        role: { tenantId: params.tenantId },
+      },
+      select: {
+        role: { select: { code: true } },
+      },
+    });
+
+    return Array.isArray(rows)
+      ? rows
+          .map((r: any) => String(r?.role?.code ?? '').trim())
+          .filter(Boolean)
+      : [];
+  }
+
+  private async assertJournalSoD(params: {
+    req: Request;
+    authz: any;
+    actionType:
+      | 'REVIEW'
+      | 'REJECT'
+      | 'POST'
+      | 'RETURN_TO_REVIEW'
+      | 'REVERSE'
+      | 'VOID';
+    soDAction:
+      | 'GL_JOURNAL_REVIEW'
+      | 'GL_JOURNAL_REJECT'
+      | 'GL_JOURNAL_POST'
+      | 'GL_JOURNAL_RETURN_TO_REVIEW'
+      | 'GL_JOURNAL_REVERSE'
+      | 'GL_JOURNAL_VOID';
+    entry: {
+      id: string;
+      createdById?: string | null;
+      submittedById?: string | null;
+      reviewedById?: string | null;
+      reversalInitiatedById?: string | null;
+    };
+    permissionUsed: string;
+  }) {
+    await this.sod.assertNoLifecycleConflict({
+      req: params.req,
+      tenantId: params.authz.tenantId,
+      realUserId: params.authz.realUserId,
+      actingAsUserId: (params.authz.actorUserId ?? params.authz.realUserId) === params.authz.realUserId
+        ? undefined
+        : params.authz.actorUserId,
+      delegationId: params.authz.delegationId,
+      actionType: params.actionType,
+      soDAction: params.soDAction,
+      entityType: AuditEntityType.JOURNAL_ENTRY,
+      entityId: params.entry.id,
+      createdByUserId: params.entry.createdById ?? undefined,
+      submittedByUserId: params.entry.submittedById ?? undefined,
+      reviewedByUserId: params.entry.reviewedById ?? undefined,
+      reversalInitiatedByUserId: params.entry.reversalInitiatedById ?? undefined,
+      permissionUsed: params.permissionUsed,
+    });
+  }
 
   private async assertCoaStructureNotFrozen(params: {
     tenantId: string;
@@ -199,6 +563,71 @@ export class GlService {
     return d;
   }
 
+  private assertJournalIntentRules(params: {
+    intent: string;
+    periodType?: string | null;
+    correctsJournalId?: string | null;
+    reversalOfId?: string | null;
+    attachments?: Array<{ id: string }>;
+    mode:
+      | 'CREATE_DRAFT'
+      | 'UPDATE_DRAFT'
+      | 'UPLOAD'
+      | 'RECURRING_TEMPLATE'
+      | 'REVERSE'
+      | 'SYSTEM'
+      | 'SUBMIT'
+      | 'POST';
+  }) {
+    const intent = String(params.intent ?? '').trim().toUpperCase();
+    if (!intent) {
+      throw new BadRequestException('Journal intent is required');
+    }
+
+    if (intent === 'REVERSAL') {
+      if (!params.reversalOfId) {
+        throw new BadRequestException(
+          'REVERSAL intent requires reversalOfId (use the reversal workflow)',
+        );
+      }
+    }
+
+    if (intent === 'CORRECTION') {
+      if (!params.correctsJournalId) {
+        throw new BadRequestException(
+          'CORRECTION intent requires correctsJournalId',
+        );
+      }
+    }
+
+    if (intent === 'OPENING_BALANCE') {
+      if (String(params.periodType ?? '').toUpperCase() !== 'OPENING') {
+        throw new BadRequestException(
+          'OPENING_BALANCE intent is only allowed in an OPENING accounting period',
+        );
+      }
+    }
+
+    if (intent === 'AUDIT_ADJUSTMENT') {
+      if (params.mode === 'SUBMIT' || params.mode === 'POST' || params.mode === 'UPLOAD') {
+        const count = (params.attachments ?? []).length;
+        if (count <= 0) {
+          throw new BadRequestException(
+            'AUDIT_ADJUSTMENT intent requires evidence attachment(s)',
+          );
+        }
+      }
+    }
+
+    if (intent === 'SYSTEM_GENERATED') {
+      if (params.mode !== 'SYSTEM') {
+        throw new BadRequestException(
+          'SYSTEM_GENERATED intent is reserved for system-created journals',
+        );
+      }
+    }
+  }
+
   private riskBandFromScore(score: number) {
     if (score >= 40) return 'HIGH' as const;
     if (score >= 20) return 'MEDIUM' as const;
@@ -229,8 +658,10 @@ export class GlService {
   }
 
   private async resolveOpenPeriodForDate(params: {
+    req: Request;
     tenantId: string;
     journalDate: Date;
+    permissionUsed: string;
   }) {
     const period = await this.prisma.accountingPeriod.findFirst({
       where: {
@@ -256,7 +687,11 @@ export class GlService {
     }
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req: params.req,
+        period,
+        permissionUsed: params.permissionUsed,
+      });
     } catch {
       throw new BadRequestException({
         code: 'INVALID_JOURNAL_DATE',
@@ -269,6 +704,7 @@ export class GlService {
   }
 
   private async computeJournalBudgetImpact(params: {
+    req: Request;
     tenantId: string;
     entry: {
       id: string;
@@ -289,10 +725,13 @@ export class GlService {
     }>;
     stage: JournalBudgetStage;
     computedAt: Date;
+    permissionUsed: string;
   }): Promise<JournalBudgetImpactResult> {
     const period = await this.resolveOpenPeriodForDate({
+      req: params.req,
       tenantId: params.tenantId,
       journalDate: params.entry.journalDate,
+      permissionUsed: params.permissionUsed,
     });
 
     const fiscalYear = new Date(period.startDate).getUTCFullYear();
@@ -1510,6 +1949,37 @@ export class GlService {
     };
   }
 
+  private async loadActorLegalEntityAccess(params: {
+    tenantId: string;
+    actorUserId: string;
+  }): Promise<
+    Array<{
+      legalEntityId: string;
+      accessLevel?: string | null;
+      canPost?: boolean | null;
+      canApprove?: boolean | null;
+      canOverride?: boolean | null;
+      expiresAt?: Date | string | null;
+    }>
+  > {
+    const rows = await (this.prisma as any).userLegalEntityAccess.findMany({
+      where: {
+        tenantId: params.tenantId,
+        userId: params.actorUserId,
+      },
+      select: {
+        legalEntityId: true,
+        accessLevel: true,
+        canPost: true,
+        canApprove: true,
+        canOverride: true,
+        expiresAt: true,
+      },
+    });
+
+    return Array.isArray(rows) ? rows : [];
+  }
+
   private formatRecurringPlaceholders(template: string, runDate: Date): string {
     const month = runDate.toLocaleDateString('en-US', { month: 'long' });
     const year = runDate.getUTCFullYear().toString();
@@ -1566,11 +2036,19 @@ export class GlService {
       dto.lines.map((l) => ({ debit: l.debitAmount, credit: l.creditAmount })),
     );
 
+    this.assertJournalIntentRules({
+      intent: (dto as any).intent,
+      mode: 'RECURRING_TEMPLATE',
+    });
+
     const created = await this.prisma.recurringJournalTemplate.create({
       data: {
         tenantId: tenant.id,
         name: dto.name,
         journalType: 'STANDARD',
+        intent: (dto as any).intent as any,
+        intentNotes: (dto as any).intentNotes ?? null,
+        intentReference: (dto as any).intentReference ?? null,
         referenceTemplate: dto.referenceTemplate,
         descriptionTemplate: dto.descriptionTemplate,
         frequency: dto.frequency,
@@ -1617,12 +2095,39 @@ export class GlService {
     return created;
   }
 
-  async uploadJournals(req: Request, file?: any) {
+  async uploadJournals(
+    req: Request,
+    file?: any,
+    opts?: { batchId?: string },
+  ) {
     const tenant = req.tenant;
     const user = req.user;
     if (!tenant || !user) {
       throw new BadRequestException('Missing tenant or user context');
     }
+
+    const batchId = String(opts?.batchId ?? '').trim() || randomUUID();
+
+    const batchEvidenceLinks = await (this.prisma as any).auditEvidenceLink.findMany({
+      where: {
+        tenantId: tenant.id,
+        entityType: 'JOURNAL_UPLOAD_BATCH',
+        entityId: batchId,
+      },
+      select: {
+        evidenceId: true,
+        evidence: {
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+            evidenceCategory: true,
+          },
+        },
+      },
+    });
+    const batchAttachments = (batchEvidenceLinks ?? []).map((l: any) => l.evidence);
 
     if (!file) throw new BadRequestException('Missing file');
     if (!file.originalname) throw new BadRequestException('Missing file name');
@@ -1642,7 +2147,10 @@ export class GlService {
     type UploadJournal = {
       journalKey: string;
       journalDate: Date;
-      journalType: 'STANDARD';
+      journalType: JournalType;
+      intent: string;
+      intentNotes?: string;
+      intentReference?: string;
       reference?: string;
       description?: string;
     };
@@ -1671,8 +2179,31 @@ export class GlService {
 
     const errors: UploadError[] = [];
 
+    const allowedJournalTypes = new Set<JournalType>([
+      'STANDARD',
+      'ADJUSTING',
+      'ACCRUAL',
+      'REVERSING',
+    ]);
+
+    const allowedIntents = new Set<string>([
+      'OPERATIONAL',
+      'ACCRUAL',
+      'ADJUSTMENT',
+      'CORRECTION',
+      'REVERSAL',
+      'RECLASSIFICATION',
+      'OPENING_BALANCE',
+      'CLOSING',
+      'TAX',
+      'INTERCOMPANY',
+      'AUDIT_ADJUSTMENT',
+      'SYSTEM_GENERATED',
+    ]);
+
     const journalsByKey = new Map<string, UploadJournal>();
     const linesByKey = new Map<string, UploadLine[]>();
+    const periodTypeByKey = new Map<string, string | null>();
 
     const toNum = (v: any): number => {
       if (v === null || v === undefined || v === '') return 0;
@@ -1804,13 +2335,14 @@ export class GlService {
           const journalType = String(
             r['journaltype'] ?? r['journal_type'] ?? 'STANDARD',
           ).trim();
-          if (journalType && journalType !== 'STANDARD') {
+          const normalizedJournalType = journalType.toUpperCase();
+          if (normalizedJournalType && !allowedJournalTypes.has(normalizedJournalType as any)) {
             errors.push({
               sheet: 'Journals',
               rowNumber,
               journalKey,
               field: 'journalType',
-              message: 'journalType must be STANDARD for upload',
+              message: `Invalid journalType: ${journalType}`,
             });
           }
 
@@ -1830,10 +2362,42 @@ export class GlService {
             continue;
           }
 
+          const intentRaw = String(
+            r['intent'] ?? r['journalintent'] ?? r['journal_intent'] ?? '',
+          ).trim();
+          const intent = intentRaw.toUpperCase();
+          if (!intent) {
+            errors.push({
+              sheet: 'Journals',
+              rowNumber,
+              journalKey,
+              field: 'intent',
+              message: 'intent is required',
+            });
+          } else if (!allowedIntents.has(intent)) {
+            errors.push({
+              sheet: 'Journals',
+              rowNumber,
+              journalKey,
+              field: 'intent',
+              message: `Invalid intent: ${intentRaw}`,
+            });
+          }
+
           journalsByKey.set(journalKey, {
             journalKey,
             journalDate: jd,
-            journalType: 'STANDARD',
+            journalType: (allowedJournalTypes.has(normalizedJournalType as any)
+              ? (normalizedJournalType as any)
+              : 'STANDARD') as JournalType,
+            intent,
+            intentNotes:
+              String(r['intentnotes'] ?? r['intent_notes'] ?? '').trim() ||
+              undefined,
+            intentReference:
+              String(
+                r['intentreference'] ?? r['intent_reference'] ?? '',
+              ).trim() || undefined,
             reference: String(r['reference'] ?? '').trim() || undefined,
             description: String(r['description'] ?? '').trim() || undefined,
           });
@@ -1975,13 +2539,36 @@ export class GlService {
           const jt = String(
             r['journaltype'] ?? r['journal_type'] ?? 'STANDARD',
           ).trim();
-          if (jt && jt !== 'STANDARD') {
+          const normalizedJournalType = jt.toUpperCase();
+          if (normalizedJournalType && !allowedJournalTypes.has(normalizedJournalType as any)) {
             errors.push({
               sheet: 'CSV',
               rowNumber,
               journalKey,
               field: 'journalType',
-              message: 'journalType must be STANDARD for upload',
+              message: `Invalid journalType: ${jt}`,
+            });
+          }
+
+          const intentRaw = String(
+            r['intent'] ?? r['journalintent'] ?? r['journal_intent'] ?? '',
+          ).trim();
+          const intent = intentRaw.toUpperCase();
+          if (!intent) {
+            errors.push({
+              sheet: 'CSV',
+              rowNumber,
+              journalKey,
+              field: 'intent',
+              message: 'intent is required',
+            });
+          } else if (!allowedIntents.has(intent)) {
+            errors.push({
+              sheet: 'CSV',
+              rowNumber,
+              journalKey,
+              field: 'intent',
+              message: `Invalid intent: ${intentRaw}`,
             });
           }
 
@@ -1993,7 +2580,17 @@ export class GlService {
             journalsByKey.set(journalKey, {
               journalKey,
               journalDate: jd,
-              journalType: 'STANDARD',
+              journalType: (allowedJournalTypes.has(normalizedJournalType as any)
+                ? (normalizedJournalType as any)
+                : 'STANDARD') as JournalType,
+              intent,
+              intentNotes:
+                String(r['intentnotes'] ?? r['intent_notes'] ?? '').trim() ||
+                undefined,
+              intentReference:
+                String(
+                  r['intentreference'] ?? r['intent_reference'] ?? '',
+                ).trim() || undefined,
               reference: String(r['reference'] ?? '').trim() || undefined,
               description: String(r['description'] ?? '').trim() || undefined,
             });
@@ -2108,18 +2705,27 @@ export class GlService {
           .filter(Boolean),
       ),
     ];
-    const accounts = await this.prisma.account.findMany({
+    const accounts = (await this.prisma.account.findMany({
       where: { tenantId: tenant.id, code: { in: allAccountCodes } },
       select: {
         id: true,
         code: true,
         type: true,
+        status: true,
         isActive: true,
         isPostingAllowed: true,
+        isPosting: true,
         isControlAccount: true,
-      },
-    });
-    const accountByCode = new Map(accounts.map((a) => [a.code, a] as const));
+        isCashEquivalent: true,
+        isIntercompanyAccount: true,
+        intercompanyEnabled: true,
+        intercompanyRole: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
+    })) as any[];
+    const accountByCode = new Map<string, any>(accounts.map((a) => [a.code, a] as const));
 
     const allLegalEntityCodes = [
       ...new Set(
@@ -2207,12 +2813,18 @@ export class GlService {
     const fundByCode = new Map(funds.map((f) => [f.code, f] as const));
 
     const cutover = await this.getCutoverDateIfLocked({ tenantId: tenant.id });
+    const retroPostToleranceDays = await loadTenantRetroPostToleranceDays({
+      prisma: this.prisma,
+      tenantId: tenant.id,
+    });
 
     for (const key of keys) {
       const j = journalsByKey.get(key)!;
       const lines = (linesByKey.get(key) ?? [])
         .slice()
         .sort((a, b) => (a.lineNumber ?? 0) - (b.lineNumber ?? 0));
+
+      const hasPrePolicyErrors = errors.some((e) => e.journalKey === key);
       if (lines.length < 2) {
         errors.push({
           journalKey: key,
@@ -2234,8 +2846,10 @@ export class GlService {
           startDate: { lte: j.journalDate },
           endDate: { gte: j.journalDate },
         },
-        select: { id: true, status: true, name: true },
+        select: { id: true, status: true, name: true, type: true },
       });
+
+      periodTypeByKey.set(key, (period as any)?.type ?? null);
 
       if (!period) {
         errors.push({
@@ -2244,13 +2858,36 @@ export class GlService {
         });
       } else {
         try {
-          assertCanPost(period.status, { periodName: period.name });
+          assertPeriodAllowsPosting({
+            req,
+            period,
+            permissionUsed: PERMISSIONS.GL.CREATE,
+          });
         } catch {
           errors.push({
             journalKey: key,
             message: `Accounting period is not OPEN: ${period.name}`,
           });
         }
+      }
+
+      try {
+        assertRetroPostingWithinToleranceOrEscalated({
+          req,
+          postingDate: j.journalDate,
+          toleranceDays: retroPostToleranceDays,
+          escalationType: 'RETRO_POSTING_OVERRIDE',
+        });
+      } catch (e: any) {
+        errors.push({
+          journalKey: key,
+          message:
+            typeof e?.response?.message === 'string'
+              ? e.response.message
+              : typeof e?.message === 'string'
+                ? e.message
+                : 'Retro posting is not allowed',
+        });
       }
 
       const hasAnyDebit = lines.some((l) => (l.debit ?? 0) > 0);
@@ -2558,16 +3195,155 @@ export class GlService {
           }
         }
       }
+
+      if (period && !hasPrePolicyErrors) {
+        try {
+          assertJournalTypePolicy({
+            req,
+            tenantId: tenant.id,
+            actorUserId: user.id,
+            permissionUsed: PERMISSIONS.GL.CREATE,
+            mode: 'UPLOAD',
+            journalDate: j.journalDate,
+            prismaJournalType: j.journalType,
+            periodType: (period as any)?.type ?? null,
+            reversalOfId: null,
+            reference: j.reference ?? null,
+            description: j.description ?? null,
+            sourceType: null,
+            sourceId: null,
+            lines: lines.map((l) => ({
+              accountId: accountByCode.get(l.accountCode)?.id ?? 'UNKNOWN_ACCOUNT',
+              legalEntityId: l.legalEntityCode
+                ? (legalEntityByCode.get(l.legalEntityCode)?.id ?? null)
+                : null,
+              departmentId: l.departmentCode
+                ? (departmentByCode.get(l.departmentCode)?.id ?? null)
+                : null,
+              projectId: l.projectCode
+                ? (projectByCode.get(l.projectCode)?.id ?? null)
+                : null,
+              fundId: l.fundCode ? (fundByCode.get(l.fundCode)?.id ?? null) : null,
+            })),
+          });
+          assertCombinationGovernance({
+            req,
+            tenantId: tenant.id,
+            actorUserId: user.id,
+            permissionUsed: PERMISSIONS.GL.CREATE,
+            mode: 'UPLOAD',
+            module: 'GL',
+            journalDate: j.journalDate,
+            prismaJournalType: j.journalType as any,
+            periodType: (period as any)?.type ?? null,
+            reversalOfId: null,
+            reference: j.reference ?? null,
+            description: j.description ?? null,
+            sourceType: null,
+            sourceId: null,
+            lines: lines.map((l) => {
+              const acc = accountByCode.get(l.accountCode);
+              return {
+                lineNumber: l.lineNumber ?? null,
+                accountId: acc?.id ?? 'UNKNOWN_ACCOUNT',
+                accountCode: acc?.code ?? null,
+                accountType: (acc as any)?.type ?? null,
+                isControlAccount: Boolean((acc as any)?.isControlAccount),
+                isCashEquivalent: Boolean((acc as any)?.isCashEquivalent),
+                requiresDepartment: Boolean((acc as any)?.requiresDepartment),
+                requiresProject: Boolean((acc as any)?.requiresProject),
+                requiresFund: Boolean((acc as any)?.requiresFund),
+                debit: Number(l.debit ?? 0),
+                credit: Number(l.credit ?? 0),
+                legalEntityId: l.legalEntityCode
+                  ? (legalEntityByCode.get(l.legalEntityCode)?.id ?? null)
+                  : null,
+                departmentId: l.departmentCode
+                  ? (departmentByCode.get(l.departmentCode)?.id ?? null)
+                  : null,
+                projectId: l.projectCode
+                  ? (projectByCode.get(l.projectCode)?.id ?? null)
+                  : null,
+                fundId: l.fundCode
+                  ? (fundByCode.get(l.fundCode)?.id ?? null)
+                  : null,
+              };
+            }),
+          });
+
+          const policyType = resolveJournalPolicyType({
+            prismaJournalType: j.journalType,
+            periodType: (period as any)?.type ?? null,
+            reversalOfId: null,
+            reference: j.reference ?? null,
+            sourceType: null,
+          });
+          const intercompanyActions = new Set<string>();
+          if (policyType === 'INTERCOMPANY_JOURNAL') {
+            intercompanyActions.add('INTERCOMPANY_BALANCE_VIOLATION');
+          }
+
+          const actorLegalEntityAccess = await this.loadActorLegalEntityAccess({
+            tenantId: tenant.id,
+            actorUserId: user.id,
+          });
+
+          assertIntercompanyGovernance({
+            req,
+            tenantId: tenant.id,
+            actorUserId: user.id,
+            permissionUsed: PERMISSIONS.GL.CREATE,
+            mode: 'UPLOAD',
+            entityType: 'JOURNAL_UPLOAD_BATCH',
+            entityId: `${batchId}:${key}`,
+            journalType: String(j.journalType ?? ''),
+            reference: j.reference ?? null,
+            governanceActions: Array.from(intercompanyActions) as any,
+            escalation: (req as any)?.governanceEscalation ?? null,
+            justificationText:
+              String(req.header('x-governance-reason') ?? '').trim() || null,
+            actorLegalEntityAccess,
+            lines: lines.map((l) => {
+              const acc = accountByCode.get(l.accountCode);
+              return {
+                lineNumber: l.lineNumber ?? null,
+                legalEntityId: l.legalEntityCode
+                  ? (legalEntityByCode.get(l.legalEntityCode)?.id ?? null)
+                  : null,
+                debit: Number(l.debit ?? 0),
+                credit: Number(l.credit ?? 0),
+                account: {
+                  accountId: acc?.id ?? 'UNKNOWN_ACCOUNT',
+                  accountCode: acc?.code ?? null,
+                  isIntercompanyAccount: (acc as any)?.isIntercompanyAccount ?? null,
+                  intercompanyEnabled: (acc as any)?.intercompanyEnabled ?? null,
+                  intercompanyRole: (acc as any)?.intercompanyRole ?? null,
+                },
+              };
+            }),
+          });
+        } catch (e: any) {
+          const msg =
+            typeof e?.response?.message === 'string'
+              ? e.response.message
+              : typeof e?.message === 'string'
+                ? e.message
+                : 'Journal type policy violation';
+          errors.push({
+            journalKey: key,
+            field: 'journalType',
+            message: msg,
+          });
+        }
+      }
     }
 
     if (errors.length > 0) {
-      const batchId = randomUUID();
-
       await writeAuditEventWithPrisma(
         {
           tenantId: tenant.id,
           eventType: AuditEventType.JOURNAL_UPLOAD_FAILED,
-          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityType: 'JOURNAL_UPLOAD_BATCH' as any,
           entityId: batchId,
           actorUserId: user.id,
           timestamp: new Date(),
@@ -2575,6 +3351,86 @@ export class GlService {
           action: 'FINANCE_GL_CREATE',
           permissionUsed: PERMISSIONS.GL.CREATE,
           reason: `Upload rejected (${fileName}). Errors: ${errors.length}`,
+          metadata: {
+            batchId,
+            fileName,
+            errorCount: errors.length,
+          },
+        },
+        this.prisma,
+      );
+
+      throw new BadRequestException({
+        error: 'Upload rejected',
+        fileName,
+        errorCount: errors.length,
+        errors,
+      });
+    }
+
+    const governanceActions = new Set<string>();
+    const escalation = (req as any)?.governanceEscalation as
+      | { type?: string; reason?: string }
+      | undefined;
+    if (escalation?.type === 'RETRO_POSTING_OVERRIDE') governanceActions.add('RETRO_POSTING_OVERRIDE');
+    if (escalation?.type === 'PERIOD_SOFT_CLOSE_POST_OVERRIDE') governanceActions.add('PERIOD_SOFT_CLOSE_POST_OVERRIDE');
+
+    for (const key of keys) {
+      const j = journalsByKey.get(key)!;
+      const policyType = resolveJournalPolicyType({
+        prismaJournalType: j.journalType,
+        periodType: periodTypeByKey.get(key) ?? null,
+        reversalOfId: null,
+        reference: j.reference ?? null,
+        sourceType: null,
+      });
+      const policy = getJournalTypePolicy(policyType);
+      if (policy.requiredEvidence?.required) governanceActions.add('JOURNAL_TYPE_EVIDENCE_REQUIRED');
+      if (policyType === 'INTERCOMPANY_JOURNAL') governanceActions.add('INTERCOMPANY_BALANCE_VIOLATION');
+    }
+
+    try {
+      assertEvidenceGovernance({
+        req,
+        tenantId: tenant.id,
+        actorUserId: user.id,
+        permissionUsed: PERMISSIONS.GL.CREATE,
+        mode: 'UPLOAD',
+        entityType: 'JOURNAL_UPLOAD_BATCH',
+        entityId: batchId,
+        journalType: null,
+        governanceActions: Array.from(governanceActions) as any,
+        escalation: escalation ?? null,
+        justificationText:
+          String(req.header('x-governance-reason') ?? '').trim() || null,
+        attachments: batchAttachments,
+      });
+    } catch (e: any) {
+      const msg =
+        typeof e?.response?.message === 'string'
+          ? e.response.message
+          : typeof e?.message === 'string'
+            ? e.message
+            : 'Evidence governance violation';
+      errors.push({
+        sheet: isXlsx ? 'Journals' : 'CSV',
+        message: msg,
+      });
+    }
+
+    if (errors.length > 0) {
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: tenant.id,
+          eventType: AuditEventType.JOURNAL_UPLOAD_FAILED,
+          entityType: 'JOURNAL_UPLOAD_BATCH' as any,
+          entityId: batchId,
+          actorUserId: user.id,
+          timestamp: new Date(),
+          outcome: 'FAILED' as any,
+          action: 'FINANCE_GL_CREATE',
+          permissionUsed: PERMISSIONS.GL.CREATE,
+          reason: `Upload rejected (${fileName}). Evidence governance violation(s): ${errors.length}`,
           metadata: {
             batchId,
             fileName,
@@ -2604,7 +3460,10 @@ export class GlService {
           data: {
             tenantId: tenant.id,
             journalDate: j.journalDate,
-            journalType: 'STANDARD',
+            journalType: j.journalType,
+            intent: String(j.intent ?? '').trim().toUpperCase() as any,
+            intentNotes: j.intentNotes ?? null,
+            intentReference: j.intentReference ?? null,
             reference: j.reference,
             description: j.description,
             createdById: user.id,
@@ -2634,6 +3493,18 @@ export class GlService {
           select: { id: true },
         });
 
+        if ((batchEvidenceLinks ?? []).length > 0) {
+          await (tx as any).auditEvidenceLink.createMany({
+            data: (batchEvidenceLinks ?? []).map((l: any) => ({
+              tenantId: tenant.id,
+              evidenceId: l.evidenceId,
+              entityType: 'JOURNAL_ENTRY',
+              entityId: createdJournal.id,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
         out.push({ journalKey: key, journalId: createdJournal.id });
       }
       return out;
@@ -2643,8 +3514,8 @@ export class GlService {
       {
         tenantId: tenant.id,
         eventType: AuditEventType.JOURNAL_UPLOAD,
-        entityType: AuditEntityType.JOURNAL_ENTRY,
-        entityId: created[0]?.journalId ?? randomUUID(),
+        entityType: 'JOURNAL_UPLOAD_BATCH' as any,
+        entityId: batchId,
         actorUserId: user.id,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
@@ -2652,14 +3523,25 @@ export class GlService {
         permissionUsed: PERMISSIONS.GL.CREATE,
         reason: `Uploaded journals (${fileName}). Journals created: ${created.length}`,
         metadata: {
+          batchId,
           fileName,
           journalsCreated: created.length,
+          intents: Array.from(
+            new Set(
+              keys.map((k) =>
+                String((journalsByKey.get(k) as any)?.intent ?? '')
+                  .trim()
+                  .toUpperCase(),
+              ),
+            ),
+          ),
         },
       },
       this.prisma,
     );
 
     return {
+      batchId,
       fileName,
       journalsCreated: created.length,
       items: created,
@@ -2678,6 +3560,9 @@ export class GlService {
       'journalKey',
       'journalDate',
       'journalType',
+      'intent',
+      'intentNotes',
+      'intentReference',
       'reference',
       'description',
       'lineNumber',
@@ -2756,18 +3641,24 @@ export class GlService {
       'journalKey',
       'journalDate',
       'journalType',
+      'intent',
+      'intentNotes',
+      'intentReference',
       'reference',
       'description',
     ]);
     wsJ.addRow([
       'J1',
-      new Date().toISOString().slice(0, 10),
+      '2024-01-31',
       'STANDARD',
-      'Bulk upload test',
-      'Example journal upload',
+      'OPERATIONAL',
+      'Monthly adjustment',
+      'REF-001',
+      'REF-001',
+      'Example journal header',
     ]);
     wsJ.getRow(1).font = { bold: true };
-    wsJ.columns.forEach((c) => (c.width = 18));
+    wsJ.columns.forEach((c) => (c.width = 22));
 
     const wsL = wb.addWorksheet('JournalLines');
     wsL.addRow([
@@ -2882,11 +3773,21 @@ export class GlService {
       })),
     );
 
+    const nextIntent = String((dto as any).intent ?? (existing as any).intent ?? '').trim();
+    this.assertJournalIntentRules({
+      intent: nextIntent,
+      mode: 'RECURRING_TEMPLATE',
+    });
+
     const updated = await this.prisma.recurringJournalTemplate.update({
       where: { id: existing.id },
       data: {
         name: dto.name ?? existing.name,
         journalType: 'STANDARD',
+        intent: ((dto as any).intent ?? (existing as any).intent) as any,
+        intentNotes: (dto as any).intentNotes ?? (existing as any).intentNotes ?? null,
+        intentReference:
+          (dto as any).intentReference ?? (existing as any).intentReference ?? null,
         referenceTemplate: dto.referenceTemplate ?? existing.referenceTemplate,
         descriptionTemplate:
           dto.descriptionTemplate !== undefined
@@ -2967,44 +3868,32 @@ export class GlService {
       throw new BadRequestException('Recurring template is inactive');
     }
 
-    const runDate = dto.runDate
-      ? new Date(dto.runDate)
-      : new Date(template.nextRunDate);
+    if (!dto.runDate) {
+      throw new BadRequestException('Missing runDate');
+    }
+
+    const runDate = new Date(dto.runDate);
     if (Number.isNaN(runDate.getTime())) {
       throw new BadRequestException('Invalid runDate');
     }
 
-    if (runDate < template.startDate) {
-      throw new BadRequestException('runDate is before template startDate');
-    }
-    if (template.endDate && runDate > template.endDate) {
-      throw new BadRequestException('runDate is after template endDate');
-    }
-
-    const cutover = await this.getCutoverDateIfLocked({ tenantId: tenant.id });
-    if (cutover && runDate < cutover) {
-      throw new ForbiddenException({
-        error: 'Generation blocked by cutover lock',
-        reason: `Generating dated before cutover is not allowed (cutover: ${cutover.toISOString().slice(0, 10)})`,
-      });
-    }
-
-    const period = await this.prisma.accountingPeriod.findFirst({
+    const period = await (this.prisma.accountingPeriod as any).findFirst({
       where: {
         tenantId: tenant.id,
         startDate: { lte: runDate },
         endDate: { gte: runDate },
       },
-      select: { id: true, status: true, name: true },
+      select: { id: true, status: true, name: true, type: true },
     });
     if (!period) {
-      throw new ForbiddenException({
-        error: 'Generation blocked by accounting period control',
-        reason: 'No accounting period exists for the run date',
-      });
+      throw new BadRequestException('No accounting period exists for runDate');
     }
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+      });
     } catch {
       throw new ForbiddenException({
         error: 'Generation blocked by accounting period control',
@@ -3020,12 +3909,130 @@ export class GlService {
       ? this.formatRecurringPlaceholders(template.descriptionTemplate, runDate)
       : undefined;
 
+    const accountIds = [...new Set(template.lines.map((l) => l.accountId).filter(Boolean))] as string[];
+    const accounts = (await this.prisma.account.findMany({
+      where: { tenantId: tenant.id, id: { in: accountIds } },
+      select: {
+        id: true,
+        code: true,
+        type: true,
+        isControlAccount: true,
+        isCashEquivalent: true,
+        isIntercompanyAccount: true,
+        intercompanyEnabled: true,
+        intercompanyRole: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
+    })) as any[];
+    const accountById = new Map<string, any>(accounts.map((a) => [a.id, a] as const));
+
+    assertJournalTypePolicy({
+      req,
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+      mode: 'POST',
+      journalDate: runDate,
+      prismaJournalType: 'STANDARD',
+      periodType: (period as any)?.type ?? null,
+      reversalOfId: null,
+      reference: reference ?? null,
+      description: description ?? null,
+      sourceType: null,
+      sourceId: null,
+      lines: template.lines.map((l) => ({
+        accountId: l.accountId,
+        legalEntityId: null,
+        departmentId: null,
+        projectId: null,
+        fundId: null,
+      })),
+    });
+
+    assertCombinationGovernance({
+      req,
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+      mode: 'POST',
+      module: 'GL',
+      journalDate: runDate,
+      prismaJournalType: 'STANDARD',
+      periodType: (period as any)?.type ?? null,
+      reversalOfId: null,
+      reference: reference ?? null,
+      description: description ?? null,
+      sourceType: null,
+      sourceId: null,
+      lines: template.lines.map((l) => {
+        const acc = accountById.get(l.accountId);
+        return {
+          lineNumber: l.lineOrder ?? null,
+          accountId: l.accountId,
+          accountCode: acc?.code ?? null,
+          accountType: (acc as any)?.type ?? null,
+          isControlAccount: Boolean((acc as any)?.isControlAccount),
+          isCashEquivalent: Boolean((acc as any)?.isCashEquivalent),
+          requiresDepartment: Boolean((acc as any)?.requiresDepartment),
+          requiresProject: Boolean((acc as any)?.requiresProject),
+          requiresFund: Boolean((acc as any)?.requiresFund),
+          debit: Number((l as any).debitAmount ?? 0),
+          credit: Number((l as any).creditAmount ?? 0),
+          legalEntityId: null,
+          departmentId: null,
+          projectId: null,
+          fundId: null,
+        };
+      }),
+    });
+
+    assertIntercompanyGovernance({
+      req,
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      permissionUsed: PERMISSIONS.GL.RECURRING_GENERATE,
+      mode: 'POST',
+      entityType: 'RECURRING_JOURNAL_TEMPLATE',
+      entityId: template.id,
+      journalType: 'STANDARD',
+      reference: reference ?? null,
+      governanceActions: [],
+      escalation: (req as any)?.governanceEscalation ?? null,
+      justificationText:
+        String(req.header('x-governance-reason') ?? '').trim() || null,
+      actorLegalEntityAccess: await this.loadActorLegalEntityAccess({
+        tenantId: tenant.id,
+        actorUserId: user.id,
+      }),
+      lines: template.lines.map((l) => {
+        const acc = accountById.get(l.accountId);
+        return {
+          lineNumber: l.lineOrder ?? null,
+          legalEntityId: null,
+          debit: Number((l as any).debitAmount ?? 0),
+          credit: Number((l as any).creditAmount ?? 0),
+          account: {
+            accountId: l.accountId,
+            accountCode: (acc as any)?.code ?? null,
+            isIntercompanyAccount: (acc as any)?.isIntercompanyAccount ?? null,
+            intercompanyEnabled: (acc as any)?.intercompanyEnabled ?? null,
+            intercompanyRole: (acc as any)?.intercompanyRole ?? null,
+          },
+        };
+      }),
+    });
+
     const created = await this.prisma.$transaction(async (tx) => {
       const journal = await tx.journalEntry.create({
         data: {
           tenantId: tenant.id,
           journalDate: runDate,
           journalType: 'STANDARD',
+          intent: (template as any).intent as any,
+          intentNotes: (template as any).intentNotes ?? null,
+          intentReference: (template as any).intentReference ?? null,
           reference,
           description,
           createdById: user.id,
@@ -3388,6 +4395,39 @@ export class GlService {
 
   private readonly JOURNAL_NUMBER_SEQUENCE_NAME = 'JOURNAL_ENTRY';
 
+  private computeFiscalYearLabel(params: { financialYearStartMonth: number; date: Date }) {
+    const m = params.date.getUTCMonth() + 1;
+    const y = params.date.getUTCFullYear();
+    return m >= params.financialYearStartMonth ? y : y - 1;
+  }
+
+  private buildJournalSequenceName(params: {
+    scope: 'TENANT_GLOBAL' | 'LEGAL_ENTITY' | 'FISCAL_YEAR' | 'LEGAL_ENTITY_FISCAL_YEAR';
+    tenantId: string;
+    legalEntityId?: string | null;
+    fiscalYearLabel?: number | null;
+  }) {
+    if (params.scope === 'TENANT_GLOBAL') return this.JOURNAL_NUMBER_SEQUENCE_NAME;
+
+    if (params.scope === 'LEGAL_ENTITY') {
+      const le = String(params.legalEntityId ?? '').trim();
+      if (!le) throw new BadRequestException('Cannot assign legal-entity-scoped journal number (missing legalEntityId)');
+      return `${this.JOURNAL_NUMBER_SEQUENCE_NAME}|LE:${le}`;
+    }
+
+    if (params.scope === 'FISCAL_YEAR') {
+      const fy = params.fiscalYearLabel;
+      if (!fy) throw new BadRequestException('Cannot assign fiscal-year-scoped journal number (missing fiscal year)');
+      return `${this.JOURNAL_NUMBER_SEQUENCE_NAME}|FY:${fy}`;
+    }
+
+    const le = String(params.legalEntityId ?? '').trim();
+    if (!le) throw new BadRequestException('Cannot assign scoped journal number (missing legalEntityId)');
+    const fy = params.fiscalYearLabel;
+    if (!fy) throw new BadRequestException('Cannot assign scoped journal number (missing fiscal year)');
+    return `${this.JOURNAL_NUMBER_SEQUENCE_NAME}|LE:${le}|FY:${fy}`;
+  }
+
   private async ensureMinimalBalanceSheetCoaForTenant(tenantId: string) {
     await this.assertCoaStructureNotFrozen({
       tenantId,
@@ -3749,7 +4789,11 @@ export class GlService {
     if (!period) throw new NotFoundException('Accounting period not found');
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      });
     } catch {
       await this.prisma.accountingPeriodCloseLog.create({
         data: {
@@ -4020,20 +5064,31 @@ export class GlService {
       throw new NotFoundException('Accounting period not found');
     }
 
-    if (period.status === 'CLOSED') {
+    if (period.status === 'CLOSED' || (period.status as any) === 'HARD_CLOSED') {
       throw new BadRequestException('Accounting period is already closed');
     }
 
-    const laterOpen = await (this.prisma.accountingPeriod as any).findFirst({
+    const periodStart = (
+      await this.prisma.accountingPeriod.findUnique({
+        where: { id },
+        select: { startDate: true },
+      })
+    )?.startDate;
+
+    const laterPeriods = await (this.prisma.accountingPeriod as any).findMany({
       where: {
         tenantId: tenant.id,
-        startDate: { gt: (await this.prisma.accountingPeriod.findUnique({ where: { id }, select: { startDate: true } }))?.startDate ?? undefined },
-        status: 'OPEN',
+        ...(periodStart ? { startDate: { gt: periodStart } } : {}),
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
-    if (laterOpen) {
+    const isClosedStatus = (status: any): boolean => {
+      return status === 'CLOSED' || status === 'HARD_CLOSED' || status === 'ARCHIVED';
+    };
+
+    const laterNotClosed = (laterPeriods ?? []).some((p: any) => !isClosedStatus(p.status));
+    if (laterNotClosed) {
       throw new BadRequestException(
         'You must close later accounting periods before closing this one.',
       );
@@ -4180,7 +5235,7 @@ export class GlService {
     const closed = await this.prisma.accountingPeriod.update({
       where: { id },
       data: {
-        status: 'CLOSED',
+        status: 'HARD_CLOSED',
         closedById: user.id,
         closedAt: new Date(),
       },
@@ -4230,9 +5285,10 @@ export class GlService {
       select: {
         id: true,
         name: true,
-        status: true,
         startDate: true,
         endDate: true,
+        status: true,
+        type: true,
       },
     });
     if (!period) {
@@ -4304,19 +5360,30 @@ export class GlService {
       throw new NotFoundException('Accounting period not found');
     }
 
-    if (period.status !== 'CLOSED') {
+    if (period.status !== 'CLOSED' && (period.status as any) !== 'HARD_CLOSED') {
       throw new BadRequestException('Accounting period is not closed');
     }
 
-    const laterClosed = await (this.prisma.accountingPeriod as any).findFirst({
+    const periodStart = (
+      await this.prisma.accountingPeriod.findUnique({
+        where: { id: period.id },
+        select: { startDate: true },
+      })
+    )?.startDate;
+
+    const laterPeriods = await (this.prisma.accountingPeriod as any).findMany({
       where: {
         tenantId: tenant.id,
-        startDate: { gt: (await this.prisma.accountingPeriod.findUnique({ where: { id: period.id }, select: { startDate: true } }))?.startDate ?? undefined },
-        status: 'CLOSED',
+        ...(periodStart ? { startDate: { gt: periodStart } } : {}),
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
+    const isClosedStatus = (status: any): boolean => {
+      return status === 'CLOSED' || status === 'HARD_CLOSED' || status === 'ARCHIVED';
+    };
+
+    const laterClosed = (laterPeriods ?? []).some((p: any) => isClosedStatus(p.status));
     if (laterClosed) {
       const reason = 'Cannot reopen a period while a later period is CLOSED';
 
@@ -5031,6 +6098,21 @@ export class GlService {
       );
     }
 
+    await this.assertJournalSoD({
+      req,
+      authz,
+      actionType: 'RETURN_TO_REVIEW',
+      soDAction: 'GL_JOURNAL_RETURN_TO_REVIEW',
+      entry: {
+        id: entry.id,
+        createdById: entry.createdById,
+        submittedById: null,
+        reviewedById: entry.reviewedById ?? null,
+        reversalInitiatedById: null,
+      },
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+    });
+
     const now = new Date();
     const previousReviewerId = entry.reviewedById ?? null;
 
@@ -5110,7 +6192,7 @@ export class GlService {
         startDate: { lte: journalDate },
         endDate: { gte: journalDate },
       },
-      select: { id: true, status: true },
+      select: { id: true, status: true, type: true },
     });
 
     if (!period) {
@@ -5122,7 +6204,11 @@ export class GlService {
     }
 
     try {
-      assertCanPost(period.status);
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.GL.CREATE,
+      });
     } catch {
       throw new BadRequestException({
         code: 'INVALID_JOURNAL_DATE',
@@ -5131,22 +6217,31 @@ export class GlService {
       });
     }
 
-    const accounts = await this.prisma.account.findMany({
+    const accounts = (await this.prisma.account.findMany({
       where: {
         tenantId: authz.tenantId,
         id: { in: dto.lines.map((l) => l.accountId) },
       },
       select: {
         id: true,
+        code: true,
+        type: true,
         status: true,
         isActive: true,
         isPostingAllowed: true,
         isPosting: true,
         isControlAccount: true,
-      },
-    });
+        isCashEquivalent: true,
+        isIntercompanyAccount: true,
+        intercompanyEnabled: true,
+        intercompanyRole: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
+    })) as any[];
 
-    const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
+    const accountMap = new Map<string, any>(accounts.map((a) => [a.id, a] as const));
 
     for (const line of dto.lines) {
       const account = accountMap.get(line.accountId);
@@ -5168,11 +6263,124 @@ export class GlService {
       });
     }
 
+    assertJournalTypePolicy({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      mode: 'CREATE_DRAFT',
+      journalDate,
+      prismaJournalType: (dto.journalType ?? 'STANDARD') as any,
+      periodType: (period as any)?.type ?? null,
+      reversalOfId: null,
+      reference: dto.reference ?? null,
+      description: dto.description ?? null,
+      sourceType: null,
+      sourceId: null,
+      lines: dto.lines.map((l) => ({
+        accountId: l.accountId,
+        legalEntityId: l.legalEntityId ?? null,
+        departmentId: l.departmentId ?? null,
+        projectId: (l as any).projectId ?? null,
+        fundId: (l as any).fundId ?? null,
+      })),
+    });
+
+    assertCombinationGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      mode: 'CREATE_DRAFT',
+      module: 'GL',
+      journalDate,
+      prismaJournalType: (dto.journalType ?? 'STANDARD') as any,
+      periodType: (period as any)?.type ?? null,
+      reversalOfId: null,
+      reference: dto.reference ?? null,
+      description: dto.description ?? null,
+      sourceType: null,
+      sourceId: null,
+      lines: dto.lines.map((l) => {
+        const acc = accountMap.get(l.accountId);
+        return {
+          lineNumber: l.lineNumber ?? null,
+          accountId: l.accountId,
+          accountCode: (acc as any)?.code ?? null,
+          accountType: (acc as any)?.type ?? null,
+          isControlAccount: Boolean((acc as any)?.isControlAccount),
+          isCashEquivalent: Boolean((acc as any)?.isCashEquivalent),
+          requiresDepartment: Boolean((acc as any)?.requiresDepartment),
+          requiresProject: Boolean((acc as any)?.requiresProject),
+          requiresFund: Boolean((acc as any)?.requiresFund),
+          debit: Number(l.debit ?? 0),
+          credit: Number(l.credit ?? 0),
+          legalEntityId: l.legalEntityId ?? null,
+          departmentId: l.departmentId ?? null,
+          projectId: (l as any).projectId ?? null,
+          fundId: (l as any).fundId ?? null,
+        };
+      }),
+    });
+
+    const createDraftPolicyType = resolveJournalPolicyType({
+      prismaJournalType: (dto.journalType ?? 'STANDARD') as any,
+      periodType: (period as any)?.type ?? null,
+      reversalOfId: null,
+      reference: dto.reference ?? null,
+      sourceType: null,
+    });
+    const createDraftGovernanceActions = new Set<string>();
+    if (createDraftPolicyType === 'INTERCOMPANY_JOURNAL') {
+      createDraftGovernanceActions.add('INTERCOMPANY_BALANCE_VIOLATION');
+    }
+
+    const actorLegalEntityAccess = await this.loadActorLegalEntityAccess({
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+    });
+
+    assertIntercompanyGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      mode: 'CREATE_DRAFT',
+      entityType: 'JOURNAL_ENTRY',
+      entityId: 'NEW_JOURNAL_DRAFT',
+      journalType: String(dto.journalType ?? 'STANDARD'),
+      reference: dto.reference ?? null,
+      governanceActions: Array.from(createDraftGovernanceActions) as any,
+      escalation: (req as any)?.governanceEscalation ?? null,
+      justificationText:
+        String(req.header('x-governance-reason') ?? '').trim() || null,
+      actorLegalEntityAccess,
+      lines: dto.lines.map((l) => {
+        const acc = accountMap.get(l.accountId);
+        return {
+          lineNumber: l.lineNumber ?? null,
+          legalEntityId: l.legalEntityId ?? null,
+          debit: Number(l.debit ?? 0),
+          credit: Number(l.credit ?? 0),
+          account: {
+            accountId: l.accountId,
+            accountCode: (acc as any)?.code ?? null,
+            isIntercompanyAccount: (acc as any)?.isIntercompanyAccount ?? null,
+            intercompanyEnabled: (acc as any)?.intercompanyEnabled ?? null,
+            intercompanyRole: (acc as any)?.intercompanyRole ?? null,
+          },
+        };
+      }),
+    });
+
     const created = await this.prisma.journalEntry.create({
       data: {
         tenantId: authz.tenantId,
         journalDate,
         journalType: dto.journalType ?? 'STANDARD',
+        intent: (dto as any).intent as any,
+        intentNotes: (dto as any).intentNotes ?? null,
+        intentReference: (dto as any).intentReference ?? null,
         reference: dto.reference,
         description: dto.description,
         correctsJournalId: dto.correctsJournalId ?? null,
@@ -5256,6 +6464,32 @@ export class GlService {
       );
     }
 
+    const period = await this.prisma.accountingPeriod.findFirst({
+      where: {
+        tenantId: authz.tenantId,
+        startDate: { lte: new Date(dto.journalDate) },
+        endDate: { gte: new Date(dto.journalDate) },
+      },
+      select: { id: true, status: true, type: true },
+    });
+
+    if (!period) {
+      throw new BadRequestException({
+        code: 'INVALID_JOURNAL_DATE',
+        reason: 'NO_PERIOD',
+        message: 'No accounting period exists for the selected date.',
+      });
+    }
+
+    const nextIntent = String((dto as any).intent ?? (entry as any).intent ?? '').trim();
+    this.assertJournalIntentRules({
+      intent: nextIntent,
+      periodType: (period as any)?.type ?? null,
+      correctsJournalId: (entry as any).correctsJournalId ?? null,
+      reversalOfId: (entry as any).reversalOfId ?? null,
+      mode: 'UPDATE_DRAFT',
+    });
+
     const isReversal =
       entry.journalType === 'REVERSING' && !!(entry as any).reversalOfId;
     if (isReversal) {
@@ -5280,7 +6514,7 @@ export class GlService {
         );
       }
 
-      const period = await (this.prisma.accountingPeriod as any).findFirst({
+      const reversalPeriod = await (this.prisma.accountingPeriod as any).findFirst({
         where: {
           tenantId: authz.tenantId,
           startDate: { lte: proposedDate },
@@ -5288,29 +6522,18 @@ export class GlService {
         },
         select: { id: true, status: true, name: true, type: true },
       });
-      if (!period) {
+      if (!reversalPeriod) {
         throw new BadRequestException(
           'Journal date is not within an open accounting period. Please choose a date in an open period.',
         );
       }
-      const periodStatus = (period as any).status as string;
-      if (periodStatus === 'CLOSED') {
-        throw new BadRequestException(
-          'This accounting period is closed. Posting is not allowed.',
-        );
-      }
-      if (periodStatus === 'SOFT_CLOSED') {
-        throw new BadRequestException(
-          'This accounting period is soft-closed. Reopen the period to allow posting.',
-        );
-      }
-      if (periodStatus !== 'OPEN') {
-        throw new BadRequestException(
-          'Journal date is not within an open accounting period. Please choose a date in an open period.',
-        );
-      }
+      assertPeriodAllowsPosting({
+        req,
+        period: reversalPeriod,
+        permissionUsed: PERMISSIONS.GL.CREATE,
+      });
 
-      if (period.type === 'OPENING') {
+      if (reversalPeriod.type === 'OPENING') {
         await this.assertOpeningBalanceAccountsAllowed({
           tenantId: authz.tenantId,
           lines: entry.lines.map((l) => ({
@@ -5362,9 +6585,55 @@ export class GlService {
       return updated;
     }
 
+    const proposedDate = dto.journalDate
+      ? new Date(dto.journalDate)
+      : new Date(entry.journalDate);
+    if (Number.isNaN(proposedDate.getTime())) {
+      throw new BadRequestException('Invalid journalDate');
+    }
+
+    const cutover = await this.getCutoverDateIfLocked({
+      tenantId: authz.tenantId,
+    });
+    if (cutover && proposedDate < cutover) {
+      throw new BadRequestException(
+        'Journal date is before system cutover. Select a later date.',
+      );
+    }
+
+    const proposedPeriod = await (this.prisma.accountingPeriod as any).findFirst({
+      where: {
+        tenantId: authz.tenantId,
+        startDate: { lte: proposedDate },
+        endDate: { gte: proposedDate },
+      },
+      select: { id: true, status: true, name: true, type: true },
+    });
+    if (!proposedPeriod) {
+      throw new BadRequestException(
+        'Journal date is not within an open accounting period. Please choose a date in an open period.',
+      );
+    }
+    assertPeriodAllowsPosting({
+      req,
+      period: proposedPeriod,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+    });
+
+    if (proposedPeriod.type === 'OPENING') {
+      await this.assertOpeningBalanceAccountsAllowed({
+        tenantId: authz.tenantId,
+        lines: dto.lines.map((l) => ({
+          accountId: l.accountId,
+          debit: Number(l.debit),
+          credit: Number(l.credit),
+        })),
+      });
+    }
+
     this.assertLinesBasicValid(dto.lines);
 
-    const accounts = await this.prisma.account.findMany({
+    const accounts = (await this.prisma.account.findMany({
       where: {
         tenantId: authz.tenantId,
         id: { in: dto.lines.map((l) => l.accountId) },
@@ -5372,14 +6641,22 @@ export class GlService {
       select: {
         id: true,
         code: true,
+        type: true,
         status: true,
         isActive: true,
         isPostingAllowed: true,
         isPosting: true,
         isControlAccount: true,
-      },
-    });
-    const accountMap = new Map(accounts.map((a) => [a.id, a] as const));
+        isCashEquivalent: true,
+        isIntercompanyAccount: true,
+        intercompanyEnabled: true,
+        intercompanyRole: true,
+        requiresDepartment: true,
+        requiresProject: true,
+        requiresFund: true,
+      } as any,
+    })) as any[];
+    const accountMap = new Map<string, any>(accounts.map((a) => [a.id, a] as const));
 
     for (const line of dto.lines) {
       const account = accountMap.get(line.accountId);
@@ -5401,21 +6678,130 @@ export class GlService {
       });
     }
 
+    assertJournalTypePolicy({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      mode: 'UPDATE_DRAFT',
+      journalDate: proposedDate,
+      prismaJournalType: (dto.journalType ?? entry.journalType) as any,
+      periodType: (proposedPeriod as any)?.type ?? null,
+      reversalOfId: (entry as any).reversalOfId ?? null,
+      reference: (dto.reference ?? entry.reference ?? null) as any,
+      description: (dto.description ?? entry.description ?? null) as any,
+      sourceType: (entry as any).sourceType ?? null,
+      sourceId: (entry as any).sourceId ?? null,
+      lines: dto.lines.map((l) => ({
+        accountId: l.accountId,
+        legalEntityId: l.legalEntityId ?? null,
+        departmentId: l.departmentId ?? null,
+        projectId: (l as any).projectId ?? null,
+        fundId: (l as any).fundId ?? null,
+      })),
+    });
+
+    assertCombinationGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      mode: 'UPDATE_DRAFT',
+      module: 'GL',
+      journalDate: proposedDate,
+      prismaJournalType: (dto.journalType ?? entry.journalType) as any,
+      periodType: (proposedPeriod as any)?.type ?? null,
+      reversalOfId: (entry as any).reversalOfId ?? null,
+      reference: (dto.reference ?? entry.reference ?? null) as any,
+      description: (dto.description ?? entry.description ?? null) as any,
+      sourceType: (entry as any).sourceType ?? null,
+      sourceId: (entry as any).sourceId ?? null,
+      lines: dto.lines.map((l) => {
+        const acc = accountMap.get(l.accountId);
+        return {
+          lineNumber: l.lineNumber ?? null,
+          accountId: l.accountId,
+          accountCode: (acc as any)?.code ?? null,
+          accountType: (acc as any)?.type ?? null,
+          isControlAccount: Boolean((acc as any)?.isControlAccount),
+          isCashEquivalent: Boolean((acc as any)?.isCashEquivalent),
+          requiresDepartment: Boolean((acc as any)?.requiresDepartment),
+          requiresProject: Boolean((acc as any)?.requiresProject),
+          requiresFund: Boolean((acc as any)?.requiresFund),
+          debit: Number(l.debit ?? 0),
+          credit: Number(l.credit ?? 0),
+          legalEntityId: l.legalEntityId ?? null,
+          departmentId: l.departmentId ?? null,
+          projectId: (l as any).projectId ?? null,
+          fundId: (l as any).fundId ?? null,
+        };
+      }),
+    });
+
+    const updateDraftPolicyType = resolveJournalPolicyType({
+      prismaJournalType: (dto.journalType ?? entry.journalType) as any,
+      periodType: (proposedPeriod as any)?.type ?? null,
+      reversalOfId: (entry as any).reversalOfId ?? null,
+      reference: (dto.reference ?? entry.reference ?? null) as any,
+      sourceType: (entry as any).sourceType ?? null,
+    });
+    const updateDraftGovernanceActions = new Set<string>();
+    if (updateDraftPolicyType === 'INTERCOMPANY_JOURNAL') {
+      updateDraftGovernanceActions.add('INTERCOMPANY_BALANCE_VIOLATION');
+    }
+
+    const actorLegalEntityAccess = await this.loadActorLegalEntityAccess({
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+    });
+
+    assertIntercompanyGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.CREATE,
+      mode: 'UPDATE_DRAFT',
+      entityType: 'JOURNAL_ENTRY',
+      entityId: entry.id,
+      journalType: String(dto.journalType ?? entry.journalType ?? 'STANDARD'),
+      reference: (dto.reference ?? entry.reference ?? null) as any,
+      governanceActions: Array.from(updateDraftGovernanceActions) as any,
+      escalation: (req as any)?.governanceEscalation ?? null,
+      justificationText:
+        String(req.header('x-governance-reason') ?? '').trim() || null,
+      actorLegalEntityAccess,
+      lines: dto.lines.map((l) => {
+        const acc = accountMap.get(l.accountId);
+        return {
+          lineNumber: l.lineNumber ?? null,
+          legalEntityId: l.legalEntityId ?? null,
+          debit: Number(l.debit ?? 0),
+          credit: Number(l.credit ?? 0),
+          account: {
+            accountId: l.accountId,
+            accountCode: (acc as any)?.code ?? null,
+            isIntercompanyAccount: (acc as any)?.isIntercompanyAccount ?? null,
+            intercompanyEnabled: (acc as any)?.intercompanyEnabled ?? null,
+            intercompanyRole: (acc as any)?.intercompanyRole ?? null,
+          },
+        };
+      }),
+    });
+
     const updated = await this.prisma.journalEntry.update({
       where: { id: entry.id },
       data: {
-        journalDate: new Date(dto.journalDate),
-        journalType: dto.journalType ?? entry.journalType,
-        reference: dto.reference,
-        description: dto.description,
-        budgetOverrideJustification:
-          typeof (dto as any).budgetOverrideJustification === 'string'
-            ? ((dto as any).budgetOverrideJustification ?? null)
-            : ((entry as any).budgetOverrideJustification ?? null),
-        ...(entry.status === 'REJECTED'
+        journalDate: proposedDate,
+        journalType: (dto.journalType ?? entry.journalType) as any,
+        intent: ((dto as any).intent ?? (entry as any).intent) as any,
+        intentNotes: (dto as any).intentNotes ?? (entry as any).intentNotes ?? null,
+        intentReference:
+          (dto as any).intentReference ?? (entry as any).intentReference ?? null,
+        reference: dto.reference ?? entry.reference,
+        description: dto.description ?? entry.description,
+        ...((dto as any).correctsJournalId !== undefined
           ? {
-              rejectedById: null,
-              rejectedAt: null,
+              correctsJournalId: (dto as any).correctsJournalId,
               rejectionReason: null,
             }
           : {}),
@@ -5443,7 +6829,7 @@ export class GlService {
         eventType: AuditEventType.JOURNAL_UPDATE,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: updated.id,
-        actorUserId: authz.id,
+        actorUserId: authz.realUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
         action: 'FINANCE_GL_CREATE',
@@ -5516,6 +6902,129 @@ export class GlService {
     return parked;
   }
 
+  async voidJournal(req: Request, id: string, dto: VoidJournalDto) {
+    const authz = await this.getUserAuthz(req);
+
+    const reason = String(dto?.reason ?? '').trim();
+    if (!reason) {
+      throw new BadRequestException('Void reason is required');
+    }
+    const reference = String(dto?.reference ?? '').trim() || null;
+
+    const entry = await this.prisma.journalEntry.findFirst({
+      where: { id, tenantId: authz.tenantId },
+      include: { lines: true },
+    });
+    if (!entry) {
+      throw new NotFoundException('Journal entry not found');
+    }
+
+    if (entry.status === 'POSTED') {
+      throw new BadRequestException('POSTED journals cannot be voided');
+    }
+    if (entry.status === 'VOIDED') {
+      throw new BadRequestException('Journal entry is already voided');
+    }
+
+    const allowed =
+      entry.status === 'DRAFT' ||
+      entry.status === 'PARKED' ||
+      entry.status === 'SUBMITTED' ||
+      entry.status === 'REVIEWED' ||
+      entry.status === 'REJECTED';
+    if (!allowed) {
+      throw new BadRequestException(
+        `Journal entry cannot be voided from status: ${entry.status}`,
+      );
+    }
+
+    const permissionUsed =
+      entry.status === 'REVIEWED'
+        ? PERMISSIONS.GL.JOURNAL_VOID_REVIEWED
+        : PERMISSIONS.GL.JOURNAL_VOID;
+    requirePermission(authz, permissionUsed);
+
+    await this.assertJournalSoD({
+      req,
+      authz,
+      actionType: 'VOID',
+      soDAction: 'GL_JOURNAL_VOID',
+      entry: {
+        id: entry.id,
+        createdById: entry.createdById,
+        submittedById: (entry as any).submittedById ?? null,
+        reviewedById: (entry as any).reviewedById ?? null,
+        reversalInitiatedById: (entry as any).reversalInitiatedById ?? null,
+      },
+      permissionUsed,
+    });
+
+    const now = new Date();
+    const updated = await this.prisma.journalEntry.update({
+      where: { id: entry.id },
+      data: {
+        status: 'VOIDED',
+        voidedAt: now,
+        voidedById: authz.actorUserId,
+        voidReason: reason,
+        voidReference: reference,
+      } as any,
+      include: { lines: true },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_VOIDED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: updated.id,
+        actorUserId: authz.actorUserId,
+        timestamp: new Date(),
+        outcome: 'SUCCESS' as any,
+        action: permissionUsed,
+        permissionUsed,
+        lifecycleType: 'VOID',
+        reason,
+        metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'GL_JOURNAL_VOID',
+            permissionUsed,
+            actorUserId: authz.actorUserId,
+            tenantId: authz.tenantId,
+            req,
+            changedKeys: ['status', 'voidedAt', 'voidedById', 'voidReason', 'voidReference'],
+            before: {
+              status: entry.status,
+              voidedAt: (entry as any).voidedAt ?? null,
+              voidedById: (entry as any).voidedById ?? null,
+              voidReason: (entry as any).voidReason ?? null,
+              voidReference: (entry as any).voidReference ?? null,
+            },
+            after: {
+              status: 'VOIDED',
+              voidedAt: now.toISOString(),
+              voidedById: authz.actorUserId,
+              voidReason: reason,
+              voidReference: reference,
+            },
+            escalation: (req as any)?.governanceEscalation ?? null,
+          }),
+          journalId: updated.id,
+          voidedAt: now.toISOString(),
+          voidedById: authz.actorUserId,
+          voidReason: reason,
+          voidReference: reference,
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
+        },
+      },
+      this.prisma,
+    );
+
+    return updated;
+  }
+
   async submitJournal(req: Request, id: string) {
     const authz = await this.getUserAuthz(req);
     requirePermission(authz, 'FINANCE_GL_CREATE');
@@ -5543,6 +7052,15 @@ export class GlService {
       });
     }
 
+    const evidenceLinks = await (this.prisma as any).auditEvidenceLink.findMany({
+      where: {
+        tenantId: authz.tenantId,
+        entityType: 'JOURNAL_ENTRY',
+        entityId: entry.id,
+      },
+      select: { evidenceId: true },
+    });
+
     const journalDate = new Date(entry.journalDate);
     if (Number.isNaN(journalDate.getTime())) {
       throw new BadRequestException('Invalid journalDate');
@@ -5563,29 +7081,27 @@ export class GlService {
         startDate: { lte: journalDate },
         endDate: { gte: journalDate },
       },
-      select: { id: true, status: true, name: true },
+      select: { id: true, status: true, name: true, type: true },
     });
     if (!period) {
       throw new BadRequestException(
         'Journal date is not within an open accounting period. Please choose a date in an open period.',
       );
     }
-    const periodStatus = (period as any).status as string;
-    if (periodStatus === 'CLOSED') {
-      throw new BadRequestException(
-        'This accounting period is closed. Posting is not allowed.',
-      );
-    }
-    if (periodStatus === 'SOFT_CLOSED') {
-      throw new BadRequestException(
-        'This accounting period is soft-closed. Reopen the period to allow posting.',
-      );
-    }
-    if (periodStatus !== 'OPEN') {
-      throw new BadRequestException(
-        'Journal date is not within an open accounting period. Please choose a date in an open period.',
-      );
-    }
+    assertPeriodAllowsPosting({
+      req,
+      period,
+      permissionUsed: PERMISSIONS.GL.POST,
+    });
+
+    this.assertJournalIntentRules({
+      intent: String((entry as any).intent ?? '').trim(),
+      periodType: (period as any)?.type ?? null,
+      correctsJournalId: (entry as any).correctsJournalId ?? null,
+      reversalOfId: (entry as any).reversalOfId ?? null,
+      attachments: (evidenceLinks ?? []).map((l: any) => ({ id: String(l.evidenceId) })),
+      mode: 'SUBMIT',
+    });
 
     const linesForValidation = entry.lines.map((l) => ({
       debit: Number(l.debit),
@@ -5948,6 +7464,7 @@ export class GlService {
     const now = new Date();
 
     const budgetImpact = await this.computeJournalBudgetImpact({
+      req,
       tenantId: authz.tenantId,
       entry: {
         id: entry.id,
@@ -5969,6 +7486,7 @@ export class GlService {
       })),
       stage: 'SUBMIT',
       computedAt: now,
+      permissionUsed: PERMISSIONS.GL.CREATE,
     });
 
     await this.persistJournalBudgetImpact({
@@ -6127,6 +7645,21 @@ export class GlService {
       );
     }
 
+    await this.assertJournalSoD({
+      req,
+      authz,
+      actionType: 'REVIEW',
+      soDAction: 'GL_JOURNAL_REVIEW',
+      entry: {
+        id: entry.id,
+        createdById: entry.createdById,
+        submittedById: (entry as any).submittedById ?? null,
+        reviewedById: (entry as any).reviewedById ?? null,
+        reversalInitiatedById: (entry as any).reversalInitiatedById ?? null,
+      },
+      permissionUsed: PERMISSIONS.GL.APPROVE,
+    });
+
     if (!entry.submittedById || !entry.submittedAt) {
       throw new BadRequestException({
         error: 'Corrupted workflow state',
@@ -6167,26 +7700,16 @@ export class GlService {
         'Journal date is not within an open accounting period. Please choose a date in an open period.',
       );
     }
-    const periodStatus = (period as any).status as string;
-    if (periodStatus === 'CLOSED') {
-      throw new BadRequestException(
-        'This accounting period is closed. Posting is not allowed.',
-      );
-    }
-    if (periodStatus === 'SOFT_CLOSED') {
-      throw new BadRequestException(
-        'This accounting period is soft-closed. Reopen the period to allow posting.',
-      );
-    }
-    if (periodStatus !== 'OPEN') {
-      throw new BadRequestException(
-        'Journal date is not within an open accounting period. Please choose a date in an open period.',
-      );
-    }
+    assertPeriodAllowsPosting({
+      req,
+      period,
+      permissionUsed: PERMISSIONS.GL.APPROVE,
+    });
 
     const now = new Date();
 
     const budgetImpact = await this.computeJournalBudgetImpact({
+      req,
       tenantId: authz.tenantId,
       entry: {
         id: entry.id,
@@ -6208,6 +7731,7 @@ export class GlService {
       })),
       stage: 'REVIEW',
       computedAt: now,
+      permissionUsed: PERMISSIONS.GL.APPROVE,
     });
 
     await this.persistJournalBudgetImpact({
@@ -6251,15 +7775,18 @@ export class GlService {
         });
       }
     }
-    const reviewed = await this.prisma.journalEntry.update({
-      where: { id: entry.id },
-      data: {
-        status: 'REVIEWED',
-        reviewedById: authz.actorUserId,
-        reviewedAt: now,
-      },
-      include: { lines: true },
-    });
+    const reviewed = await withGlLifecycleBypass(() =>
+      this.prisma.journalEntry.update({
+        where: { id: entry.id },
+        data: {
+          status: 'REVIEWED',
+          reviewedById: authz.actorUserId,
+          reviewedAt: now,
+          reviewMode: JournalReviewMode.MANUAL_REVIEW,
+        },
+        include: { lines: true },
+      }),
+    );
 
     const reviewAccounts = await this.prisma.account.findMany({
       where: {
@@ -6393,6 +7920,21 @@ export class GlService {
       );
     }
 
+    await this.assertJournalSoD({
+      req,
+      authz,
+      actionType: 'REJECT',
+      soDAction: 'GL_JOURNAL_REJECT',
+      entry: {
+        id: entry.id,
+        createdById: entry.createdById,
+        submittedById: (entry as any).submittedById ?? null,
+        reviewedById: (entry as any).reviewedById ?? null,
+        reversalInitiatedById: (entry as any).reversalInitiatedById ?? null,
+      },
+      permissionUsed: PERMISSIONS.GL.APPROVE,
+    });
+
     if (!entry.submittedById || !entry.submittedAt) {
       throw new BadRequestException({
         error: 'Corrupted workflow state',
@@ -6465,6 +8007,21 @@ export class GlService {
       throw new BadRequestException('Only POSTED journals can be reversed');
     }
 
+    await this.assertJournalSoD({
+      req,
+      authz,
+      actionType: 'REVERSE',
+      soDAction: 'GL_JOURNAL_REVERSE',
+      entry: {
+        id: original.id,
+        createdById: original.createdById,
+        submittedById: (original as any).submittedById ?? null,
+        reviewedById: (original as any).reviewedById ?? null,
+        reversalInitiatedById: (original as any).reversalInitiatedById ?? null,
+      },
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+    });
+
     const existingReversal =
       (original as any).reversedBy?.find(
         (j: any) => j && j.status !== 'REJECTED',
@@ -6508,45 +8065,70 @@ export class GlService {
     });
 
     let reversalDate = suggestedDate;
-    if (!period) {
-      const nextOpen = await this.prisma.accountingPeriod.findFirst({
+    const resolveNextAllowedPostingPeriodStartDate = async (
+      fromDate: Date,
+    ): Promise<Date | null> => {
+      const candidates = await this.prisma.accountingPeriod.findMany({
         where: {
           tenantId: authz.tenantId,
-          status: 'OPEN',
-          startDate: { gte: suggestedDate },
+          endDate: { gte: fromDate },
         },
         orderBy: { startDate: 'asc' },
-        select: { startDate: true },
+        select: {
+          id: true,
+          status: true,
+          name: true,
+          startDate: true,
+        },
       });
-      if (!nextOpen) {
+
+      for (const p of candidates) {
+        if (p.startDate < fromDate) continue;
+        try {
+          assertPeriodAllowsPosting({
+            req,
+            period: p,
+            permissionUsed: PERMISSIONS.GL.FINAL_POST,
+          });
+          return p.startDate;
+        } catch {
+          // keep scanning
+        }
+      }
+
+      return null;
+    };
+    if (!period) {
+      const nextAllowed = await resolveNextAllowedPostingPeriodStartDate(
+        suggestedDate,
+      );
+      if (!nextAllowed) {
         throw new ForbiddenException({
           error: 'Reversal blocked by accounting period control',
           reason:
-            'No OPEN accounting period exists for the reversal date or after it',
+            'No accounting period allows posting for the reversal date or after it',
         });
       }
-      reversalDate = nextOpen.startDate;
+      reversalDate = nextAllowed;
     } else {
       try {
-        assertCanPost(period.status, { periodName: period.name });
-      } catch {
-        const nextOpen = await this.prisma.accountingPeriod.findFirst({
-          where: {
-            tenantId: authz.tenantId,
-            status: 'OPEN',
-            startDate: { gte: suggestedDate },
-          },
-          orderBy: { startDate: 'asc' },
-          select: { startDate: true },
+        assertPeriodAllowsPosting({
+          req,
+          period,
+          permissionUsed: PERMISSIONS.GL.FINAL_POST,
         });
-        if (!nextOpen) {
+      } catch {
+        const nextAllowed = await resolveNextAllowedPostingPeriodStartDate(
+          suggestedDate,
+        );
+        if (!nextAllowed) {
           throw new ForbiddenException({
             error: 'Reversal blocked by accounting period control',
             reason:
-              'No OPEN accounting period exists for the reversal date or after it',
+              'No accounting period allows posting for the reversal date or after it',
           });
         }
-        reversalDate = nextOpen.startDate;
+        reversalDate = nextAllowed;
       }
     }
 
@@ -6564,24 +8146,21 @@ export class GlService {
       );
     }
     try {
-      assertCanPost((effectivePeriod as any).status);
+      assertPeriodAllowsPosting({
+        req,
+        period: effectivePeriod,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      });
     } catch {
-      const effectiveStatus = (effectivePeriod as any)?.status as
-        | string
-        | undefined;
-      if (effectiveStatus === PeriodStatus.CLOSED) {
-        throw new BadRequestException(
-          'This accounting period is closed. Posting is not allowed.',
-        );
-      }
-      if (effectiveStatus === PeriodStatus.SOFT_CLOSED) {
-        throw new BadRequestException(
-          'This accounting period is soft-closed. Reopen the period to allow posting.',
-        );
-      }
-      throw new BadRequestException(
-        'Journal date is not within an open accounting period. Please choose a date in an open period.',
+      const nextAllowed = await resolveNextAllowedPostingPeriodStartDate(
+        reversalDate,
       );
+      if (!nextAllowed) {
+        throw new BadRequestException(
+          'Journal date is not within an open accounting period. Please choose a date in an open period.',
+        );
+      }
+      reversalDate = nextAllowed;
     }
 
     if ((effectivePeriod as GlScopedProps).type === 'OPENING') {
@@ -6605,16 +8184,22 @@ export class GlService {
     ] as string[];
 
     const [accounts, projects] = await Promise.all([
-      this.prisma.account.findMany({
+      (this.prisma.account.findMany({
         where: { tenantId: authz.tenantId, id: { in: accountIds } },
         select: {
           id: true,
+          code: true,
           type: true,
           isControlAccount: true,
+          isCashEquivalent: true,
+          isIntercompanyAccount: true,
+          intercompanyEnabled: true,
+          intercompanyRole: true,
+          requiresDepartment: true,
           requiresProject: true,
           requiresFund: true,
-        },
-      }),
+        } as any,
+      }) as any) as Promise<any[]>,
       projectIds.length
         ? this.prisma.project.findMany({
             where: { tenantId: authz.tenantId, id: { in: projectIds } },
@@ -6622,7 +8207,7 @@ export class GlService {
           })
         : Promise.resolve([]),
     ]);
-    const accountById = new Map(accounts.map((a) => [a.id, a] as const));
+    const accountById = new Map<string, any>((accounts as any[]).map((a) => [a.id, a] as const));
     const projectById = new Map(
       (projects as any[]).map((p) => [p.id, p] as const),
     );
@@ -6683,6 +8268,131 @@ export class GlService {
       })),
     );
 
+    assertJournalTypePolicy({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      mode: 'REVERSE',
+      journalDate: reversalDate,
+      prismaJournalType: 'REVERSING',
+      periodType: (effectivePeriod as any)?.type ?? null,
+      reversalOfId: original.id,
+      reference:
+        dto.reference ??
+        (original.journalNumber
+          ? `REVERSAL_OF:${original.journalNumber}`
+          : `REVERSAL_OF:${original.id}`),
+      description:
+        dto.description ??
+        (original.description
+          ? `Reversal: ${original.description}`
+          : 'Reversal journal'),
+      sourceType: null,
+      sourceId: null,
+      lines: reversalLines.map((l) => ({
+        accountId: String((l as any).accountId),
+        legalEntityId: (l as any).legalEntityId ?? null,
+        departmentId: (l as any).departmentId ?? null,
+        projectId: (l as any).projectId ?? null,
+        fundId: (l as any).fundId ?? null,
+      })),
+    });
+
+    assertCombinationGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      mode: 'REVERSE',
+      module: 'GL',
+      journalDate: reversalDate,
+      prismaJournalType: 'REVERSING',
+      periodType: (effectivePeriod as any)?.type ?? null,
+      reversalOfId: original.id,
+      reference:
+        dto.reference ??
+        (original.journalNumber
+          ? `REVERSAL_OF:${original.journalNumber}`
+          : `REVERSAL_OF:${original.id}`),
+      description:
+        dto.description ??
+        (original.description
+          ? `Reversal: ${original.description}`
+          : 'Reversal journal'),
+      sourceType: null,
+      sourceId: null,
+      lines: reversalLines.map((l) => {
+        const accountId = String((l as any).accountId);
+        const acc = accountById.get(accountId);
+        return {
+          lineNumber: (l as any).lineNumber ?? null,
+          accountId,
+          accountCode: (acc as any)?.code ?? null,
+          accountType: (acc as any)?.type ?? null,
+          isControlAccount: Boolean((acc as any)?.isControlAccount),
+          isCashEquivalent: Boolean((acc as any)?.isCashEquivalent),
+          requiresDepartment: Boolean((acc as any)?.requiresDepartment),
+          requiresProject: Boolean((acc as any)?.requiresProject),
+          requiresFund: Boolean((acc as any)?.requiresFund),
+          debit: Number((l as any).debit ?? 0),
+          credit: Number((l as any).credit ?? 0),
+          legalEntityId: (l as any).legalEntityId ?? null,
+          departmentId: (l as any).departmentId ?? null,
+          projectId: (l as any).projectId ?? null,
+          fundId: (l as any).fundId ?? null,
+        };
+      }),
+    });
+
+    const reversalIntercompanyActions = new Set<string>();
+    const anyIntercompanyAccount = reversalLines.some((l: any) => {
+      const acc = accountById.get(String(l.accountId));
+      return Boolean((acc as any)?.intercompanyEnabled) && Boolean((acc as any)?.isIntercompanyAccount);
+    });
+    if (anyIntercompanyAccount) reversalIntercompanyActions.add('INTERCOMPANY_BALANCE_VIOLATION');
+
+    assertIntercompanyGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.realUserId,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      mode: 'REVERSE',
+      entityType: 'JOURNAL_ENTRY',
+      entityId: original.id,
+      journalType: 'REVERSING',
+      reference:
+        dto.reference ??
+        (original.journalNumber
+          ? `REVERSAL_OF:${original.journalNumber}`
+          : `REVERSAL_OF:${original.id}`),
+      governanceActions: Array.from(reversalIntercompanyActions) as any,
+      escalation: (req as any)?.governanceEscalation ?? null,
+      justificationText:
+        String(req.header('x-governance-reason') ?? '').trim() || null,
+      actorLegalEntityAccess: await this.loadActorLegalEntityAccess({
+        tenantId: authz.tenantId,
+        actorUserId: authz.realUserId,
+      }),
+      lines: reversalLines.map((l: any) => {
+        const accountId = String(l.accountId);
+        const acc = accountById.get(accountId);
+        return {
+          lineNumber: l.lineNumber ?? null,
+          legalEntityId: l.legalEntityId ?? null,
+          debit: Number(l.debit ?? 0),
+          credit: Number(l.credit ?? 0),
+          account: {
+            accountId,
+            accountCode: (acc as any)?.code ?? null,
+            isIntercompanyAccount: (acc as any)?.isIntercompanyAccount ?? null,
+            intercompanyEnabled: (acc as any)?.intercompanyEnabled ?? null,
+            intercompanyRole: (acc as any)?.intercompanyRole ?? null,
+          },
+        };
+      }),
+    });
+
     const reason = (dto?.reason ?? '').trim();
     if (!reason) {
       throw new BadRequestException('Reversal reason is required');
@@ -6695,6 +8405,9 @@ export class GlService {
         tenantId: authz.tenantId,
         journalDate: reversalDate,
         journalType: 'REVERSING',
+        intent: 'REVERSAL' as any,
+        intentNotes: String((dto as any)?.reason ?? '').trim() || null,
+        intentReference: original.journalNumber ? String(original.journalNumber) : original.id,
         reference:
           dto.reference ??
           (original.journalNumber
@@ -6792,8 +8505,65 @@ export class GlService {
 
     return this.postJournalCore({
       prisma: this.prisma,
+      req,
       authz,
       id,
+    });
+  }
+
+  async postJournalOverride(
+    req: Request,
+    id: string,
+    dto: { overrideSessionId?: string },
+  ) {
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, PERMISSIONS.GL.OVERRIDE_POST);
+
+    const overrideSessionId = String(dto?.overrideSessionId ?? '').trim();
+    if (!overrideSessionId) {
+      throw new BadRequestException('overrideSessionId is required');
+    }
+
+    const session = await this.overrideSessions.assertActiveApproved({
+      tenantId: authz.tenantId,
+      sessionId: overrideSessionId,
+    });
+
+    if (String((session as any).overrideCode ?? '') !== 'GL_POST_OVERRIDE') {
+      throw new BadRequestException('Override session is not valid for GL override posting');
+    }
+
+    const sessionReason = String((session as any).reason ?? '').trim();
+    const sessionJustification = String((session as any).justification ?? '').trim();
+    if (sessionReason.length < 3) {
+      throw new BadRequestException('Override session is missing a reason');
+    }
+    if (sessionJustification.length < 3) {
+      throw new BadRequestException('Override session is missing a justification');
+    }
+
+    const escalationType = String((session as any).escalationType ?? '').trim();
+    const escalationReason = String((session as any).escalationReason ?? '').trim();
+    const overrideEscalation = escalationType
+      ? { type: escalationType, reason: escalationReason || sessionReason }
+      : { type: 'MODULE_OVERRIDE', reason: sessionReason };
+
+    if (!(req as any).governanceEscalation) {
+      (req as any).governanceEscalation = overrideEscalation;
+    }
+
+    return this.postJournalCore({
+      prisma: this.prisma,
+      req,
+      authz,
+      id,
+      override: {
+        reason: sessionReason,
+        justification: sessionJustification,
+        overrideSessionId,
+        escalation: overrideEscalation,
+        permissionUsed: PERMISSIONS.GL.OVERRIDE_POST,
+      },
     });
   }
 
@@ -6807,6 +8577,7 @@ export class GlService {
 
     return this.postJournalCore({
       prisma: params.tx,
+      req: params.req,
       authz,
       id: params.id,
     });
@@ -6814,10 +8585,18 @@ export class GlService {
 
   private async postJournalCore(params: {
     prisma: any;
+    req: Request;
     authz: any;
     id: string;
+    override?: {
+      reason: string;
+      justification?: string;
+      overrideSessionId?: string;
+      escalation?: { type?: string; reason?: string };
+      permissionUsed: string;
+    };
   }) {
-    const { prisma, authz, id } = params;
+    const { prisma, req, authz, id } = params;
 
     const entry = await prisma.journalEntry.findFirst({
       where: {
@@ -6841,11 +8620,231 @@ export class GlService {
       );
     }
 
+    const evidenceLinks = await (prisma as any).auditEvidenceLink.findMany({
+      where: {
+        tenantId: authz.tenantId,
+        entityType: 'JOURNAL_ENTRY',
+        entityId: entry.id,
+      },
+      select: {
+        evidence: {
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+            evidenceCategory: true,
+          },
+        },
+      },
+    });
+    const attachments = (evidenceLinks ?? []).map((l: any) => l.evidence);
+
+    const escalation = (req as any)?.governanceEscalation as
+      | { type?: string; reason?: string }
+      | undefined;
+
+    const policyType = resolveJournalPolicyType({
+      prismaJournalType: entry.journalType,
+      periodType: null,
+      reversalOfId: (entry as any).reversalOfId ?? null,
+      reference: (entry as any).reference ?? null,
+      sourceType: (entry as any).sourceType ?? null,
+    });
+    const policy = getJournalTypePolicy(policyType);
+
+    const governanceActions = new Set<string>();
+    if (params.override) governanceActions.add('GL_JOURNAL_OVERRIDE_POST');
+    if (escalation?.type === 'RETRO_POSTING_OVERRIDE') governanceActions.add('RETRO_POSTING_OVERRIDE');
+    if (escalation?.type === 'PERIOD_SOFT_CLOSE_POST_OVERRIDE') governanceActions.add('PERIOD_SOFT_CLOSE_POST_OVERRIDE');
+    if (policy.requiredEvidence?.required) governanceActions.add('JOURNAL_TYPE_EVIDENCE_REQUIRED');
+    if (policyType === 'INTERCOMPANY_JOURNAL') governanceActions.add('INTERCOMPANY_BALANCE_VIOLATION');
+
+    if (params.override?.overrideSessionId) {
+      const session = await this.overrideSessions.assertActiveApproved({
+        tenantId: authz.tenantId,
+        sessionId: params.override.overrideSessionId,
+      });
+
+      assertOverrideGovernance({
+        req,
+        tenantId: authz.tenantId,
+        actorUserId: authz.actorUserId,
+        permissionUsed: params.override.permissionUsed,
+        entryPoint: 'GL_JOURNAL_POST_OVERRIDE',
+        overrideCode: 'GL_POST_OVERRIDE',
+        reason: params.override.reason,
+        justificationText: params.override.justification ?? null,
+        escalation: escalation ?? null,
+        attachments: (attachments ?? []).map((a: any) => ({
+          id: String(a.id),
+          evidenceCategory: (a as any).evidenceCategory ?? null,
+          fileName: (a as any).fileName ?? null,
+        })),
+        actorRoleCodes: await this.loadActorRoleCodes({
+          tenantId: authz.tenantId,
+          actorUserId: authz.actorUserId,
+        }),
+        approval: {
+          status: String((session as any).status) === 'APPROVED' ? 'APPROVED' : 'PENDING',
+          approvedById: (session as any).approvedById ?? null,
+          approvedAt: (session as any).approvedAt ?? null,
+        },
+        overrideSession: {
+          id: (session as any).id,
+          overrideCode: 'GL_POST_OVERRIDE',
+          tenantId: authz.tenantId,
+          actorUserId: authz.actorUserId,
+          governanceDomain: 'FINANCIAL_GOVERNANCE',
+          severity: 'CRITICAL',
+          reason: String((session as any).reason ?? ''),
+          justification: String((session as any).justification ?? ''),
+          status: String((session as any).status) as any,
+          createdAt: (session as any).createdAt,
+          expiresAt: (session as any).expiresAt,
+          escalation: escalation ?? null,
+          approval: {
+            status: String((session as any).status) === 'APPROVED' ? 'APPROVED' : 'PENDING',
+            approvedById: (session as any).approvedById ?? null,
+            approvedAt: (session as any).approvedAt ?? null,
+          },
+          evidence: null,
+        },
+      });
+    }
+
+    assertEvidenceGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.actorUserId,
+      permissionUsed: params.override?.permissionUsed ?? PERMISSIONS.GL.FINAL_POST,
+      mode: params.override ? 'JOURNAL_POST_OVERRIDE' : 'JOURNAL_POST',
+      entityType: 'JOURNAL_ENTRY',
+      entityId: entry.id,
+      journalType: String(entry.journalType ?? ''),
+      governanceActions: Array.from(governanceActions) as any,
+      escalation: escalation ?? null,
+      justificationText: params.override?.justification ?? params.override?.reason ?? null,
+      attachments,
+    });
+
+    const icAccountIds = [
+      ...new Set((entry.lines ?? []).map((l: any) => l.accountId).filter(Boolean)),
+    ] as string[];
+    const icAccounts: any[] = icAccountIds.length
+      ? await prisma.account.findMany({
+          where: { tenantId: authz.tenantId, id: { in: icAccountIds } },
+          select: {
+            id: true,
+            code: true,
+            isIntercompanyAccount: true,
+            intercompanyEnabled: true,
+            intercompanyRole: true,
+          },
+        })
+      : [];
+    const icAccountById = new Map<string, any>(
+      (icAccounts ?? []).map((a: any) => [a.id, a] as const),
+    );
+
+    assertIntercompanyGovernance({
+      req,
+      tenantId: authz.tenantId,
+      actorUserId: authz.actorUserId,
+      permissionUsed: params.override?.permissionUsed ?? PERMISSIONS.GL.FINAL_POST,
+      mode: 'POST',
+      entityType: 'JOURNAL_ENTRY',
+      entityId: entry.id,
+      journalType: String(entry.journalType ?? ''),
+      reference: (entry as any).reference ?? null,
+      governanceActions: Array.from(governanceActions) as any,
+      escalation: escalation ?? null,
+      justificationText: params.override?.reason ?? null,
+      actorLegalEntityAccess: await this.loadActorLegalEntityAccess({
+        tenantId: authz.tenantId,
+        actorUserId: authz.actorUserId,
+      }),
+      lines: (entry.lines ?? []).map((l: any) => {
+        const acc = icAccountById.get(l.accountId);
+        return {
+          lineNumber: l.lineNumber ?? null,
+          legalEntityId: l.legalEntityId ?? null,
+          debit: Number(l.debit ?? 0),
+          credit: Number(l.credit ?? 0),
+          account: {
+            accountId: l.accountId,
+            accountCode: (acc as any)?.code ?? null,
+            isIntercompanyAccount: (acc as any)?.isIntercompanyAccount ?? null,
+            intercompanyEnabled: (acc as any)?.intercompanyEnabled ?? null,
+            intercompanyRole: (acc as any)?.intercompanyRole ?? null,
+          },
+        };
+      }),
+    });
+
     const isReversal =
       entry.journalType === 'REVERSING' && !!(entry as any).reversalOfId;
     const reversalInitiatorId = isReversal
       ? ((entry as any).reversalInitiatedById ?? entry.createdById ?? null)
       : null;
+
+    try {
+      await this.assertJournalSoD({
+        req,
+        authz,
+        actionType: 'POST',
+        soDAction: 'GL_JOURNAL_POST',
+        entry: {
+          id: entry.id,
+          createdById: entry.createdById,
+          submittedById: (entry as any).submittedById ?? null,
+          reviewedById: (entry as any).reviewedById ?? null,
+          reversalInitiatedById: reversalInitiatorId,
+        },
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      });
+    } catch (e: any) {
+      if (!params.override) throw e;
+
+      await writeAuditEventWithPrisma(
+        {
+          tenantId: authz.tenantId,
+          eventType: AuditEventType.GL_JOURNAL_OVERRIDE_POSTED,
+          entityType: AuditEntityType.JOURNAL_ENTRY,
+          entityId: entry.id,
+          actorUserId: authz.actorUserId,
+          timestamp: new Date(),
+          outcome: 'SUCCESS' as any,
+          action: 'FINANCE_GL_FINAL_POST',
+          permissionUsed: params.override.permissionUsed,
+          lifecycleType: 'POST_OVERRIDE',
+          reason: params.override.reason,
+          metadata: {
+            governance: buildGovernanceAuditMetadata({
+              actionType: 'GL_JOURNAL_OVERRIDE_POST',
+              permissionUsed: params.override.permissionUsed,
+              actorUserId: authz.actorUserId,
+              tenantId: authz.tenantId,
+              req,
+              changedKeys: ['status'],
+              before: { status: entry.status },
+              after: { status: 'POSTED' },
+              escalation: (req as any)?.governanceEscalation ?? {
+                type: 'MODULE_OVERRIDE',
+                reason: params.override.reason,
+              },
+            }),
+            journalId: entry.id,
+            overrideSessionId: params.override.overrideSessionId ?? null,
+            overrideReason: params.override.reason,
+            realUserId: authz.realUserId,
+            actorUserId: authz.actorUserId,
+            delegationId: authz.delegationId ?? null,
+          },
+        },
+        this.prisma,
+      );
+    }
 
 
     this.assertBalanced(
@@ -6895,7 +8894,11 @@ export class GlService {
     }
 
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req: params.req,
+        period,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      });
     } catch {
       await writeAuditEventWithPrisma(
         {
@@ -6923,6 +8926,154 @@ export class GlService {
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
         reason: `Accounting period is not OPEN: ${period.name}`,
+      });
+    }
+
+    const tenantControls = await (prisma.tenant as any).findUnique({
+      where: { id: authz.tenantId },
+      select: { retroPostToleranceDays: true },
+    });
+    const retroPostToleranceDays = Math.max(
+      0,
+      Math.floor(Number((tenantControls as any)?.retroPostToleranceDays ?? 0)),
+    );
+
+    assertRetroPostingWithinToleranceOrEscalated({
+      req: params.req,
+      postingDate: new Date(entry.journalDate),
+      toleranceDays: retroPostToleranceDays,
+      escalationType: 'RETRO_POSTING_OVERRIDE',
+    });
+
+    const entryPoint = params.override
+      ? ('GL_JOURNAL_POST_OVERRIDE' as const)
+      : ('GL_JOURNAL_POST' as const);
+
+    const periodOverrideSessionId = String(
+      (params.req as any)?.governanceOverrideSessionIdPeriod ?? '',
+    ).trim();
+    if (periodOverrideSessionId) {
+      const policy = getOverridePolicy('PERIOD_SOFT_CLOSE_OVERRIDE');
+      const session = await this.overrideSessions.assertActiveApproved({
+        tenantId: authz.tenantId,
+        sessionId: periodOverrideSessionId,
+      });
+
+      if (String((session as any).overrideCode ?? '') !== 'PERIOD_SOFT_CLOSE_OVERRIDE') {
+        throw new BadRequestException(
+          'Override session is not valid for SOFT_CLOSED period posting',
+        );
+      }
+
+      const reason = String((params.req.header('x-governance-reason') ?? '') as any).trim();
+
+      assertOverrideGovernance({
+        req,
+        tenantId: authz.tenantId,
+        actorUserId: authz.actorUserId,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        entryPoint,
+        overrideCode: 'PERIOD_SOFT_CLOSE_OVERRIDE',
+        reason,
+        justificationText: reason,
+        escalation: (params.req as any)?.governanceEscalation ?? null,
+        attachments: (attachments ?? []).map((a: any) => ({
+          id: String(a.id),
+          evidenceCategory: (a as any).evidenceCategory ?? null,
+          fileName: (a as any).fileName ?? null,
+        })),
+        actorRoleCodes: await this.loadActorRoleCodes({
+          tenantId: authz.tenantId,
+          actorUserId: authz.actorUserId,
+        }),
+        approval: {
+          status: 'APPROVED',
+          approvedById: (session as any).approvedById ?? null,
+          approvedAt: (session as any).approvedAt ?? null,
+        },
+        overrideSession: {
+          id: (session as any).id,
+          overrideCode: 'PERIOD_SOFT_CLOSE_OVERRIDE',
+          tenantId: authz.tenantId,
+          actorUserId: authz.actorUserId,
+          governanceDomain: policy.governanceDomain,
+          severity: policy.severity,
+          reason: String((session as any).reason ?? ''),
+          justification: String((session as any).justification ?? ''),
+          status: String((session as any).status) as any,
+          createdAt: (session as any).createdAt,
+          expiresAt: (session as any).expiresAt,
+          escalation: (params.req as any)?.governanceEscalation ?? null,
+          approval: {
+            status: 'APPROVED',
+            approvedById: (session as any).approvedById ?? null,
+            approvedAt: (session as any).approvedAt ?? null,
+          },
+          evidence: null,
+        },
+      });
+    }
+
+    const retroOverrideSessionId = String(
+      (params.req as any)?.governanceOverrideSessionIdRetro ?? '',
+    ).trim();
+    if (retroOverrideSessionId) {
+      const policy = getOverridePolicy('RETRO_POSTING_OVERRIDE');
+      const session = await this.overrideSessions.assertActiveApproved({
+        tenantId: authz.tenantId,
+        sessionId: retroOverrideSessionId,
+      });
+
+      if (String((session as any).overrideCode ?? '') !== 'RETRO_POSTING_OVERRIDE') {
+        throw new BadRequestException('Override session is not valid for retro posting');
+      }
+
+      const reason = String((params.req.header('x-governance-reason') ?? '') as any).trim();
+
+      assertOverrideGovernance({
+        req,
+        tenantId: authz.tenantId,
+        actorUserId: authz.actorUserId,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        entryPoint,
+        overrideCode: 'RETRO_POSTING_OVERRIDE',
+        reason,
+        justificationText: reason,
+        escalation: (params.req as any)?.governanceEscalation ?? null,
+        attachments: (attachments ?? []).map((a: any) => ({
+          id: String(a.id),
+          evidenceCategory: (a as any).evidenceCategory ?? null,
+          fileName: (a as any).fileName ?? null,
+        })),
+        actorRoleCodes: await this.loadActorRoleCodes({
+          tenantId: authz.tenantId,
+          actorUserId: authz.actorUserId,
+        }),
+        approval: {
+          status: 'APPROVED',
+          approvedById: (session as any).approvedById ?? null,
+          approvedAt: (session as any).approvedAt ?? null,
+        },
+        overrideSession: {
+          id: (session as any).id,
+          overrideCode: 'RETRO_POSTING_OVERRIDE',
+          tenantId: authz.tenantId,
+          actorUserId: authz.actorUserId,
+          governanceDomain: policy.governanceDomain,
+          severity: policy.severity,
+          reason: String((session as any).reason ?? ''),
+          justification: String((session as any).justification ?? ''),
+          status: String((session as any).status) as any,
+          createdAt: (session as any).createdAt,
+          expiresAt: (session as any).expiresAt,
+          escalation: (params.req as any)?.governanceEscalation ?? null,
+          approval: {
+            status: 'APPROVED',
+            approvedById: (session as any).approvedById ?? null,
+            approvedAt: (session as any).approvedAt ?? null,
+          },
+          evidence: null,
+        },
       });
     }
 
@@ -7068,6 +9219,7 @@ export class GlService {
     const now = new Date();
 
     const budgetImpact = await this.computeJournalBudgetImpact({
+      req: params.req,
       tenantId: authz.tenantId,
       entry: {
         id: entry.id,
@@ -7089,6 +9241,7 @@ export class GlService {
       })),
       stage: 'POST',
       computedAt: now,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
     });
 
     await this.persistJournalBudgetImpact({
@@ -7174,16 +9327,59 @@ export class GlService {
     };
 
     const updated = await runAsTransaction(async (tx) => {
+      const cfg = await (tx.tenantJournalNumberingConfig as any).findUnique({
+        where: { tenantId: authz.tenantId },
+        select: { scope: true },
+      });
+
+      const tenantRow = await (tx.tenant as any).findUnique({
+        where: { id: authz.tenantId },
+        select: { financialYearStartMonth: true },
+      });
+
+      const scope = String(cfg?.scope ?? 'TENANT_GLOBAL') as
+        | 'TENANT_GLOBAL'
+        | 'LEGAL_ENTITY'
+        | 'FISCAL_YEAR'
+        | 'LEGAL_ENTITY_FISCAL_YEAR';
+
+      const distinctLegalEntities = new Set<string>(
+        (entry.lines ?? [])
+          .map((l: any) => String(l.legalEntityId ?? '').trim())
+          .filter(Boolean),
+      );
+      const legalEntityId =
+        distinctLegalEntities.size === 1 ? Array.from(distinctLegalEntities)[0] : null;
+      if ((scope === 'LEGAL_ENTITY' || scope === 'LEGAL_ENTITY_FISCAL_YEAR') && distinctLegalEntities.size !== 1) {
+        throw new BadRequestException('Journal has multiple legal entities; cannot use legal-entity journal numbering scope');
+      }
+
+      const fyStartMonth =
+        typeof tenantRow?.financialYearStartMonth === 'number' && tenantRow.financialYearStartMonth >= 1 && tenantRow.financialYearStartMonth <= 12
+          ? tenantRow.financialYearStartMonth
+          : 1;
+      const fiscalYearLabel = this.computeFiscalYearLabel({
+        financialYearStartMonth: fyStartMonth,
+        date: period?.startDate ? new Date(period.startDate) : new Date(entry.journalDate),
+      });
+
+      const sequenceName = this.buildJournalSequenceName({
+        scope,
+        tenantId: authz.tenantId,
+        legalEntityId,
+        fiscalYearLabel,
+      });
+
       const counter = await (tx.tenantSequenceCounter as any).upsert({
         where: {
           tenantId_name: {
             tenantId: authz.tenantId,
-            name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
+            name: sequenceName,
           },
         },
         create: {
           tenantId: authz.tenantId,
-          name: this.JOURNAL_NUMBER_SEQUENCE_NAME,
+          name: sequenceName,
           value: 0,
         },
         update: {},
@@ -7196,20 +9392,22 @@ export class GlService {
         select: { value: true },
       });
 
-      return (tx.journalEntry as any).update({
-        where: { id: entry.id },
-        data: {
-          status: 'POSTED',
-          postedById: authz.id,
-          postedAt: now,
-          periodId: period.id,
-          journalNumber: bumped.value,
-          riskScore: postRisk.score,
-          riskFlags: postRisk.flags as any,
-          riskComputedAt: now,
-        } as any,
-        include: { lines: true },
-      });
+      return await withGlLifecycleBypass(() =>
+        (tx.journalEntry as any).update({
+          where: { id: entry.id },
+          data: {
+            status: 'POSTED',
+            postedById: authz.id,
+            postedAt: now,
+            periodId: period.id,
+            journalNumber: bumped.value,
+            riskScore: postRisk.score,
+            riskFlags: postRisk.flags as any,
+            riskComputedAt: now,
+          },
+          include: { lines: true },
+        })
+      );
     });
 
     await writeAuditEventWithPrisma(
@@ -7255,6 +9453,42 @@ export class GlService {
       },
       this.prisma,
     );
+
+    if (params.override?.overrideSessionId) {
+      await this.overrideSessions.markExecuted({
+        tenantId: authz.tenantId,
+        sessionId: params.override.overrideSessionId,
+        executedById: authz.actorUserId,
+        req,
+        permissionUsed: params.override.permissionUsed,
+      });
+    }
+
+    const sessionIdPeriod = String(
+      (params.req as any)?.governanceOverrideSessionIdPeriod ?? '',
+    ).trim();
+    if (sessionIdPeriod) {
+      await this.overrideSessions.markExecuted({
+        tenantId: authz.tenantId,
+        sessionId: sessionIdPeriod,
+        executedById: authz.actorUserId,
+        req,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      });
+    }
+
+    const sessionIdRetro = String(
+      (params.req as any)?.governanceOverrideSessionIdRetro ?? '',
+    ).trim();
+    if (sessionIdRetro) {
+      await this.overrideSessions.markExecuted({
+        tenantId: authz.tenantId,
+        sessionId: sessionIdRetro,
+        executedById: authz.actorUserId,
+        req,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      });
+    }
 
     if (isReversal) {
       await writeAuditEventWithPrisma(
@@ -7489,7 +9723,11 @@ export class GlService {
     // Canonical period semantics for posting (OPEN only) while preserving the existing
     // BadRequestException wording for Opening Balances posting.
     try {
-      assertCanPost(period.status);
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      });
     } catch {
       const periodStatus = (period as any).status as string;
       if (periodStatus === PeriodStatus.CLOSED) {
@@ -7544,20 +9782,21 @@ export class GlService {
       })),
     });
 
-    const posted = await this.prisma.journalEntry.update({
-      where: { id: journal.id },
-      data: {
-        status: 'POSTED',
-        postedById: user.id,
-        postedAt: new Date(),
-      },
-      include: { lines: true },
+    await this.systemReviewJournal(req, {
+      prisma: this.prisma,
+      journalId: journal.id,
+      sourceType: 'OPENING_BALANCES',
+      sourceId: dto.cutoverDate,
+      permissionUsed: PERMISSIONS.GL.FINAL_POST,
+      validateSource: async () => true,
     });
+
+    const posted = await this.postJournal(req, journal.id);
 
     await this.prisma.accountingPeriod.update({
       where: { id: period.id },
       data: {
-        status: 'CLOSED',
+        status: 'HARD_CLOSED',
         closedById: user.id,
         closedAt: new Date(),
       },
@@ -7566,6 +9805,80 @@ export class GlService {
     this.cache.clearTenant(tenant.id);
 
     return { journal: posted, openingPeriodClosed: true };
+  }
+
+  async systemReviewJournal(
+    req: Request,
+    params: {
+      prisma?: any;
+      journalId: string;
+      sourceType: string;
+      sourceId: string;
+      permissionUsed: string;
+      validateSource: () => Promise<boolean>;
+    },
+  ) {
+    const authz = await this.getUserAuthz(req);
+    requirePermission(authz, params.permissionUsed);
+
+    const prisma = params.prisma ?? this.prisma;
+
+    const ok = await params.validateSource();
+    if (!ok) {
+      throw new BadRequestException('Source workflow validation failed');
+    }
+
+    const entry = await prisma.journalEntry.findFirst({
+      where: { id: params.journalId, tenantId: authz.tenantId },
+      select: { id: true, status: true, reviewedById: true, reviewedAt: true },
+    });
+    if (!entry) throw new NotFoundException('Journal entry not found');
+    if (entry.status !== 'SUBMITTED') {
+      throw new BadRequestException(
+        `Journal entry cannot be system-reviewed from status: ${entry.status}`,
+      );
+    }
+
+    const now = new Date();
+
+    const reviewed = await withGlLifecycleBypass(() =>
+      prisma.journalEntry.update({
+        where: { id: entry.id },
+        data: {
+          status: 'REVIEWED',
+          reviewedById: authz.actorUserId,
+          reviewedAt: now,
+          reviewMode: JournalReviewMode.SYSTEM_REVIEW,
+        },
+      }),
+    );
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: authz.tenantId,
+        eventType: AuditEventType.GL_JOURNAL_SYSTEM_REVIEWED,
+        entityType: AuditEntityType.JOURNAL_ENTRY,
+        entityId: reviewed.id,
+        actorUserId: authz.actorUserId,
+        timestamp: now,
+        outcome: 'SUCCESS' as any,
+        action: params.permissionUsed,
+        permissionUsed: params.permissionUsed,
+        lifecycleType: 'SYSTEM_REVIEW',
+        metadata: {
+          journalId: reviewed.id,
+          sourceType: params.sourceType,
+          sourceId: params.sourceId,
+          reviewMode: 'SYSTEM_REVIEW',
+          realUserId: authz.realUserId,
+          actorUserId: authz.actorUserId,
+          delegationId: authz.delegationId ?? null,
+        },
+      },
+      prisma,
+    );
+
+    return reviewed;
   }
 
   async listJournals(
@@ -7960,7 +10273,7 @@ export class GlService {
       where: {
         tenantId: params.tenantId,
         type: 'OPENING',
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },

@@ -4,6 +4,8 @@ import type { Request } from 'express';
 import { getEffectiveActorContext } from '../auth/actor-context';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { buildGovernanceAuditMetadata } from '../governance/governance-enforcement';
 import type { CreateDelegationDto } from './dto/create-delegation.dto';
 import type { ListDelegationsQueryDto } from './dto/list-delegations-query.dto';
 
@@ -136,6 +138,17 @@ export class DelegationsService {
         outcome: 'SUCCESS' as any,
         reason: 'delegation_created',
         metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'DELEGATION_CHANGE',
+            permissionUsed: PERMISSIONS.SECURITY.DELEGATION_MANAGE,
+            actorUserId: actorCtx.realUserId,
+            tenantId: actorCtx.tenantId,
+            req,
+            changedKeys: ['delegations'],
+            before: null,
+            after: created,
+            escalation: (req as any)?.governanceEscalation ?? undefined,
+          }),
           delegationId: created.id,
           createdByUserId: actorCtx.realUserId,
           delegatorUserId,
@@ -145,6 +158,7 @@ export class DelegationsService {
           scope: created.scope,
           reason: created.reason ?? null,
         },
+        permissionUsed: PERMISSIONS.SECURITY.DELEGATION_MANAGE,
       },
       this.prisma,
     );
@@ -255,12 +269,24 @@ export class DelegationsService {
         outcome: 'SUCCESS' as any,
         reason: 'delegation_revoked',
         metadata: {
+          governance: buildGovernanceAuditMetadata({
+            actionType: 'DELEGATION_CHANGE',
+            permissionUsed: PERMISSIONS.SECURITY.DELEGATION_MANAGE,
+            actorUserId: actorCtx.realUserId,
+            tenantId: actorCtx.tenantId,
+            req,
+            changedKeys: ['revokedAt'],
+            before: existing,
+            after: { ...existing, revokedAt },
+            escalation: (req as any)?.governanceEscalation ?? undefined,
+          }),
           delegationId: existing.id,
           revokedByUserId: actorCtx.realUserId,
           delegatorUserId: existing.delegatorUserId,
           delegateUserId: existing.delegateUserId,
           revokedAt,
         },
+        permissionUsed: PERMISSIONS.SECURITY.DELEGATION_MANAGE,
       },
       this.prisma,
     );

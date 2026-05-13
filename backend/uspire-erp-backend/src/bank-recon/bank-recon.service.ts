@@ -11,7 +11,11 @@ import { GlService } from '../gl/gl.service';
 import { PERMISSIONS } from '../rbac/permission-catalog';
 import { requirePermission } from '../rbac/finance-authz.helpers';
 import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
 import { validateAccountPostingEligibility } from '../finance/common/account-posting-eligibility';
+import { validateSegmentCompleteness } from '../finance/common/segment-completeness';
+import { assertRetroPostingWithinToleranceOrEscalated, loadTenantRetroPostToleranceDays } from '../periods/retro-posting-governance';
+import { maybeBuildGovernanceOverrideAuditMetadata } from '../governance/governance-enforcement';
 import type {
   AddBankStatementLinesDto,
   CreateAdjustmentJournalDto,
@@ -73,6 +77,7 @@ export class BankReconService {
     prisma: PrismaService;
     tenantId: string;
     statementEndDate: Date;
+    req: Request;
   }) {
     const period = await (params.prisma.accountingPeriod as any).findFirst({
       where: {
@@ -89,12 +94,11 @@ export class BankReconService {
       );
     }
 
-    const status = String((period as any).status);
-    if (status !== 'OPEN') {
-      throw new BadRequestException(
-        'Cannot reconcile: accounting period is CLOSED.',
-      );
-    }
+    assertPeriodAllowsPosting({
+      req: params.req,
+      period,
+      permissionUsed: PERMISSIONS.BANK.RECONCILE,
+    });
 
     return period;
   }
@@ -103,6 +107,7 @@ export class BankReconService {
     prisma: PrismaService;
     tenantId: string;
     postingDate: Date;
+    req: Request;
   }) {
     const period = await (params.prisma.accountingPeriod as any).findFirst({
       where: {
@@ -119,12 +124,11 @@ export class BankReconService {
       );
     }
 
-    const status = String((period as any).status);
-    if (status !== 'OPEN') {
-      throw new BadRequestException(
-        'Cannot post adjustment: accounting period is CLOSED.',
-      );
-    }
+    assertPeriodAllowsPosting({
+      req: params.req,
+      period,
+      permissionUsed: PERMISSIONS.BANK.RECONCILE,
+    });
 
     return period;
   }
@@ -698,6 +702,7 @@ export class BankReconService {
         prisma: tx as any,
         tenantId: tenant.id,
         statementEndDate: statement.statementEndDate,
+        req,
       });
 
       // Compute preview using the same underlying aggregation logic.
@@ -928,6 +933,18 @@ export class BankReconService {
         prisma: tx as any,
         tenantId: tenant.id,
         postingDate,
+        req,
+      });
+
+      const retroPostToleranceDays = await loadTenantRetroPostToleranceDays({
+        prisma: tx as any,
+        tenantId: tenant.id,
+      });
+      assertRetroPostingWithinToleranceOrEscalated({
+        req,
+        postingDate: new Date(postingDate),
+        toleranceDays: retroPostToleranceDays,
+        escalationType: 'RETRO_POSTING_OVERRIDE',
       });
 
       const bankGlAccount = await tx.account.findFirst({
@@ -1030,9 +1047,9 @@ export class BankReconService {
           journalType: 'STANDARD',
           sourceType: 'BANK_RECON_ADJUSTMENT',
           sourceId: line.id,
-          status: 'REVIEWED',
-          reviewedById: user.id,
-          reviewedAt: now,
+          status: 'SUBMITTED',
+          submittedById: user.id,
+          submittedAt: now,
           lines: {
             create: [
               {
@@ -1055,6 +1072,15 @@ export class BankReconService {
           },
         },
         include: { lines: true },
+      });
+
+      await this.gl.systemReviewJournal(req, {
+        prisma: tx,
+        journalId: journal.id,
+        sourceType: 'BANK_RECON_ADJUSTMENT',
+        sourceId: line.id,
+        permissionUsed: PERMISSIONS.GL.FINAL_POST,
+        validateSource: async () => true,
       });
 
       const postedJournal = await this.gl.postJournalInTx({
@@ -1102,6 +1128,27 @@ export class BankReconService {
           permissionUsed: PERMISSIONS.BANK.RECONCILE,
           lifecycleType: 'CREATE',
           metadata: {
+            ...(maybeBuildGovernanceOverrideAuditMetadata({
+              req,
+              permissionUsed: PERMISSIONS.BANK.RECONCILE,
+              actorUserId: user.id,
+              tenantId: tenant.id,
+              changedKeys: ['adjustmentJournalId'],
+              before: { adjustmentJournalId: null },
+              after: { adjustmentJournalId: postedJournal.id },
+            })
+              ? {
+                  governance: maybeBuildGovernanceOverrideAuditMetadata({
+                    req,
+                    permissionUsed: PERMISSIONS.BANK.RECONCILE,
+                    actorUserId: user.id,
+                    tenantId: tenant.id,
+                    changedKeys: ['adjustmentJournalId'],
+                    before: { adjustmentJournalId: null },
+                    after: { adjustmentJournalId: postedJournal.id },
+                  }),
+                }
+              : {}),
             statementId: line.statementId,
             statementLineId: line.id,
             bankAccountId,

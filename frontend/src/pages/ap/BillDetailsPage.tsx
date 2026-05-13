@@ -40,8 +40,7 @@ export function BillDetailsPage() {
 
   const canConfigureApControlAccount =
     hasPermission(PERMISSIONS.FINANCE.CONFIG_UPDATE) ||
-    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE) ||
-    hasPermission(PERMISSIONS.SYSTEM.VIEW_ALL);
+    hasPermission(PERMISSIONS.SYSTEM.CONFIG_UPDATE);
 
   const [bill, setBill] = useState<SupplierInvoice | null>(null);
   const [loading, setLoading] = useState(true);

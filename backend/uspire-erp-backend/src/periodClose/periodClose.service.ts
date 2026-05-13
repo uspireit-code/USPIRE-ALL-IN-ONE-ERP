@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertCanPost } from '../periods/period-guard';
+import { AuditEntityType, AuditEventType } from '@prisma/client';
+import { PERMISSIONS } from '../rbac/permission-catalog';
+import { requirePermission } from '../rbac/finance-authz.helpers';
+import { writeAuditEventWithPrisma } from '../audit/audit-writer';
+import { assertPeriodAllowsPosting } from '../periods/period-posting-governance';
 
 @Injectable()
 export class PeriodCloseService {
@@ -71,7 +75,11 @@ export class PeriodCloseService {
     // Canonical period semantics: posting-like actions are allowed only in OPEN.
     // We preserve the existing ForbiddenException payload/messages on failure.
     try {
-      assertCanPost(period.status, { periodName: period.name });
+      assertPeriodAllowsPosting({
+        req,
+        period,
+        permissionUsed: PERMISSIONS.PERIOD.CHECKLIST_COMPLETE,
+      });
     } catch {
       throw new ForbiddenException({
         error: 'Checklist completion blocked by accounting period control',

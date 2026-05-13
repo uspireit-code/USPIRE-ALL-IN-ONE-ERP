@@ -83,6 +83,7 @@ export async function apiFetch<T>(
   inputPath: string,
   init?: RequestInit,
   config: ApiConfig = defaultConfig,
+  options?: { governanceReason?: string },
 ): Promise<T> {
   const { tenantId } = getStoredAuth();
 
@@ -95,6 +96,10 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
   if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
+  if (options?.governanceReason) {
+    const reason = String(options.governanceReason).trim();
+    if (reason) headers.set('x-governance-reason', reason);
+  }
 
   if (debugApi) {
     // eslint-disable-next-line no-console
@@ -133,6 +138,7 @@ export async function apiFetchRaw(
   inputPath: string,
   init?: RequestInit,
   config: ApiConfig = defaultConfig,
+  options?: { governanceReason?: string },
 ): Promise<Response> {
   const { tenantId } = getStoredAuth();
 
@@ -145,6 +151,10 @@ export async function apiFetchRaw(
     headers.set('Content-Type', 'application/json');
   }
   if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
+  if (options?.governanceReason) {
+    const reason = String(options.governanceReason).trim();
+    if (reason) headers.set('x-governance-reason', reason);
+  }
 
   if (debugApi) {
     // eslint-disable-next-line no-console

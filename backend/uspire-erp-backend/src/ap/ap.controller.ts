@@ -62,7 +62,6 @@ export class ApController {
   @PermissionsAny(
     PERMISSIONS.REPORT.AP_AGING_VIEW,
     PERMISSIONS.FINANCE.VIEW_ALL,
-    PERMISSIONS.SYSTEM.VIEW_ALL,
   )
   async apAging(@Req() req: Request, @Query() dto: ApAgingQueryDto) {
     return this.ap.apAging(req, dto);

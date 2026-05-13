@@ -1162,7 +1162,7 @@ export class ReportsService {
       where: {
         tenantId: params.tenantId,
         name: this.OPENING_PERIOD_NAME,
-        status: 'CLOSED',
+        status: { in: ['CLOSED', 'HARD_CLOSED', 'ARCHIVED'] },
       },
       orderBy: { startDate: 'desc' },
       select: { startDate: true },
