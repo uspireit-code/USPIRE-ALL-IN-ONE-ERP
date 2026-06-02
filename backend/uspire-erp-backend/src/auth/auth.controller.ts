@@ -33,18 +33,25 @@ export class AuthController {
     private readonly unlockRequests: UnlockRequestsService,
   ) {}
 
-  private getCookieOptions() {
-    const isProd = process.env.NODE_ENV === 'production';
+  private getCookieOptions(req: Request) {
+    const frontendUrl = (process.env.FRONTEND_URL ?? '').trim();
+    const frontendIsHttps = frontendUrl.toLowerCase().startsWith('https://');
+    const reqProto = String(req.header('x-forwarded-proto') ?? '').trim().toLowerCase();
+    const reqIsHttps = Boolean((req as any).secure) || reqProto === 'https';
+    const isHttps = frontendIsHttps || reqIsHttps;
+
+    const sameSite = isHttps ? ('none' as const) : ('lax' as const);
+    const secure = isHttps;
     return {
       httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax' as const,
+      secure,
+      sameSite,
       path: '/',
     };
   }
 
-  private setAuthCookies(res: Response, params: { accessToken: string; refreshToken: string; accessMaxAgeMs: number; refreshMaxAgeMs: number }) {
-    const base = this.getCookieOptions();
+  private setAuthCookies(req: Request, res: Response, params: { accessToken: string; refreshToken: string; accessMaxAgeMs: number; refreshMaxAgeMs: number }) {
+    const base = this.getCookieOptions(req);
     res.cookie('uspire_access_token', params.accessToken, {
       ...base,
       maxAge: params.accessMaxAgeMs,
@@ -55,8 +62,8 @@ export class AuthController {
     });
   }
 
-  private clearAuthCookies(res: Response) {
-    const base = this.getCookieOptions();
+  private clearAuthCookies(req: Request, res: Response) {
+    const base = this.getCookieOptions(req);
     res.clearCookie('uspire_access_token', base);
     res.clearCookie('uspire_refresh_token', base);
   }
@@ -70,7 +77,7 @@ export class AuthController {
         return out;
 
       if (out?.accessToken && out?.refreshToken) {
-        this.setAuthCookies(res, {
+        this.setAuthCookies(req, res, {
           accessToken: out.accessToken,
           refreshToken: out.refreshToken,
           accessMaxAgeMs: out.accessMaxAgeMs,
@@ -136,7 +143,7 @@ export class AuthController {
     });
 
     if (out?.accessToken && out?.refreshToken) {
-      this.setAuthCookies(res, {
+      this.setAuthCookies(req, res, {
         accessToken: out.accessToken,
         refreshToken: out.refreshToken,
         accessMaxAgeMs: out.accessMaxAgeMs,
@@ -254,7 +261,7 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() dto: RefreshTokenDto) {
     const out: any = await this.authService.refresh(req, dto);
-    this.setAuthCookies(res, {
+    this.setAuthCookies(req, res, {
       accessToken: out.accessToken,
       refreshToken: out.refreshToken,
       accessMaxAgeMs: out.accessMaxAgeMs,
@@ -266,7 +273,7 @@ export class AuthController {
   @Post('2fa/verify')
   async verify2fa(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() dto: Verify2faDto) {
     const out: any = await this.authService.verify2fa(req, dto);
-    this.setAuthCookies(res, {
+    this.setAuthCookies(req, res, {
       accessToken: out.accessToken,
       refreshToken: out.refreshToken,
       accessMaxAgeMs: out.accessMaxAgeMs,
@@ -281,22 +288,8 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const sessionUser: any = req.user as any;
-    const tenantId = String((req.tenant as any)?.id ?? sessionUser?.tenantId ?? '').trim();
-    const userId = String(sessionUser?.id ?? '').trim();
-    const sessionId = String(sessionUser?.sessionId ?? '').trim();
-
-    const requestId = (req.header('x-request-id') ? String(req.header('x-request-id')) : '').trim();
-    await this.authService.revokeSessionBySessionId({
-      tenantId,
-      userId,
-      sessionId,
-      req,
-      requestId: requestId || undefined,
-      reason: 'user_logout',
-    });
-
-    this.clearAuthCookies(res);
+    await this.authService.logout(req);
+    this.clearAuthCookies(req, res);
     return { success: true };
   }
 
@@ -305,6 +298,19 @@ export class AuthController {
   async ping(@Req() req: Request) {
     await this.authService.ping(req);
     return { success: true };
+  }
+
+  @Get('me/legal-entity-access')
+  @UseGuards(JwtAuthGuard)
+  async myLegalEntityAccess(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate',
+    );
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    return this.authService.myLegalEntityAccess(req);
   }
 
   @Get('me')

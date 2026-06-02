@@ -2,19 +2,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
- model TenantJournalNumberingConfig {
-  id         String                @id @default(uuid())
-  tenantId   String                @unique
-  scope      JournalNumberingScope @default(TENANT_GLOBAL)
-  updatedAt  DateTime              @updatedAt
-  updatedById String?
-
-  tenant     Tenant                @relation(fields: [tenantId], references: [id])
-  updatedBy  User?                 @relation("TenantJournalNumberingConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-
-  @@index([tenantId])
- }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -246,44 +233,29 @@ model TaxRate {
   @@index([glAccountId])
 }
 
-enum BankStatementStatus {
-  DRAFT
-  IN_PROGRESS
-  RECONCILED
-  LOCKED
-}
-
-enum BankStatementLineClassification {
-  SYSTEM_MATCH
-  BANK_CHARGE
-  INTEREST
-  ERROR
-  UNIDENTIFIED
-}
-
 model BankStatement {
-  id                 String                      @id @default(uuid())
-  tenantId           String
-  bankAccountId      String
-  statementStartDate DateTime
-  statementEndDate   DateTime
-  openingBalance     Decimal                     @db.Decimal(18, 2)
-  closingBalance     Decimal                     @db.Decimal(18, 2)
-  status             BankStatementStatus         @default(DRAFT)
-  reconciledAt       DateTime?
-  reconciledByUserId String?
-  lockedAt           DateTime?
-  lockedByUserId     String?
-  createdByUserId    String
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @default(now()) @updatedAt
-  bankAccount        BankAccount                 @relation(fields: [bankAccountId], references: [id])
-  tenant             Tenant                      @relation(fields: [tenantId], references: [id])
-  createdBy          User                        @relation("BankStatementCreatedBy", fields: [createdByUserId], references: [id])
-  reconciledBy       User?                       @relation("BankStatementReconciledBy", fields: [reconciledByUserId], references: [id], onDelete: Restrict)
-  lockedBy           User?                       @relation("BankStatementLockedBy", fields: [lockedByUserId], references: [id], onDelete: Restrict)
-  lines              BankStatementLine[]
+  id                     String                      @id @default(uuid())
+  tenantId               String
+  bankAccountId          String
+  openingBalance         Decimal                     @db.Decimal(18, 2)
+  closingBalance         Decimal                     @db.Decimal(18, 2)
+  createdAt              DateTime                    @default(now())
+  createdByUserId        String
+  statementEndDate       DateTime
+  statementStartDate     DateTime
+  status                 BankStatementStatus         @default(DRAFT)
+  updatedAt              DateTime                    @default(now()) @updatedAt
+  lockedAt               DateTime?
+  lockedByUserId         String?
+  reconciledAt           DateTime?
+  reconciledByUserId     String?
   reconciliationSnapshot BankReconciliationSnapshot?
+  bankAccount            BankAccount                 @relation(fields: [bankAccountId], references: [id])
+  createdBy              User                        @relation("BankStatementCreatedBy", fields: [createdByUserId], references: [id])
+  lockedBy               User?                       @relation("BankStatementLockedBy", fields: [lockedByUserId], references: [id], onDelete: Restrict)
+  reconciledBy           User?                       @relation("BankStatementReconciledBy", fields: [reconciledByUserId], references: [id], onDelete: Restrict)
+  tenant                 Tenant                      @relation(fields: [tenantId], references: [id])
+  lines                  BankStatementLine[]
 
   @@unique([tenantId, bankAccountId, statementEndDate])
   @@index([tenantId])
@@ -294,27 +266,24 @@ model BankStatement {
 }
 
 model BankReconciliationSnapshot {
-  id                      String   @id @default(cuid())
-  tenantId                String
-  bankStatementId         String   @unique
-  bankAccountId           String
-  statementEndDate        DateTime
-
-  bankClosingBalance        Decimal @db.Decimal(18, 2)
-  systemBankBalance         Decimal @db.Decimal(18, 2)
-  outstandingPaymentsTotal  Decimal @db.Decimal(18, 2)
-  depositsInTransitTotal    Decimal @db.Decimal(18, 2)
-  adjustedBankBalance       Decimal @db.Decimal(18, 2)
-  adjustedGLBalance         Decimal @db.Decimal(18, 2)
-  difference                Decimal @db.Decimal(18, 2)
-
-  createdAt              DateTime @default(now())
-  createdByUserId        String
-
-  tenant                 Tenant        @relation(fields: [tenantId], references: [id])
-  bankStatement          BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
-  bankAccount            BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  createdBy              User          @relation("BankReconciliationSnapshotCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                       String        @id @default(cuid())
+  tenantId                 String
+  bankStatementId          String        @unique
+  bankAccountId            String
+  statementEndDate         DateTime
+  bankClosingBalance       Decimal       @db.Decimal(18, 2)
+  systemBankBalance        Decimal       @db.Decimal(18, 2)
+  outstandingPaymentsTotal Decimal       @db.Decimal(18, 2)
+  depositsInTransitTotal   Decimal       @db.Decimal(18, 2)
+  adjustedBankBalance      Decimal       @db.Decimal(18, 2)
+  adjustedGLBalance        Decimal       @db.Decimal(18, 2)
+  difference               Decimal       @db.Decimal(18, 2)
+  createdAt                DateTime      @default(now())
+  createdByUserId          String
+  bankAccount              BankAccount   @relation(fields: [bankAccountId], references: [id])
+  bankStatement            BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  createdBy                User          @relation("BankReconciliationSnapshotCreatedBy", fields: [createdByUserId], references: [id])
+  tenant                   Tenant        @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([bankAccountId])
@@ -322,24 +291,22 @@ model BankReconciliationSnapshot {
 }
 
 model BankStatementLine {
-  id                  String                         @id @default(uuid())
-  statementId         String
-  txnDate             DateTime
-  description         String
-  reference           String?
-  debitAmount         Decimal                        @default(0) @db.Decimal(18, 2)
-  creditAmount        Decimal                        @default(0) @db.Decimal(18, 2)
-  matched             Boolean                        @default(false)
-  matchedJournalLineId String?
-  adjustmentJournalId  String?
-  classification      BankStatementLineClassification @default(UNIDENTIFIED)
-  statement           BankStatement                  @relation(fields: [statementId], references: [id], onDelete: Cascade)
-  matchedJournalLine  JournalLine?                   @relation("BankStatementLineMatchedJournalLine", fields: [matchedJournalLineId], references: [id], onDelete: Restrict)
-  adjustmentJournal   JournalEntry?                  @relation("BankStatementLineAdjustmentJournal", fields: [adjustmentJournalId], references: [id], onDelete: Restrict)
-  clearedJournalLine  JournalLine?                   @relation("JournalLineClearedByStatementLine")
+  id                   String                          @id @default(uuid())
+  description          String
+  reference            String?
+  classification       BankStatementLineClassification @default(UNIDENTIFIED)
+  creditAmount         Decimal                         @default(0) @db.Decimal(18, 2)
+  debitAmount          Decimal                         @default(0) @db.Decimal(18, 2)
+  matched              Boolean                         @default(false)
+  matchedJournalLineId String?                         @unique
+  statementId          String
+  txnDate              DateTime
+  adjustmentJournalId  String?                         @unique
+  adjustmentJournal    JournalEntry?                   @relation("BankStatementLineAdjustmentJournal", fields: [adjustmentJournalId], references: [id], onDelete: Restrict)
+  matchedJournalLine   JournalLine?                    @relation("BankStatementLineMatchedJournalLine", fields: [matchedJournalLineId], references: [id], onDelete: Restrict)
+  statement            BankStatement                   @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  clearedJournalLine   JournalLine?                    @relation("JournalLineClearedByStatementLine")
 
-  @@unique([matchedJournalLineId])
-  @@unique([adjustmentJournalId])
   @@index([statementId])
   @@index([txnDate])
   @@index([matched])
@@ -363,37 +330,27 @@ model InvoiceTaxLine {
   @@index([taxRateId])
 }
 
-enum BankAccountType {
-  BANK
-  CASH
-}
-
-enum BankAccountStatus {
-  ACTIVE
-  INACTIVE
-}
-
 model BankAccount {
-  id              String               @id @default(uuid())
-  tenantId        String
-  name            String
-  bankName        String
-  accountNumber   String?
-  type            BankAccountType      @default(BANK)
-  currency        String
-  glAccountId     String
-  status          BankAccountStatus    @default(ACTIVE)
-  openingBalance  Decimal              @default(0) @db.Decimal(18, 2)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @default(now()) @updatedAt
-  glAccount       Account              @relation(fields: [glAccountId], references: [id])
-  tenant          Tenant               @relation(fields: [tenantId], references: [id])
-  statements      BankStatement[]
+  id                      String                       @id @default(uuid())
+  tenantId                String
+  name                    String
+  bankName                String
+  accountNumber           String?
+  currency                String
+  glAccountId             String
+  createdAt               DateTime                     @default(now())
+  openingBalance          Decimal                      @default(0) @db.Decimal(18, 2)
+  status                  BankAccountStatus            @default(ACTIVE)
+  type                    BankAccountType              @default(BANK)
+  updatedAt               DateTime                     @default(now()) @updatedAt
+  glAccount               Account                      @relation(fields: [glAccountId], references: [id])
+  tenant                  Tenant                       @relation(fields: [tenantId], references: [id])
   reconciliationSnapshots BankReconciliationSnapshot[]
-  customerRefunds CustomerRefund[]
-  payments        Payment[]
-  paymentRuns     PaymentRun[]
-  imprestFacilities ImprestFacility[]
+  statements              BankStatement[]
+  customerRefunds         CustomerRefund[]
+  imprestFacilities       ImprestFacility[]
+  payments                Payment[]
+  paymentRuns             PaymentRun[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -401,26 +358,26 @@ model BankAccount {
 }
 
 model Payment {
-  id              String              @id @default(uuid())
-  tenantId        String
-  type            PaymentType
-  bankAccountId   String
-  amount          Decimal             @db.Decimal(18, 2)
-  paymentDate     DateTime
-  reference       String?
-  status          PaymentStatus       @default(DRAFT)
-  createdById     String
-  approvedById    String?
-  postedById      String?
-  createdAt       DateTime            @default(now())
-  approvedAt      DateTime?
-  postedAt        DateTime?
-  approvedBy      User?               @relation("PaymentApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  bankAccount     BankAccount         @relation(fields: [bankAccountId], references: [id])
-  createdBy       User                @relation("PaymentCreatedBy", fields: [createdById], references: [id])
-  postedBy        User?               @relation("PaymentPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
-  tenant          Tenant              @relation(fields: [tenantId], references: [id])
-  allocations     PaymentAllocation[]
+  id            String              @id @default(uuid())
+  tenantId      String
+  type          PaymentType
+  bankAccountId String
+  amount        Decimal             @db.Decimal(18, 2)
+  paymentDate   DateTime
+  reference     String?
+  status        PaymentStatus       @default(DRAFT)
+  createdById   String
+  approvedById  String?
+  postedById    String?
+  createdAt     DateTime            @default(now())
+  approvedAt    DateTime?
+  postedAt      DateTime?
+  approvedBy    User?               @relation("PaymentApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  bankAccount   BankAccount         @relation(fields: [bankAccountId], references: [id])
+  createdBy     User                @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  postedBy      User?               @relation("PaymentPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  tenant        Tenant              @relation(fields: [tenantId], references: [id])
+  allocations   PaymentAllocation[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -428,18 +385,18 @@ model Payment {
 }
 
 model PaymentAllocation {
-  id         String                      @id @default(uuid())
-  paymentId  String
-  sourceType PaymentAllocationSourceType
-  sourceId   String
-  amount     Decimal                     @db.Decimal(18, 2)
+  id           String                      @id @default(uuid())
+  paymentId    String
+  sourceType   PaymentAllocationSourceType
+  sourceId     String
+  amount       Decimal                     @db.Decimal(18, 2)
   departmentId String?
   projectId    String?
   fundId       String?
-  payment    Payment                     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  department Department?                 @relation("PaymentAllocationDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
-  project    Project?                    @relation("PaymentAllocationProject", fields: [projectId], references: [id], onDelete: Restrict)
-  fund       Fund?                       @relation("PaymentAllocationFund", fields: [fundId], references: [id], onDelete: Restrict)
+  department   Department?                 @relation("PaymentAllocationDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  fund         Fund?                       @relation("PaymentAllocationFund", fields: [fundId], references: [id], onDelete: Restrict)
+  payment      Payment                     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  project      Project?                    @relation("PaymentAllocationProject", fields: [projectId], references: [id], onDelete: Restrict)
 
   @@index([paymentId])
   @@index([sourceType, sourceId])
@@ -448,65 +405,25 @@ model PaymentAllocation {
   @@index([fundId])
 }
 
-enum ImprestRiskRating {
-  LOW
-  MEDIUM
-  HIGH
-}
-
-enum ImprestFundingSourceType {
-  BANK
-  CASH
-  MOBILE_MONEY
-}
-
-enum ImprestFacilityStatus {
-  ACTIVE
-  SUSPENDED
-  CLOSED
-}
-
-enum ImprestEvidenceType {
-  REQUEST_SUPPORTING_DOC
-  FUNDING_PROOF
-  RECEIPT_BUNDLE
-  CASH_RETURN_PROOF
-  OTHER
-}
-
-enum ImprestCaseState {
-  DRAFT
-  SUBMITTED
-  IN_REVIEW
-  APPROVED
-  REJECTED
-  ISSUANCE_PENDING_EVIDENCE
-  ISSUED
-  RETIREMENT_SUBMITTED
-  RETIREMENT_REVIEW
-  SETTLED
-  CLOSED
-}
-
 model ImprestTypePolicy {
-  id                      String            @id @default(uuid())
-  tenantId                String
-  name                    String
-  defaultFloatLimit       Decimal           @db.Decimal(18, 2)
-  settlementDays          Int
-  receiptRule             String
-  receiptThresholdAmount  Decimal?          @db.Decimal(18, 2)
-  approvalStrength        String
-  defaultRiskRating       ImprestRiskRating @default(MEDIUM)
-  effectiveFrom           DateTime
-  effectiveTo             DateTime?
-  isActive                Boolean           @default(true)
-  createdById             String
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @default(now()) @updatedAt
-  tenant                  Tenant            @relation(fields: [tenantId], references: [id])
-  createdBy               User              @relation("ImprestTypePolicyCreatedBy", fields: [createdById], references: [id])
-  facilities              ImprestFacility[]
+  id                     String            @id @default(uuid())
+  tenantId               String
+  name                   String
+  defaultFloatLimit      Decimal           @db.Decimal(18, 2)
+  settlementDays         Int
+  receiptRule            String
+  receiptThresholdAmount Decimal?          @db.Decimal(18, 2)
+  approvalStrength       String
+  defaultRiskRating      ImprestRiskRating @default(MEDIUM)
+  effectiveFrom          DateTime
+  effectiveTo            DateTime?
+  isActive               Boolean           @default(true)
+  createdById            String
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @default(now()) @updatedAt
+  facilities             ImprestFacility[]
+  createdBy              User              @relation("ImprestTypePolicyCreatedBy", fields: [createdById], references: [id])
+  tenant                 Tenant            @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, name, effectiveFrom])
   @@index([tenantId])
@@ -515,7 +432,7 @@ model ImprestTypePolicy {
 }
 
 model ImprestFacility {
-  id                 String                  @id @default(uuid())
+  id                 String                   @id @default(uuid())
   tenantId           String
   typePolicyId       String
   custodianUserId    String
@@ -524,7 +441,7 @@ model ImprestFacility {
   projectId          String?
   fundId             String?
   currency           String
-  approvedFloatLimit Decimal                 @db.Decimal(18, 2)
+  approvedFloatLimit Decimal                  @db.Decimal(18, 2)
   settlementDays     Int
   fundingSourceType  ImprestFundingSourceType
   bankAccountId      String?
@@ -532,21 +449,21 @@ model ImprestFacility {
   controlGlAccountId String
   validFrom          DateTime
   validTo            DateTime
-  status             ImprestFacilityStatus   @default(ACTIVE)
+  status             ImprestFacilityStatus    @default(ACTIVE)
   createdById        String
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @default(now()) @updatedAt
-  typePolicy         ImprestTypePolicy       @relation(fields: [typePolicyId], references: [id])
-  custodian          User                    @relation("ImprestFacilityCustodian", fields: [custodianUserId], references: [id])
-  entity             Entity                  @relation(fields: [entityId], references: [id])
-  department         Department              @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  project            Project?                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  fund               Fund?                   @relation(fields: [fundId], references: [id], onDelete: Restrict)
-  bankAccount        BankAccount?            @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  controlGlAccount   Account                 @relation(fields: [controlGlAccountId], references: [id], onDelete: Restrict)
-  createdBy          User                    @relation("ImprestFacilityCreatedBy", fields: [createdById], references: [id])
-  tenant             Tenant                  @relation(fields: [tenantId], references: [id])
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @default(now()) @updatedAt
   cases              ImprestCase[]
+  bankAccount        BankAccount?             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  controlGlAccount   Account                  @relation(fields: [controlGlAccountId], references: [id])
+  createdBy          User                     @relation("ImprestFacilityCreatedBy", fields: [createdById], references: [id])
+  custodian          User                     @relation("ImprestFacilityCustodian", fields: [custodianUserId], references: [id])
+  department         Department               @relation(fields: [departmentId], references: [id])
+  entity             Entity                   @relation(fields: [entityId], references: [id])
+  fund               Fund?                    @relation(fields: [fundId], references: [id], onDelete: Restrict)
+  project            Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id])
+  typePolicy         ImprestTypePolicy        @relation(fields: [typePolicyId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -561,7 +478,7 @@ model ImprestFacility {
 }
 
 model ImprestCase {
-  id                     String           @id @default(uuid())
+  id                     String                     @id @default(uuid())
   tenantId               String
   facilityId             String
   reference              String
@@ -570,12 +487,12 @@ model ImprestCase {
   periodFrom             DateTime
   periodTo               DateTime
   expectedSettlementDate DateTime
-  requestedAmount        Decimal          @db.Decimal(18, 2)
+  requestedAmount        Decimal                    @db.Decimal(18, 2)
   currency               String
-  state                  ImprestCaseState @default(DRAFT)
+  state                  ImprestCaseState           @default(DRAFT)
   createdById            String
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @default(now()) @updatedAt
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @default(now()) @updatedAt
   submittedAt            DateTime?
   reviewedAt             DateTime?
   reviewedById           String?
@@ -591,18 +508,18 @@ model ImprestCase {
   settledAt              DateTime?
   settledByUserId        String?
   settlementJournalId    String?
-  facility               ImprestFacility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  createdBy              User             @relation("ImprestCaseCreatedBy", fields: [createdById], references: [id])
-  reviewedBy             User?            @relation("ImprestCaseReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
-  approvedBy             User?            @relation("ImprestCaseApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  rejectedBy             User?            @relation("ImprestCaseRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
-  issuedBy               User?            @relation("ImprestCaseIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
-  issuedJournal          JournalEntry?    @relation("ImprestCaseIssuedJournal", fields: [issuedJournalId], references: [id], onDelete: Restrict)
-  settledBy              User?            @relation("ImprestCaseSettledBy", fields: [settledByUserId], references: [id], onDelete: Restrict)
-  settlementJournal      JournalEntry?    @relation("ImprestCaseSettlementJournal", fields: [settlementJournalId], references: [id], onDelete: Restrict)
-  tenant                 Tenant           @relation(fields: [tenantId], references: [id])
-  transitions            ImprestCaseTransitionLog[]
+  approvedBy             User?                      @relation("ImprestCaseApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  createdBy              User                       @relation("ImprestCaseCreatedBy", fields: [createdById], references: [id])
+  facility               ImprestFacility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  issuedBy               User?                      @relation("ImprestCaseIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
+  issuedJournal          JournalEntry?              @relation("ImprestCaseIssuedJournal", fields: [issuedJournalId], references: [id], onDelete: Restrict)
+  rejectedBy             User?                      @relation("ImprestCaseRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  reviewedBy             User?                      @relation("ImprestCaseReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  settledBy              User?                      @relation("ImprestCaseSettledBy", fields: [settledByUserId], references: [id], onDelete: Restrict)
+  settlementJournal      JournalEntry?              @relation("ImprestCaseSettlementJournal", fields: [settlementJournalId], references: [id], onDelete: Restrict)
+  tenant                 Tenant                     @relation(fields: [tenantId], references: [id])
   evidence               ImprestCaseEvidence[]
+  transitions            ImprestCaseTransitionLog[]
   settlementLines        ImprestSettlementLine[]
 
   @@unique([tenantId, reference])
@@ -616,27 +533,21 @@ model ImprestCase {
   @@index([approvedById])
 }
 
-enum ImprestSettlementLineType {
-  EXPENSE
-  CASH_RETURN
-}
-
 model ImprestSettlementLine {
-  id          String                   @id @default(uuid())
+  id          String                    @id @default(uuid())
   tenantId    String
   caseId      String
   type        ImprestSettlementLineType
-  glAccountId String?
   description String
-  amount      Decimal                  @db.Decimal(18, 2)
+  amount      Decimal                   @db.Decimal(18, 2)
   spentDate   DateTime
   createdById String
-  createdAt   DateTime                 @default(now())
-
-  imprestCase ImprestCase              @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  glAccount   Account?                 @relation(fields: [glAccountId], references: [id], onDelete: Restrict)
-  createdBy   User                     @relation("ImprestSettlementLineCreatedBy", fields: [createdById], references: [id])
-  tenant      Tenant                   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime                  @default(now())
+  glAccountId String?
+  imprestCase ImprestCase               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdBy   User                      @relation("ImprestSettlementLineCreatedBy", fields: [createdById], references: [id])
+  glAccount   Account?                  @relation(fields: [glAccountId], references: [id], onDelete: Restrict)
+  tenant      Tenant                    @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([caseId])
@@ -655,8 +566,8 @@ model ImprestCaseTransitionLog {
   notes       String?
   metadata    Json?
   createdAt   DateTime         @default(now())
-  imprestCase ImprestCase      @relation(fields: [caseId], references: [id], onDelete: Cascade)
   actor       User             @relation("ImprestCaseTransitionActor", fields: [actorUserId], references: [id])
+  imprestCase ImprestCase      @relation(fields: [caseId], references: [id], onDelete: Cascade)
   tenant      Tenant           @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -666,15 +577,15 @@ model ImprestCaseTransitionLog {
 }
 
 model ImprestCaseEvidence {
-  id          String             @id @default(uuid())
+  id          String              @id @default(uuid())
   tenantId    String
   caseId      String
   evidenceId  String
   type        ImprestEvidenceType
-  createdAt   DateTime           @default(now())
-  imprestCase ImprestCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  evidence    AuditEvidence      @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
-  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime            @default(now())
+  imprestCase ImprestCase         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  evidence    AuditEvidence       @relation(fields: [evidenceId], references: [id])
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
 
   @@unique([caseId, evidenceId])
   @@index([tenantId])
@@ -939,13 +850,13 @@ model AuditEvent {
   outcome           AuditOutcome
   reason            String?
   userId            String?
-  ipAddress         String?
-  userAgent         String?
-  requestId         String?
   permissionUsed    String?
   createdAt         DateTime        @default(now())
   forecastId        String?
   forecastVersionId String?
+  ipAddress         String?
+  requestId         String?
+  userAgent         String?
   tenant            Tenant?         @relation(fields: [tenantId], references: [id])
   user              User?           @relation(fields: [userId], references: [id])
 
@@ -1012,27 +923,27 @@ model ForecastLine {
 }
 
 model AuditEvidence {
-  id           String          @id @default(uuid())
-  tenantId     String
-  entityType   AuditEntityType
-  entityId     String
-  fileName     String
-  mimeType     String
-  size         Int
-  storageKey   String
-  sha256Hash   String
-  uploadedById String
-  createdAt    DateTime        @default(now())
-  governanceDomain          String?
-  governanceActionType      String?
-  evidenceCategory          String?
-  retentionClassification   String?
-  auditSensitivity          String?
-  justificationText         String?
-  tenant       Tenant          @relation(fields: [tenantId], references: [id])
-  uploadedBy   User            @relation("AuditEvidenceUploadedBy", fields: [uploadedById], references: [id])
-  imprestCaseEvidence ImprestCaseEvidence[]
-  links        AuditEvidenceLink[]
+  id                      String                @id @default(uuid())
+  tenantId                String
+  entityType              AuditEntityType
+  entityId                String
+  fileName                String
+  mimeType                String
+  size                    Int
+  storageKey              String
+  sha256Hash              String
+  uploadedById            String
+  createdAt               DateTime              @default(now())
+  auditSensitivity        String?
+  evidenceCategory        String?
+  governanceActionType    String?
+  governanceDomain        String?
+  justificationText       String?
+  retentionClassification String?
+  tenant                  Tenant                @relation(fields: [tenantId], references: [id])
+  uploadedBy              User                  @relation("AuditEvidenceUploadedBy", fields: [uploadedById], references: [id])
+  links                   AuditEvidenceLink[]
+  imprestCaseEvidence     ImprestCaseEvidence[]
 
   @@unique([tenantId, storageKey])
   @@index([tenantId])
@@ -1042,14 +953,14 @@ model AuditEvidence {
 }
 
 model AuditEvidenceLink {
-  id         String        @id @default(uuid())
+  id         String          @id @default(uuid())
   tenantId   String
   evidenceId String
   entityType AuditEntityType
   entityId   String
-  createdAt  DateTime      @default(now())
-  evidence   AuditEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
-  tenant     Tenant        @relation(fields: [tenantId], references: [id])
+  createdAt  DateTime        @default(now())
+  evidence   AuditEvidence   @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  tenant     Tenant          @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, evidenceId, entityType, entityId])
   @@index([tenantId])
@@ -1114,9 +1025,8 @@ model CustomerInvoiceImportLog {
   importId      String
   processedById String
   createdAt     DateTime @default(now())
-
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
   processedBy   User     @relation("CustomerInvoiceImportProcessedBy", fields: [processedById], references: [id])
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, importId])
   @@index([tenantId])
@@ -1124,36 +1034,35 @@ model CustomerInvoiceImportLog {
 }
 
 model CustomerReceipt {
-  id             String               @id @default(uuid())
-  tenantId       String
-  receiptNumber  String
-  receiptDate    DateTime
-  customerId     String
-  currency       String
-  exchangeRate   Decimal              @default(1.0) @db.Decimal(18, 6)
-  totalAmount    Decimal              @db.Decimal(18, 2)
-  paymentMethod  ReceiptPaymentMethod
+  id               String                @id @default(uuid())
+  tenantId         String
+  receiptNumber    String
+  receiptDate      DateTime
+  customerId       String
+  currency         String
+  totalAmount      Decimal               @db.Decimal(18, 2)
+  paymentMethod    ReceiptPaymentMethod
   paymentReference String?
-  reference      String?
-  status         ReceiptStatus        @default(DRAFT)
-  createdById    String
-  postedById     String?
-  postedByUserId String?
-  voidedById     String?
-  createdAt      DateTime             @default(now())
-  postedAt       DateTime?
-  voidedAt       DateTime?
-  voidReason     String?
-  glJournalId    String?
-
-  createdBy      User                 @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id])
-  customer       Customer             @relation(fields: [customerId], references: [id])
-  glJournal      JournalEntry?        @relation("CustomerReceiptGlJournal", fields: [glJournalId], references: [id], onDelete: Restrict)
-  postedBy       User?                @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
-  tenant         Tenant               @relation(fields: [tenantId], references: [id])
-  voidedBy       User?                @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
-  lines          CustomerReceiptLine[]
-  refunds        CustomerRefund[]
+  status           ReceiptStatus         @default(DRAFT)
+  createdById      String
+  createdAt        DateTime              @default(now())
+  postedById       String?
+  postedAt         DateTime?
+  voidedById       String?
+  voidedAt         DateTime?
+  voidReason       String?
+  glJournalId      String?
+  postedByUserId   String?
+  exchangeRate     Decimal               @default(1.0) @db.Decimal(18, 6)
+  reference        String?
+  createdBy        User                  @relation("CustomerReceiptCreatedBy", fields: [createdById], references: [id])
+  customer         Customer              @relation(fields: [customerId], references: [id])
+  glJournal        JournalEntry?         @relation("CustomerReceiptGlJournal", fields: [glJournalId], references: [id], onDelete: Restrict)
+  postedBy         User?                 @relation("CustomerReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  voidedBy         User?                 @relation("CustomerReceiptVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  lines            CustomerReceiptLine[]
+  refunds          CustomerRefund[]
 
   @@unique([tenantId, receiptNumber])
   @@unique([tenantId, glJournalId])
@@ -1184,24 +1093,24 @@ model Supplier {
   tenantId             String
   name                 String
   taxNumber            String?
-  registrationNumber   String?
-  vatRegistered        Boolean               @default(false)
-  defaultPaymentTerms  String?
-  defaultCurrency      String                @default("ZMW")
-  withholdingProfile   WithholdingProfile    @default(NONE)
-  email                String?
-  phone                String?
-  address              String?
   isActive             Boolean               @default(true)
   createdAt            DateTime              @default(now())
+  address              String?
+  defaultCurrency      String                @default("ZMW")
+  defaultPaymentTerms  String?
+  email                String?
+  phone                String?
+  registrationNumber   String?
+  vatRegistered        Boolean               @default(false)
+  withholdingProfile   WithholdingProfile    @default(NONE)
   fixedAssets          FixedAsset[]
-  tenant               Tenant                @relation(fields: [tenantId], references: [id])
-  invoices             SupplierInvoice[]
   paymentProposalLines PaymentProposalLine[]
   paymentRunLines      PaymentRunLine[]
-  documents            SupplierDocument[]
+  tenant               Tenant                @relation(fields: [tenantId], references: [id])
   bankAccounts         SupplierBankAccount[]
   changeLogs           SupplierChangeLog[]
+  documents            SupplierDocument[]
+  invoices             SupplierInvoice[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1218,23 +1127,23 @@ model SupplierInvoice {
   status               SupplierInvoiceStatus @default(DRAFT)
   createdById          String
   approvedById         String?
-  rejectedByUserId     String?
   postedById           String?
   createdAt            DateTime              @default(now())
   approvedAt           DateTime?
-  rejectedAt           DateTime?
-  rejectionReason      String?
   postedAt             DateTime?
+  rejectedAt           DateTime?
+  rejectedByUserId     String?
+  rejectionReason      String?
   fixedAssets          FixedAsset[]
+  paymentProposalLines PaymentProposalLine[]
+  paymentRunLines      PaymentRunLine[]
   approvedBy           User?                 @relation("SupplierInvoiceApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   createdBy            User                  @relation("SupplierInvoiceCreatedBy", fields: [createdById], references: [id])
-  rejectedBy           User?                 @relation("SupplierInvoiceRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
   postedBy             User?                 @relation("SupplierInvoicePostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  rejectedBy           User?                 @relation("SupplierInvoiceRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
   supplier             Supplier              @relation(fields: [supplierId], references: [id])
   tenant               Tenant                @relation(fields: [tenantId], references: [id])
   lines                SupplierInvoiceLine[]
-  paymentProposalLines PaymentProposalLine[]
-  paymentRunLines      PaymentRunLine[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
@@ -1251,10 +1160,10 @@ model SupplierInvoiceLine {
   projectId         String?
   fundId            String?
   account           Account         @relation(fields: [accountId], references: [id])
-  supplierInvoice   SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
   department        Department?     @relation("SupplierInvoiceLineDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
-  project           Project?        @relation("SupplierInvoiceLineProject", fields: [projectId], references: [id], onDelete: Restrict)
   fund              Fund?           @relation("SupplierInvoiceLineFund", fields: [fundId], references: [id], onDelete: Restrict)
+  project           Project?        @relation("SupplierInvoiceLineProject", fields: [projectId], references: [id], onDelete: Restrict)
+  supplierInvoice   SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
 
   @@index([supplierInvoiceId])
   @@index([accountId])
@@ -1263,34 +1172,27 @@ model SupplierInvoiceLine {
   @@index([fundId])
 }
 
-enum PaymentProposalStatus {
-  DRAFT
-  SUBMITTED
-  APPROVED
-}
-
 model PaymentProposal {
-  id             String                @id @default(uuid())
-  tenantId       String
-  proposalNumber String
-  proposalDate   DateTime
-  status         PaymentProposalStatus @default(DRAFT)
-  totalAmount    Decimal               @db.Decimal(18, 2)
-  createdById    String
-  approvedById   String?
+  id               String                @id @default(uuid())
+  tenantId         String
+  proposalNumber   String
+  proposalDate     DateTime
+  status           PaymentProposalStatus @default(DRAFT)
+  totalAmount      Decimal               @db.Decimal(18, 2)
+  createdById      String
+  approvedById     String?
+  approvedAt       DateTime?
+  notes            String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @default(now()) @updatedAt
+  rejectedAt       DateTime?
   rejectedByUserId String?
-  approvedAt     DateTime?
-  rejectedAt     DateTime?
-  rejectionReason String?
-  notes          String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @default(now()) @updatedAt
-
-  tenant     Tenant                @relation(fields: [tenantId], references: [id])
-  createdBy  User                  @relation("PaymentProposalCreatedBy", fields: [createdById], references: [id])
-  approvedBy User?                 @relation("PaymentProposalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  rejectedBy User?                 @relation("PaymentProposalRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
-  lines      PaymentProposalLine[]
+  rejectionReason  String?
+  approvedBy       User?                 @relation("PaymentProposalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  createdBy        User                  @relation("PaymentProposalCreatedBy", fields: [createdById], references: [id])
+  rejectedBy       User?                 @relation("PaymentProposalRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: Restrict)
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  lines            PaymentProposalLine[]
 
   @@unique([tenantId, proposalNumber])
   @@index([tenantId])
@@ -1299,7 +1201,7 @@ model PaymentProposal {
 }
 
 model PaymentProposalLine {
-  id                String   @id @default(uuid())
+  id                String          @id @default(uuid())
   tenantId          String
   proposalId        String
   supplierId        String
@@ -1308,16 +1210,15 @@ model PaymentProposalLine {
   invoiceNumber     String
   invoiceDate       DateTime
   dueDate           DateTime
-  originalAmount    Decimal  @db.Decimal(18, 2)
-  outstandingAmount Decimal  @db.Decimal(18, 2)
-  proposedPayAmount Decimal  @db.Decimal(18, 2)
-  createdAt         DateTime @default(now())
-
-  proposal PaymentProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  supplier Supplier        @relation(fields: [supplierId], references: [id])
-  invoice  SupplierInvoice @relation(fields: [invoiceId], references: [id])
-  tenant   Tenant          @relation(fields: [tenantId], references: [id])
-  paymentRunLine PaymentRunLine?
+  originalAmount    Decimal         @db.Decimal(18, 2)
+  outstandingAmount Decimal         @db.Decimal(18, 2)
+  proposedPayAmount Decimal         @db.Decimal(18, 2)
+  createdAt         DateTime        @default(now())
+  invoice           SupplierInvoice @relation(fields: [invoiceId], references: [id])
+  proposal          PaymentProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  supplier          Supplier        @relation(fields: [supplierId], references: [id])
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  paymentRunLine    PaymentRunLine?
 
   @@unique([proposalId, invoiceId])
   @@index([tenantId])
@@ -1326,28 +1227,23 @@ model PaymentProposalLine {
   @@index([invoiceId])
 }
 
-enum PaymentRunStatus {
-  EXECUTED
-}
-
 model PaymentRun {
-  id              String           @id @default(uuid())
-  tenantId        String
-  runNumber       String
-  executionDate   DateTime
-  periodId        String
-  bankAccountId   String
-  totalAmount     Decimal          @db.Decimal(18, 2)
-  status          PaymentRunStatus @default(EXECUTED)
+  id               String           @id @default(uuid())
+  tenantId         String
+  runNumber        String
+  executionDate    DateTime
+  periodId         String
+  bankAccountId    String
+  totalAmount      Decimal          @db.Decimal(18, 2)
+  status           PaymentRunStatus @default(EXECUTED)
   executedByUserId String
-  executedAt      DateTime
-  createdAt       DateTime         @default(now())
-
-  tenant     Tenant           @relation(fields: [tenantId], references: [id])
-  period     AccountingPeriod @relation(fields: [periodId], references: [id])
-  bankAccount BankAccount     @relation(fields: [bankAccountId], references: [id])
-  executedBy User             @relation("PaymentRunExecutedBy", fields: [executedByUserId], references: [id])
-  lines      PaymentRunLine[]
+  executedAt       DateTime
+  createdAt        DateTime         @default(now())
+  bankAccount      BankAccount      @relation(fields: [bankAccountId], references: [id])
+  executedBy       User             @relation("PaymentRunExecutedBy", fields: [executedByUserId], references: [id])
+  period           AccountingPeriod @relation(fields: [periodId], references: [id])
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  lines            PaymentRunLine[]
 
   @@unique([tenantId, runNumber])
   @@index([tenantId])
@@ -1357,21 +1253,19 @@ model PaymentRun {
 }
 
 model PaymentRunLine {
-  id                   String @id @default(uuid())
-  tenantId             String
-  paymentRunId         String
-  paymentProposalLineId String
-  supplierId           String
-  invoiceId            String
-  amountPaid           Decimal @db.Decimal(18, 2)
+  id                    String              @id @default(uuid())
+  tenantId              String
+  paymentRunId          String
+  paymentProposalLineId String              @unique
+  supplierId            String
+  invoiceId             String
+  amountPaid            Decimal             @db.Decimal(18, 2)
+  invoice               SupplierInvoice     @relation(fields: [invoiceId], references: [id])
+  paymentProposalLine   PaymentProposalLine @relation(fields: [paymentProposalLineId], references: [id])
+  paymentRun            PaymentRun          @relation(fields: [paymentRunId], references: [id], onDelete: Cascade)
+  supplier              Supplier            @relation(fields: [supplierId], references: [id])
+  tenant                Tenant              @relation(fields: [tenantId], references: [id])
 
-  paymentRun          PaymentRun          @relation(fields: [paymentRunId], references: [id], onDelete: Cascade)
-  paymentProposalLine PaymentProposalLine @relation(fields: [paymentProposalLineId], references: [id], onDelete: Restrict)
-  supplier            Supplier            @relation(fields: [supplierId], references: [id])
-  invoice             SupplierInvoice     @relation(fields: [invoiceId], references: [id])
-  tenant              Tenant              @relation(fields: [tenantId], references: [id])
-
-  @@unique([paymentProposalLineId])
   @@index([tenantId])
   @@index([paymentRunId])
   @@index([supplierId])
@@ -1379,32 +1273,28 @@ model PaymentRunLine {
 }
 
 model SupplierDocument {
-  id         String @id @default(uuid())
-  tenantId   String
-  supplierId String
-
-  docType    String
-  filename   String
-  mimeType   String
-  storageKey String
-  fileSize   Int?
-  notes      String?
-
+  id          String   @id @default(uuid())
+  tenantId    String
+  supplierId  String
+  docType     String
+  filename    String
+  mimeType    String
+  storageKey  String
+  fileSize    Int?
+  notes       String?
   createdById String
   createdAt   DateTime @default(now())
   isActive    Boolean  @default(true)
-
-  supplier Supplier @relation(fields: [supplierId], references: [id])
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, supplierId])
   @@index([tenantId, supplierId, createdAt])
 }
 
 model SupplierBankAccount {
-  id         String @id @default(uuid())
-  tenantId   String
-  supplierId String
-
+  id            String   @id @default(uuid())
+  tenantId      String
+  supplierId    String
   bankName      String
   branchName    String?
   accountName   String
@@ -1412,215 +1302,206 @@ model SupplierBankAccount {
   currency      String?
   swiftCode     String?
   notes         String?
-
-  isPrimary Boolean @default(false)
-  isActive  Boolean @default(true)
-
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedById String?
-  updatedAt   DateTime @default(now()) @updatedAt
-
-  supplier Supplier @relation(fields: [supplierId], references: [id])
+  isPrimary     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedById   String?
+  updatedAt     DateTime @default(now()) @updatedAt
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, supplierId])
   @@index([tenantId, supplierId, isActive])
 }
 
 model SupplierChangeLog {
-  id         String @id @default(uuid())
-  tenantId   String
-  supplierId String
-
-  changeType String
-  field      String?
-  oldValue   String?
-  newValue   String?
-  refId      String?
-
+  id          String   @id @default(uuid())
+  tenantId    String
+  supplierId  String
+  changeType  String
+  field       String?
+  oldValue    String?
+  newValue    String?
+  refId       String?
   actorUserId String
   createdAt   DateTime @default(now())
-
-  supplier Supplier @relation(fields: [supplierId], references: [id])
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
 
   @@index([tenantId, supplierId, createdAt])
   @@index([tenantId, supplierId, changeType])
 }
 
 model Tenant {
-  id                             String                          @id @default(uuid())
-  name                           String                          @unique
-  status                         MasterStatus                    @default(ACTIVE)
-  createdAt                      DateTime                        @default(now())
-  logoUrl                        String?
-  organisationName               String                          @default("USPIRE ERP")
-  organisationShortName          String?
-  primaryColor                   String                          @default("#020445")
-  secondaryColor                 String?
-  loginPageTitle                 String                          @default("Enterprise Resource Planning System")
-  loginPageBackgroundUrl         String?
-  updatedAt                      DateTime                        @default(now()) @updatedAt
-  accentColor                    String?
-  country                        String?
-  dateFormat                     String?
-  defaultCurrency                String?
-  defaultDashboard               String?
-  defaultLandingPage             String?
-  defaultLanguage                String?
-  defaultUserRoleCode            String?
-  demoModeEnabled                Boolean?                        @default(false)
-  faviconUrl                     String?
-  financialYearStartMonth        Int?
-  legalName                      String?
-  numberFormat                   String?
-  secondaryAccentColor           String?
-  timezone                       String?
-  coaFrozen                      Boolean                         @default(false)
-  coaLockedAt                    DateTime?
-  coaStructureFrozen             Boolean                         @default(false)
-  coaStructureFrozenAt           DateTime?
-  coaStructureFrozenByUserId     String?
-  coaStructureFreezeEffectiveDate DateTime?
-  arControlAccountId             String?
-  apControlAccountId             String?
-  supplierAdvanceAccountId       String?
-  defaultBankClearingAccountId   String?
-  unappliedReceiptsAccountId     String?
-  allowSelfPosting               Boolean                         @default(false)
-  retroPostToleranceDays         Int                             @default(0)
-  receiptBankName                String?
-  receiptBankAccountName         String?
-  receiptBankAccountNumber       String?
-  receiptBankBranch              String?
-  receiptBankSwiftCode           String?
-  requiresDepartmentOnInvoices   Boolean                         @default(false)
-  requiresFundOnInvoices         Boolean                         @default(false)
-  requiresProjectOnInvoices      Boolean                         @default(false)
-  cashClearingAccountId          String?
-  coaRootCategories              CoaRootCategory[]                @relation("TenantCoaRootCategories")
-  accounts                       Account[]
-  periods                        AccountingPeriod[]
-  accountingPeriodChecklists     AccountingPeriodChecklist[]
-  accountingPeriodChecklistItems AccountingPeriodChecklistItem[]
-  accountingPeriodCloseLogs      AccountingPeriodCloseLog[]
-  accountingPeriodCorrections    AccountingPeriodCorrection[]
-  arReminderLogs                 ArReminderLog[]
-  arReminderRules                ArReminderRule[]
-  arReminderTemplates            ArReminderTemplate[]
-  auditEvents                    AuditEvent[]
-  auditEvidence                  AuditEvidence[]
-  auditEvidenceLinks             AuditEvidenceLink[]
-  bankAccounts                   BankAccount[]
-  bankReconciliationSnapshots     BankReconciliationSnapshot[]
-  bankStatements                 BankStatement[]
-  budgets                        Budget[]
-  budgetLines                    BudgetLine[]
-  budgetRevisions                BudgetRevision[]
-  coaCanonicalSnapshots          CoaCanonicalSnapshot[]
-  customers                      Customer[]
-  customerCreditNotes            CustomerCreditNote[]
-  customerInvoices               CustomerInvoice[]
-  customerInvoiceImportLogs      CustomerInvoiceImportLog[]
-  customerReceipts               CustomerReceipt[]
-  customerReceiptLines           CustomerReceiptLine[]
-  refunds                        CustomerRefund[]
-  departments                    Department[]
-  departmentMemberships          DepartmentMembership[]
-  disclosureNotes                DisclosureNote[]
-  entities                       Entity[]
-  fixedAssets                    FixedAsset[]
-  fixedAssetCategories           FixedAssetCategory[]
-  fixedAssetDepreciationLines    FixedAssetDepreciationLine[]
-  fixedAssetDepreciationRuns     FixedAssetDepreciationRun[]
-  forecasts                      Forecast[]
-  funds                          Fund[]
-  invoiceCategories              InvoiceCategory[]
-  invoiceTaxLines                InvoiceTaxLine[]
-  journals                       JournalEntry[]
-  legalEntities                  LegalEntity[]
-  payments                       Payment[]
-  paymentRuns                    PaymentRun[]
-  paymentRunLines                PaymentRunLine[]
-  periodCloseChecklists          PeriodCloseChecklist[]
-  periodCloseChecklistItems      PeriodCloseChecklistItem[]
-  projects                       Project[]
-  recurringJournalGenerations    RecurringJournalGeneration[]
-  recurringJournalTemplates      RecurringJournalTemplate[]
-  reviewPacks                    ReviewPack[]
-  roles                          Role[]
-  sodRules                       SoDRule[]
-  sodLogs                        SoDViolationLog[]
-  suppliers                      Supplier[]
-  supplierInvoices               SupplierInvoice[]
-  paymentProposals               PaymentProposal[]
-  paymentProposalLines           PaymentProposalLine[]
-  taxRates                       TaxRate[]
-  imprestTypePolicies             ImprestTypePolicy[]
-  imprestFacilities               ImprestFacility[]
-  journalNumberingConfig          TenantJournalNumberingConfig?
-  imprestCases                    ImprestCase[]
-  imprestCaseTransitionLogs       ImprestCaseTransitionLog[]
-  imprestCaseEvidence             ImprestCaseEvidence[]
-  imprestSettlementLines          ImprestSettlementLine[]
-  arControlAccount               Account?                        @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
-  apControlAccount               Account?                        @relation("TenantApControlAccount", fields: [apControlAccountId], references: [id], onDelete: Restrict)
-  supplierAdvanceAccount         Account?                        @relation("TenantSupplierAdvanceAccount", fields: [supplierAdvanceAccountId], references: [id], onDelete: Restrict)
-  cashClearingAccount            Account?                        @relation("TenantCashClearingAccount", fields: [cashClearingAccountId], references: [id], onDelete: Restrict)
-  defaultBankClearingAccount     Account?                        @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
-  unappliedReceiptsAccount       Account?                        @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
-  sequenceCounters               TenantSequenceCounter[]
-  taxConfig                      TenantTaxConfig?
-  users                          User[]
-  userLegalEntityAccess          UserLegalEntityAccess[]
-  sessions                       UserSession[]
-  governanceOverrideSessions      GovernanceOverrideSession[]
+  id                                    String                                 @id @default(uuid())
+  name                                  String                                 @unique
+  createdAt                             DateTime                               @default(now())
+  logoUrl                               String?
+  organisationName                      String                                 @default("USPIRE ERP")
+  organisationShortName                 String?
+  primaryColor                          String                                 @default("#020445")
+  secondaryColor                        String?
+  updatedAt                             DateTime                               @default(now()) @updatedAt
+  accentColor                           String?
+  country                               String?
+  dateFormat                            String?
+  defaultCurrency                       String?
+  defaultDashboard                      String?
+  defaultLandingPage                    String?
+  defaultLanguage                       String?
+  defaultUserRoleCode                   String?
+  demoModeEnabled                       Boolean?                               @default(false)
+  faviconUrl                            String?
+  financialYearStartMonth               Int?
+  legalName                             String?
+  numberFormat                          String?
+  secondaryAccentColor                  String?
+  timezone                              String?
+  coaFrozen                             Boolean                                @default(false)
+  coaLockedAt                           DateTime?
+  arControlAccountId                    String?
+  defaultBankClearingAccountId          String?
+  unappliedReceiptsAccountId            String?
+  allowSelfPosting                      Boolean                                @default(false)
+  receiptBankName                       String?
+  receiptBankAccountName                String?
+  receiptBankAccountNumber              String?
+  receiptBankBranch                     String?
+  receiptBankSwiftCode                  String?
+  requiresDepartmentOnInvoices          Boolean                                @default(false)
+  requiresFundOnInvoices                Boolean                                @default(false)
+  requiresProjectOnInvoices             Boolean                                @default(false)
+  cashClearingAccountId                 String?
+  apControlAccountId                    String?
+  loginPageBackgroundUrl                String?
+  loginPageTitle                        String                                 @default("Enterprise Resource Planning System")
+  supplierAdvanceAccountId              String?
+  coaStructureFreezeEffectiveDate       DateTime?
+  coaStructureFrozen                    Boolean                                @default(false)
+  coaStructureFrozenAt                  DateTime?
+  coaStructureFrozenByUserId            String?
+  status                                MasterStatus                           @default(ACTIVE)
+  retroPostToleranceDays                Int                                    @default(0)
+  accounts                              Account[]
+  periods                               AccountingPeriod[]
+  accountingPeriodChecklists            AccountingPeriodChecklist[]
+  accountingPeriodChecklistItems        AccountingPeriodChecklistItem[]
+  accountingPeriodCloseLogs             AccountingPeriodCloseLog[]
+  accountingPeriodCorrections           AccountingPeriodCorrection[]
+  arReminderLogs                        ArReminderLog[]
+  arReminderRules                       ArReminderRule[]
+  arReminderTemplates                   ArReminderTemplate[]
+  auditEvents                           AuditEvent[]
+  auditEvidence                         AuditEvidence[]
+  auditEvidenceLinks                    AuditEvidenceLink[]
+  bankAccounts                          BankAccount[]
+  bankReconciliationSnapshots           BankReconciliationSnapshot[]
+  bankStatements                        BankStatement[]
+  budgets                               Budget[]
+  budgetLines                           BudgetLine[]
+  budgetRevisions                       BudgetRevision[]
+  coaApprovalAttachments                COAApprovalAttachment[]
+  coaApprovalRequests                   COAApprovalRequest[]
+  coaReclassifications                  COAReclassification[]
+  coaCanonicalSnapshots                 CoaCanonicalSnapshot[]
+  coaImportBatches                      CoaImportBatch[]
+  coaRootCategories                     CoaRootCategory[]                      @relation("TenantCoaRootCategories")
+  coaStructuralChanges                  CoaStructuralChange[]
+  coaStructureChangeRequests            CoaStructureChangeRequest[]
+  coaStructureChangeRequestAttachments  CoaStructureChangeRequestAttachment[]
+  customers                             Customer[]
+  customerCreditNotes                   CustomerCreditNote[]
+  customerInvoices                      CustomerInvoice[]
+  customerInvoiceImportLogs             CustomerInvoiceImportLog[]
+  customerReceipts                      CustomerReceipt[]
+  customerReceiptLines                  CustomerReceiptLine[]
+  refunds                               CustomerRefund[]
+  departments                           Department[]
+  departmentMemberships                 DepartmentMembership[]
+  disclosureNotes                       DisclosureNote[]
+  entities                              Entity[]
+  fixedAssets                           FixedAsset[]
+  fixedAssetCategories                  FixedAssetCategory[]
+  fixedAssetDepreciationLines           FixedAssetDepreciationLine[]
+  fixedAssetDepreciationRuns            FixedAssetDepreciationRun[]
+  forecasts                             Forecast[]
+  funds                                 Fund[]
   governanceAutomationExecutionSessions GovernanceAutomationExecutionSession[]
-  governanceAutomationSchedules   GovernanceAutomationSchedule[]
-  passwordResetTokens            PasswordResetToken[]
-  delegations                    UserDelegation[]
-  twoFactorChallenges             TwoFactorChallenge[]
-  unlockRequests                 UnlockRequest[]
-  coaApprovalRequests            COAApprovalRequest[]
-  coaApprovalAttachments         COAApprovalAttachment[]
-  coaReclassifications           COAReclassification[]
-  coaImportBatches               CoaImportBatch[]
-  coaStructureChangeRequests     CoaStructureChangeRequest[]
-  coaStructureChangeRequestAttachments CoaStructureChangeRequestAttachment[]
-  coaStructuralChanges           CoaStructuralChange[]
-  ifrsNodes                      IfrsNode[]
-  notifications                  Notification[]
-
-  coaStructureFrozenByUser       User?                           @relation("TenantCoaStructureFrozenBy", fields: [coaStructureFrozenByUserId], references: [id], onDelete: SetNull)
+  governanceAutomationSchedules         GovernanceAutomationSchedule[]
+  governanceOverrideSessions            GovernanceOverrideSession[]
+  ifrsNodes                             IfrsNode[]
+  imprestCases                          ImprestCase[]
+  imprestCaseEvidence                   ImprestCaseEvidence[]
+  imprestCaseTransitionLogs             ImprestCaseTransitionLog[]
+  imprestFacilities                     ImprestFacility[]
+  imprestSettlementLines                ImprestSettlementLine[]
+  imprestTypePolicies                   ImprestTypePolicy[]
+  invoiceCategories                     InvoiceCategory[]
+  invoiceTaxLines                       InvoiceTaxLine[]
+  journals                              JournalEntry[]
+  legalEntities                         LegalEntity[]
+  notifications                         Notification[]
+  passwordResetTokens                   PasswordResetToken[]
+  payments                              Payment[]
+  paymentProposals                      PaymentProposal[]
+  paymentProposalLines                  PaymentProposalLine[]
+  paymentRuns                           PaymentRun[]
+  paymentRunLines                       PaymentRunLine[]
+  periodCloseChecklists                 PeriodCloseChecklist[]
+  periodCloseChecklistItems             PeriodCloseChecklistItem[]
+  projects                              Project[]
+  recurringJournalGenerations           RecurringJournalGeneration[]
+  recurringJournalTemplates             RecurringJournalTemplate[]
+  reviewPacks                           ReviewPack[]
+  roles                                 Role[]
+  sodRules                              SoDRule[]
+  sodLogs                               SoDViolationLog[]
+  suppliers                             Supplier[]
+  supplierInvoices                      SupplierInvoice[]
+  taxRates                              TaxRate[]
+  apControlAccount                      Account?                               @relation("TenantApControlAccount", fields: [apControlAccountId], references: [id], onDelete: Restrict)
+  arControlAccount                      Account?                               @relation("TenantArControlAccount", fields: [arControlAccountId], references: [id], onDelete: Restrict)
+  cashClearingAccount                   Account?                               @relation("TenantCashClearingAccount", fields: [cashClearingAccountId], references: [id], onDelete: Restrict)
+  coaStructureFrozenByUser              User?                                  @relation("TenantCoaStructureFrozenBy", fields: [coaStructureFrozenByUserId], references: [id])
+  defaultBankClearingAccount            Account?                               @relation("TenantDefaultBankClearingAccount", fields: [defaultBankClearingAccountId], references: [id], onDelete: Restrict)
+  supplierAdvanceAccount                Account?                               @relation("TenantSupplierAdvanceAccount", fields: [supplierAdvanceAccountId], references: [id], onDelete: Restrict)
+  unappliedReceiptsAccount              Account?                               @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
+  sequenceCounters                      TenantSequenceCounter[]
+  taxConfig                             TenantTaxConfig?
+  twoFactorChallenges                   TwoFactorChallenge[]
+  unlockRequests                        UnlockRequest[]
+  users                                 User[]
+  delegations                           UserDelegation[]
+  userLegalEntityAccess                 UserLegalEntityAccess[]
+  sessions                              UserSession[]
 
   @@index([status])
 }
 
 model UnlockRequest {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   userEmail   String
   userId      String?
   ipAddress   String?
   userAgent   String?
-  requestedAt DateTime @default(now())
-  status      String   @default("PENDING")
+  requestedAt DateTime  @default(now())
+  status      String    @default("PENDING")
   resolvedAt  DateTime?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([userEmail])
 }
 
 model Entity {
-  id              String   @id @default(uuid())
-  tenantId        String
-  name            String
-  jurisdiction    String
-  baseCurrency    String
-  fiscalYearStart Int
-  createdAt       DateTime @default(now())
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  id                String            @id @default(uuid())
+  tenantId          String
+  name              String
+  jurisdiction      String
+  baseCurrency      String
+  fiscalYearStart   Int
+  createdAt         DateTime          @default(now())
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
   imprestFacilities ImprestFacility[]
 
   @@unique([tenantId, name])
@@ -1628,21 +1509,21 @@ model Entity {
 }
 
 model LegalEntity {
-  id            String        @id @default(uuid())
-  tenantId      String
-  code          String
-  name          String
-  isActive      Boolean       @default(true)
-  effectiveFrom DateTime
-  effectiveTo   DateTime?
-  createdById   String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @default(now()) @updatedAt
-  budgetLines   BudgetLine[]
-  journalLines  JournalLine[]
+  id                    String                  @id @default(uuid())
+  tenantId              String
+  code                  String
+  name                  String
+  isActive              Boolean                 @default(true)
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  createdById           String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @default(now()) @updatedAt
+  budgetLines           BudgetLine[]
+  journalLines          JournalLine[]
+  createdBy             User?                   @relation("LegalEntityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  tenant                Tenant                  @relation(fields: [tenantId], references: [id])
   userLegalEntityAccess UserLegalEntityAccess[]
-  createdBy     User?         @relation("LegalEntityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1653,19 +1534,18 @@ model LegalEntity {
 }
 
 model DepartmentMembership {
-  id           String       @id @default(uuid())
-  tenantId     String
-  departmentId String
-  userId       String
-  status       MasterStatus @default(ACTIVE)
+  id            String       @id @default(uuid())
+  tenantId      String
+  departmentId  String
+  userId        String
+  status        MasterStatus @default(ACTIVE)
   effectiveFrom DateTime
   effectiveTo   DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @default(now()) @updatedAt
-
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+  department    Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, departmentId, userId])
   @@index([tenantId])
@@ -1694,12 +1574,12 @@ model Project {
   customerInvoices        CustomerInvoice[]        @relation("CustomerInvoiceProject")
   invoiceLines            CustomerInvoiceLine[]
   funds                   Fund[]
-  journalLines            JournalLine[]
   imprestFacilities       ImprestFacility[]
-  paymentAllocations      PaymentAllocation[]        @relation("PaymentAllocationProject")
-  supplierInvoiceLines    SupplierInvoiceLine[]      @relation("SupplierInvoiceLineProject")
+  journalLines            JournalLine[]
+  paymentAllocations      PaymentAllocation[]      @relation("PaymentAllocationProject")
   createdBy               User?                    @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
+  supplierInvoiceLines    SupplierInvoiceLine[]    @relation("SupplierInvoiceLineProject")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1731,8 +1611,8 @@ model Fund {
   createdBy               User?                    @relation("FundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   project                 Project                  @relation(fields: [projectId], references: [id])
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
-  journalLines            JournalLine[]
   imprestFacilities       ImprestFacility[]
+  journalLines            JournalLine[]
   paymentAllocations      PaymentAllocation[]      @relation("PaymentAllocationFund")
   supplierInvoiceLines    SupplierInvoiceLine[]    @relation("SupplierInvoiceLineFund")
 
@@ -1762,11 +1642,11 @@ model Department {
   customerCreditNoteLines CustomerCreditNoteLine[]
   customerInvoices        CustomerInvoice[]
   invoiceLines            CustomerInvoiceLine[]
-  memberships             DepartmentMembership[]
   createdBy               User?                    @relation("DepartmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
-  journalLines            JournalLine[]
+  memberships             DepartmentMembership[]
   imprestFacilities       ImprestFacility[]
+  journalLines            JournalLine[]
   paymentAllocations      PaymentAllocation[]      @relation("PaymentAllocationDepartment")
   supplierInvoiceLines    SupplierInvoiceLine[]    @relation("SupplierInvoiceLineDepartment")
 
@@ -1779,168 +1659,163 @@ model Department {
 }
 
 model User {
-  id                                      String                          @id @default(uuid())
-  tenantId                                String
-  email                                   String
-  passwordHash                            String
-  passwordChangedAt                       DateTime?
-  passwordExpiresAt                       DateTime?
-  mustChangePassword                      Boolean                         @default(false)
-  passwordResetTokenHash                  String?
-  passwordResetTokenExpiresAt             DateTime?
-  activeSessionId                         String?
-  lastActivityAt                          DateTime?
-  isActive                                Boolean                         @default(true)
-  createdAt                               DateTime                        @default(now())
-  name                                    String
-  phone                                   String?
-  jobTitle                                String?
-  timezone                                String?
-  language                                String?
-  avatarUrl                               String?
-  updatedAt                               DateTime                        @default(now()) @updatedAt
-  failedLoginAttempts                     Int                             @default(0)
-  isLocked                                Boolean                         @default(false)
-  lockedAt                                DateTime?
-  passwordFailedAttempts                  Int                             @default(0)
-  passwordLockUntil                       DateTime?
-  twoFactorEnabled                        Boolean                         @default(false)
-  twoFactorMethod                         TwoFactorMethod?
-  twoFactorSecret                         String?
-  twoFactorEmailLastSentAt                DateTime?
-  twoFactorLockUntil                      DateTime?
-  twoFactorFailedAttempts                 Int                             @default(0)
-  sessions                                UserSession[]
-  governanceOverrideSessionsRequested      GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionRequestedBy")
-  governanceOverrideSessionsApproved       GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionApprovedBy")
-  governanceOverrideSessionsRejected       GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionRejectedBy")
-  governanceOverrideSessionsRevoked        GovernanceOverrideSession[]      @relation("GovernanceOverrideSessionRevokedBy")
+  id                                           String                                 @id @default(uuid())
+  tenantId                                     String
+  email                                        String
+  passwordHash                                 String
+  isActive                                     Boolean                                @default(true)
+  createdAt                                    DateTime                               @default(now())
+  name                                         String
+  avatarUrl                                    String?
+  jobTitle                                     String?
+  language                                     String?
+  phone                                        String?
+  timezone                                     String?
+  updatedAt                                    DateTime                               @default(now()) @updatedAt
+  twoFactorEmailLastSentAt                     DateTime?
+  twoFactorEnabled                             Boolean                                @default(false)
+  twoFactorFailedAttempts                      Int                                    @default(0)
+  twoFactorLockUntil                           DateTime?
+  twoFactorMethod                              TwoFactorMethod?
+  twoFactorSecret                              String?
+  passwordFailedAttempts                       Int                                    @default(0)
+  passwordLockUntil                            DateTime?
+  failedLoginAttempts                          Int                                    @default(0)
+  isLocked                                     Boolean                                @default(false)
+  lockedAt                                     DateTime?
+  activeSessionId                              String?
+  lastActivityAt                               DateTime?
+  mustChangePassword                           Boolean                                @default(false)
+  passwordChangedAt                            DateTime?
+  passwordExpiresAt                            DateTime?
+  passwordResetTokenExpiresAt                  DateTime?
+  passwordResetTokenHash                       String?
+  accountsApproved                             Account[]                              @relation("AccountApprovedBy")
+  accountsBlocked                              Account[]                              @relation("AccountBlockedBy")
+  accountsCreated                              Account[]                              @relation("AccountCreatedBy")
+  accountsRetired                              Account[]                              @relation("AccountRetiredBy")
+  periodsClosed                                AccountingPeriod[]                     @relation("PeriodClosedBy")
+  accountingPeriodsCreated                     AccountingPeriod[]                     @relation("AccountingPeriodCreatedBy")
+  accountingPeriodChecklistsCompleted          AccountingPeriodChecklist[]            @relation("AccountingPeriodChecklistCompletedBy")
+  accountingPeriodChecklistItemsCompleted      AccountingPeriodChecklistItem[]        @relation("AccountingPeriodChecklistItemCompletedBy")
+  accountingPeriodCloseLogs                    AccountingPeriodCloseLog[]
+  accountingPeriodCorrections                  AccountingPeriodCorrection[]
+  arReminderLogsSent                           ArReminderLog[]                        @relation("ArReminderLogSentBy")
+  arReminderRulesCreated                       ArReminderRule[]                       @relation("ArReminderRuleCreatedBy")
+  arReminderTemplatesUpdated                   ArReminderTemplate[]                   @relation("ArReminderTemplateLastUpdatedBy")
+  auditEvents                                  AuditEvent[]
+  auditEvidenceUploaded                        AuditEvidence[]                        @relation("AuditEvidenceUploadedBy")
+  bankReconciliationSnapshotsCreated           BankReconciliationSnapshot[]           @relation("BankReconciliationSnapshotCreatedBy")
+  bankStatementsCreated                        BankStatement[]                        @relation("BankStatementCreatedBy")
+  bankStatementsLocked                         BankStatement[]                        @relation("BankStatementLockedBy")
+  bankStatementsReconciled                     BankStatement[]                        @relation("BankStatementReconciledBy")
+  budgetsApproved                              Budget[]                               @relation("BudgetApprovedBy")
+  budgetsCreated                               Budget[]                               @relation("BudgetCreatedBy")
+  budgetRevisions                              BudgetRevision[]                       @relation("BudgetRevisionCreatedBy")
+  coaApprovalAttachmentsUploaded               COAApprovalAttachment[]                @relation("COAApprovalAttachmentUploadedBy")
+  coaApprovalRequestsApproved                  COAApprovalRequest[]                   @relation("COAApprovalApprovedBy")
+  coaApprovalRequestsRejected                  COAApprovalRequest[]                   @relation("COAApprovalRejectedBy")
+  coaApprovalRequestsRequested                 COAApprovalRequest[]                   @relation("COAApprovalRequestedBy")
+  coaReclassificationsApproved                 COAReclassification[]                  @relation("COAReclassApprovedBy")
+  coaReclassificationsRejected                 COAReclassification[]                  @relation("COAReclassRejectedBy")
+  coaReclassificationsRequested                COAReclassification[]                  @relation("COAReclassRequestedBy")
+  coaCanonicalSnapshotsUploaded                CoaCanonicalSnapshot[]                 @relation("CoaCanonicalSnapshotUploadedBy")
+  coaImportBatchesApproved                     CoaImportBatch[]                       @relation("CoaImportBatchApprovedBy")
+  coaImportBatchesCreated                      CoaImportBatch[]                       @relation("CoaImportBatchCreatedBy")
+  coaImportBatchesReviewed                     CoaImportBatch[]                       @relation("CoaImportBatchReviewedBy")
+  coaImportBatchesSubmitted                    CoaImportBatch[]                       @relation("CoaImportBatchSubmittedBy")
+  coaRootCategoriesCreated                     CoaRootCategory[]                      @relation("CoaRootCategoryCreatedBy")
+  coaStructuralChangesApproved                 CoaStructuralChange[]                  @relation("CoaStructuralChangeApprovedBy")
+  coaStructuralChangesImplemented              CoaStructuralChange[]                  @relation("CoaStructuralChangeImplementedBy")
+  coaStructureChangeRequestsApproved           CoaStructureChangeRequest[]            @relation("CoaStructureChangeApprovedBy")
+  coaStructureChangeRequestsImplemented        CoaStructureChangeRequest[]            @relation("CoaStructureChangeImplementedBy")
+  coaStructureChangeRequestsRejected           CoaStructureChangeRequest[]            @relation("CoaStructureChangeRejectedBy")
+  coaStructureChangeRequestsRequested          CoaStructureChangeRequest[]            @relation("CoaStructureChangeRequestedBy")
+  coaStructureChangeRequestAttachmentsUploaded CoaStructureChangeRequestAttachment[]  @relation("CoaStructureChangeRequestAttachmentUploadedBy")
+  customerCreditNotesApproved                  CustomerCreditNote[]                   @relation("CustomerCreditNoteApprovedBy")
+  customerCreditNotesCreated                   CustomerCreditNote[]                   @relation("CustomerCreditNoteCreatedBy")
+  customerCreditNotesPosted                    CustomerCreditNote[]                   @relation("CustomerCreditNotePostedBy")
+  customerCreditNotesVoided                    CustomerCreditNote[]                   @relation("CustomerCreditNoteVoidedBy")
+  customerInvoicesCreated                      CustomerInvoice[]                      @relation("CustomerInvoiceCreatedBy")
+  customerInvoicesPosted                       CustomerInvoice[]                      @relation("CustomerInvoicePostedBy")
+  customerInvoiceImportsProcessed              CustomerInvoiceImportLog[]             @relation("CustomerInvoiceImportProcessedBy")
+  customerReceiptsCreated                      CustomerReceipt[]                      @relation("CustomerReceiptCreatedBy")
+  customerReceiptsPosted                       CustomerReceipt[]                      @relation("CustomerReceiptPostedBy")
+  customerReceiptsVoided                       CustomerReceipt[]                      @relation("CustomerReceiptVoidedBy")
+  customerRefundsApproved                      CustomerRefund[]                       @relation("CustomerRefundApprovedBy")
+  customerRefundsCreated                       CustomerRefund[]                       @relation("CustomerRefundCreatedBy")
+  customerRefundsPosted                        CustomerRefund[]                       @relation("CustomerRefundPostedBy")
+  customerRefundsVoided                        CustomerRefund[]                       @relation("CustomerRefundVoidedBy")
+  departmentsCreated                           Department[]                           @relation("DepartmentCreatedBy")
+  departmentMemberships                        DepartmentMembership[]
+  disclosureNotesGenerated                     DisclosureNote[]                       @relation("DisclosureNoteGeneratedBy")
+  fixedAssetsCreated                           FixedAsset[]                           @relation("FixedAssetCreatedBy")
+  fixedAssetDepreciationRunsPosted             FixedAssetDepreciationRun[]            @relation("FixedAssetDepreciationRunPostedBy")
+  forecastsCreated                             Forecast[]                             @relation("ForecastCreatedBy")
+  forecastVersionsCreated                      ForecastVersion[]                      @relation("ForecastVersionCreatedBy")
+  fundsCreated                                 Fund[]                                 @relation("FundCreatedBy")
   governanceAutomationExecutionSessionsAsActor GovernanceAutomationExecutionSession[] @relation("GovernanceAutomationExecutionSessionActor")
-  governanceAutomationSchedulesCreated        GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleCreatedBy")
-  governanceAutomationSchedulesApproved       GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleApprovedBy")
-  governanceAutomationSchedulesSuspended      GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleSuspendedBy")
-  governanceAutomationSchedulesRevoked        GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleRevokedBy")
-  coaRootCategoriesCreated                 CoaRootCategory[]               @relation("CoaRootCategoryCreatedBy")
-  accountsCreated                         Account[]                       @relation("AccountCreatedBy")
-  accountsApproved                        Account[]                       @relation("AccountApprovedBy")
-  accountsBlocked                         Account[]                       @relation("AccountBlockedBy")
-  accountsRetired                         Account[]                       @relation("AccountRetiredBy")
-  bankStatementsCreated                   BankStatement[]                 @relation("BankStatementCreatedBy")
-  bankStatementsReconciled                BankStatement[]                 @relation("BankStatementReconciledBy")
-  bankStatementsLocked                    BankStatement[]                 @relation("BankStatementLockedBy")
-  bankReconciliationSnapshotsCreated      BankReconciliationSnapshot[]    @relation("BankReconciliationSnapshotCreatedBy")
-  periodsClosed                           AccountingPeriod[]              @relation("PeriodClosedBy")
-  accountingPeriodsCreated                AccountingPeriod[]              @relation("AccountingPeriodCreatedBy")
-  accountingPeriodChecklistsCompleted     AccountingPeriodChecklist[]     @relation("AccountingPeriodChecklistCompletedBy")
-  accountingPeriodChecklistItemsCompleted AccountingPeriodChecklistItem[] @relation("AccountingPeriodChecklistItemCompletedBy")
-  accountingPeriodCloseLogs               AccountingPeriodCloseLog[]
-  accountingPeriodCorrections             AccountingPeriodCorrection[]
-  arReminderLogsSent                      ArReminderLog[]                 @relation("ArReminderLogSentBy")
-  arReminderRulesCreated                  ArReminderRule[]                @relation("ArReminderRuleCreatedBy")
-  arReminderTemplatesUpdated              ArReminderTemplate[]            @relation("ArReminderTemplateLastUpdatedBy")
-  auditEvents                             AuditEvent[]
-  auditEvidenceUploaded                   AuditEvidence[]                 @relation("AuditEvidenceUploadedBy")
-  budgetsApproved                         Budget[]                        @relation("BudgetApprovedBy")
-  budgetsCreated                          Budget[]                        @relation("BudgetCreatedBy")
-  budgetRevisions                         BudgetRevision[]                @relation("BudgetRevisionCreatedBy")
-  coaCanonicalSnapshotsUploaded           CoaCanonicalSnapshot[]          @relation("CoaCanonicalSnapshotUploadedBy")
-  coaApprovalRequestsRequested            COAApprovalRequest[]            @relation("COAApprovalRequestedBy")
-  coaApprovalRequestsApproved             COAApprovalRequest[]            @relation("COAApprovalApprovedBy")
-  coaApprovalRequestsRejected             COAApprovalRequest[]            @relation("COAApprovalRejectedBy")
-  coaApprovalAttachmentsUploaded          COAApprovalAttachment[]         @relation("COAApprovalAttachmentUploadedBy")
-  coaImportBatchesCreated                 CoaImportBatch[]                @relation("CoaImportBatchCreatedBy")
-  coaImportBatchesSubmitted               CoaImportBatch[]                @relation("CoaImportBatchSubmittedBy")
-  coaImportBatchesApproved                CoaImportBatch[]                @relation("CoaImportBatchApprovedBy")
-  coaImportBatchesReviewed                CoaImportBatch[]                @relation("CoaImportBatchReviewedBy")
-  coaReclassificationsRequested           COAReclassification[]           @relation("COAReclassRequestedBy")
-  coaReclassificationsApproved            COAReclassification[]           @relation("COAReclassApprovedBy")
-  coaReclassificationsRejected            COAReclassification[]           @relation("COAReclassRejectedBy")
-  customerCreditNotesApproved             CustomerCreditNote[]            @relation("CustomerCreditNoteApprovedBy")
-  customerCreditNotesCreated              CustomerCreditNote[]            @relation("CustomerCreditNoteCreatedBy")
-  customerCreditNotesPosted               CustomerCreditNote[]            @relation("CustomerCreditNotePostedBy")
-  customerCreditNotesVoided               CustomerCreditNote[]            @relation("CustomerCreditNoteVoidedBy")
-  customerInvoicesCreated                 CustomerInvoice[]               @relation("CustomerInvoiceCreatedBy")
-  customerInvoicesPosted                  CustomerInvoice[]               @relation("CustomerInvoicePostedBy")
-  customerInvoiceImportsProcessed         CustomerInvoiceImportLog[]      @relation("CustomerInvoiceImportProcessedBy")
-  customerReceiptsCreated                 CustomerReceipt[]               @relation("CustomerReceiptCreatedBy")
-  customerReceiptsPosted                  CustomerReceipt[]               @relation("CustomerReceiptPostedBy")
-  customerReceiptsVoided                  CustomerReceipt[]               @relation("CustomerReceiptVoidedBy")
-  customerRefundsApproved                 CustomerRefund[]                @relation("CustomerRefundApprovedBy")
-  customerRefundsCreated                  CustomerRefund[]                @relation("CustomerRefundCreatedBy")
-  customerRefundsPosted                   CustomerRefund[]                @relation("CustomerRefundPostedBy")
-  customerRefundsVoided                   CustomerRefund[]                @relation("CustomerRefundVoidedBy")
-  departmentsCreated                      Department[]                    @relation("DepartmentCreatedBy")
-  disclosureNotesGenerated                DisclosureNote[]                @relation("DisclosureNoteGeneratedBy")
-  fixedAssetsCreated                      FixedAsset[]                    @relation("FixedAssetCreatedBy")
-  fixedAssetDepreciationRunsPosted        FixedAssetDepreciationRun[]     @relation("FixedAssetDepreciationRunPostedBy")
-  forecastsCreated                        Forecast[]                      @relation("ForecastCreatedBy")
-  forecastVersionsCreated                 ForecastVersion[]               @relation("ForecastVersionCreatedBy")
-  fundsCreated                            Fund[]                          @relation("FundCreatedBy")
-  journalsApproved                        JournalEntry[]                  @relation("JournalApprovedBy")
-  journalsCreated                         JournalEntry[]                  @relation("JournalCreatedBy")
-  journalsPosted                          JournalEntry[]                  @relation("JournalPostedBy")
-  journalsRejected                        JournalEntry[]                  @relation("JournalRejectedBy")
-  journalsVoided                          JournalEntry[]                  @relation("JournalVoidedBy")
-  journalsReturnedByPoster                JournalEntry[]                  @relation("JournalReturnedByPoster")
-  journalsReversalInitiated               JournalEntry[]                  @relation("JournalReversalInitiatedBy")
-  journalsReversalPrepared                JournalEntry[]                  @relation("JournalReversalPreparedBy")
-  journalsReviewed                        JournalEntry[]                  @relation("JournalReviewedBy")
-  journalsSubmitted                       JournalEntry[]                  @relation("JournalSubmittedBy")
-  tenantJournalNumberingConfigsUpdated    TenantJournalNumberingConfig[]  @relation("TenantJournalNumberingConfigUpdatedBy")
-  legalEntitiesCreated                    LegalEntity[]                   @relation("LegalEntityCreatedBy")
-  paymentsApproved                        Payment[]                       @relation("PaymentApprovedBy")
-  paymentsCreated                         Payment[]                       @relation("PaymentCreatedBy")
-  paymentsPosted                          Payment[]                       @relation("PaymentPostedBy")
-  periodCloseChecklistItemsCompleted      PeriodCloseChecklistItem[]      @relation("PeriodCloseChecklistItemCompletedBy")
-  projectsCreated                         Project[]                       @relation("ProjectCreatedBy")
-  recurringJournalGenerations             RecurringJournalGeneration[]    @relation("RecurringJournalGeneratedBy")
-  recurringJournalTemplatesCreated        RecurringJournalTemplate[]      @relation("RecurringTemplateCreatedBy")
-  reviewPacksGenerated                    ReviewPack[]                    @relation("ReviewPackGeneratedBy")
-  sodLogs                                 SoDViolationLog[]
-  supplierInvoicesApproved                SupplierInvoice[]               @relation("SupplierInvoiceApprovedBy")
-  supplierInvoicesCreated                 SupplierInvoice[]               @relation("SupplierInvoiceCreatedBy")
-  supplierInvoicesRejected                SupplierInvoice[]               @relation("SupplierInvoiceRejectedBy")
-  supplierInvoicesPosted                  SupplierInvoice[]               @relation("SupplierInvoicePostedBy")
-  paymentProposalsCreated                 PaymentProposal[]               @relation("PaymentProposalCreatedBy")
-  paymentProposalsApproved                PaymentProposal[]               @relation("PaymentProposalApprovedBy")
-  paymentProposalsRejected                PaymentProposal[]               @relation("PaymentProposalRejectedBy")
-  paymentRunsExecuted                     PaymentRun[]                    @relation("PaymentRunExecutedBy")
-  departmentMemberships                   DepartmentMembership[]
-  tenant                                  Tenant                          @relation(fields: [tenantId], references: [id])
-  userRoles                               UserRole[]
-  imprestTypePoliciesCreated              ImprestTypePolicy[]              @relation("ImprestTypePolicyCreatedBy")
-  imprestFacilitiesCreated                ImprestFacility[]                @relation("ImprestFacilityCreatedBy")
-  imprestFacilitiesAsCustodian            ImprestFacility[]                @relation("ImprestFacilityCustodian")
-  imprestCasesCreated                     ImprestCase[]                    @relation("ImprestCaseCreatedBy")
-  imprestCasesReviewed                    ImprestCase[]                    @relation("ImprestCaseReviewedBy")
-  imprestCasesApproved                    ImprestCase[]                    @relation("ImprestCaseApprovedBy")
-  imprestCasesRejected                    ImprestCase[]                    @relation("ImprestCaseRejectedBy")
-  imprestCasesIssued                      ImprestCase[]                    @relation("ImprestCaseIssuedBy")
-  imprestCasesSettled                     ImprestCase[]                    @relation("ImprestCaseSettledBy")
-  imprestCaseTransitionsActed             ImprestCaseTransitionLog[]        @relation("ImprestCaseTransitionActor")
-  imprestSettlementLinesCreated           ImprestSettlementLine[]            @relation("ImprestSettlementLineCreatedBy")
-  twoFactorChallenges                     TwoFactorChallenge[]
-  passwordResetTokens                     PasswordResetToken[]
-  sessionsActingAs                        UserSession[]                    @relation("UserSessionActingAs")
-  sessionsRealUser                        UserSession[]                    @relation("UserSessionRealUser")
-  delegationsGiven                        UserDelegation[]                  @relation("DelegationDelegator")
-  delegationsReceived                     UserDelegation[]                  @relation("DelegationDelegate")
-  delegationsCreated                      UserDelegation[]                  @relation("DelegationCreatedBy")
-  ifrsNodesCreated                         IfrsNode[]                       @relation("IfrsNodeCreatedBy")
-  tenantsCoaStructureFrozenBy              Tenant[]                         @relation("TenantCoaStructureFrozenBy")
-  coaStructureChangeRequestsRequested      CoaStructureChangeRequest[]       @relation("CoaStructureChangeRequestedBy")
-  coaStructureChangeRequestsApproved       CoaStructureChangeRequest[]       @relation("CoaStructureChangeApprovedBy")
-  coaStructureChangeRequestsRejected       CoaStructureChangeRequest[]       @relation("CoaStructureChangeRejectedBy")
-  coaStructureChangeRequestsImplemented    CoaStructureChangeRequest[]       @relation("CoaStructureChangeImplementedBy")
-  coaStructureChangeRequestAttachmentsUploaded CoaStructureChangeRequestAttachment[] @relation("CoaStructureChangeRequestAttachmentUploadedBy")
-
-  coaStructuralChangesApproved             CoaStructuralChange[]              @relation("CoaStructuralChangeApprovedBy")
-  coaStructuralChangesImplemented          CoaStructuralChange[]              @relation("CoaStructuralChangeImplementedBy")
-
-  legalEntityAccess                       UserLegalEntityAccess[]
-  legalEntityAccessGranted                UserLegalEntityAccess[]             @relation("UserLegalEntityAccessGrantedBy")
-
-  notifications                           Notification[]
+  governanceAutomationSchedulesApproved        GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleApprovedBy")
+  governanceAutomationSchedulesCreated         GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleCreatedBy")
+  governanceAutomationSchedulesRevoked         GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleRevokedBy")
+  governanceAutomationSchedulesSuspended       GovernanceAutomationSchedule[]         @relation("GovernanceAutomationScheduleSuspendedBy")
+  governanceOverrideSessionsApproved           GovernanceOverrideSession[]            @relation("GovernanceOverrideSessionApprovedBy")
+  governanceOverrideSessionsRejected           GovernanceOverrideSession[]            @relation("GovernanceOverrideSessionRejectedBy")
+  governanceOverrideSessionsRequested          GovernanceOverrideSession[]            @relation("GovernanceOverrideSessionRequestedBy")
+  governanceOverrideSessionsRevoked            GovernanceOverrideSession[]            @relation("GovernanceOverrideSessionRevokedBy")
+  ifrsNodesCreated                             IfrsNode[]                             @relation("IfrsNodeCreatedBy")
+  imprestCasesApproved                         ImprestCase[]                          @relation("ImprestCaseApprovedBy")
+  imprestCasesCreated                          ImprestCase[]                          @relation("ImprestCaseCreatedBy")
+  imprestCasesIssued                           ImprestCase[]                          @relation("ImprestCaseIssuedBy")
+  imprestCasesRejected                         ImprestCase[]                          @relation("ImprestCaseRejectedBy")
+  imprestCasesReviewed                         ImprestCase[]                          @relation("ImprestCaseReviewedBy")
+  imprestCasesSettled                          ImprestCase[]                          @relation("ImprestCaseSettledBy")
+  imprestCaseTransitionsActed                  ImprestCaseTransitionLog[]             @relation("ImprestCaseTransitionActor")
+  imprestFacilitiesCreated                     ImprestFacility[]                      @relation("ImprestFacilityCreatedBy")
+  imprestFacilitiesAsCustodian                 ImprestFacility[]                      @relation("ImprestFacilityCustodian")
+  imprestSettlementLinesCreated                ImprestSettlementLine[]                @relation("ImprestSettlementLineCreatedBy")
+  imprestTypePoliciesCreated                   ImprestTypePolicy[]                    @relation("ImprestTypePolicyCreatedBy")
+  journalsApproved                             JournalEntry[]                         @relation("JournalApprovedBy")
+  journalsCreated                              JournalEntry[]                         @relation("JournalCreatedBy")
+  journalsPosted                               JournalEntry[]                         @relation("JournalPostedBy")
+  journalsRejected                             JournalEntry[]                         @relation("JournalRejectedBy")
+  journalsReturnedByPoster                     JournalEntry[]                         @relation("JournalReturnedByPoster")
+  journalsReversalInitiated                    JournalEntry[]                         @relation("JournalReversalInitiatedBy")
+  journalsReversalPrepared                     JournalEntry[]                         @relation("JournalReversalPreparedBy")
+  journalsReviewed                             JournalEntry[]                         @relation("JournalReviewedBy")
+  journalsSubmitted                            JournalEntry[]                         @relation("JournalSubmittedBy")
+  legalEntitiesCreated                         LegalEntity[]                          @relation("LegalEntityCreatedBy")
+  notifications                                Notification[]
+  passwordResetTokens                          PasswordResetToken[]
+  paymentsApproved                             Payment[]                              @relation("PaymentApprovedBy")
+  paymentsCreated                              Payment[]                              @relation("PaymentCreatedBy")
+  paymentsPosted                               Payment[]                              @relation("PaymentPostedBy")
+  paymentProposalsApproved                     PaymentProposal[]                      @relation("PaymentProposalApprovedBy")
+  paymentProposalsCreated                      PaymentProposal[]                      @relation("PaymentProposalCreatedBy")
+  paymentProposalsRejected                     PaymentProposal[]                      @relation("PaymentProposalRejectedBy")
+  paymentRunsExecuted                          PaymentRun[]                           @relation("PaymentRunExecutedBy")
+  periodCloseChecklistItemsCompleted           PeriodCloseChecklistItem[]             @relation("PeriodCloseChecklistItemCompletedBy")
+  projectsCreated                              Project[]                              @relation("ProjectCreatedBy")
+  recurringJournalGenerations                  RecurringJournalGeneration[]           @relation("RecurringJournalGeneratedBy")
+  recurringJournalTemplatesCreated             RecurringJournalTemplate[]             @relation("RecurringTemplateCreatedBy")
+  reviewPacksGenerated                         ReviewPack[]                           @relation("ReviewPackGeneratedBy")
+  sodLogs                                      SoDViolationLog[]
+  supplierInvoicesApproved                     SupplierInvoice[]                      @relation("SupplierInvoiceApprovedBy")
+  supplierInvoicesCreated                      SupplierInvoice[]                      @relation("SupplierInvoiceCreatedBy")
+  supplierInvoicesPosted                       SupplierInvoice[]                      @relation("SupplierInvoicePostedBy")
+  supplierInvoicesRejected                     SupplierInvoice[]                      @relation("SupplierInvoiceRejectedBy")
+  tenantsCoaStructureFrozenBy                  Tenant[]                               @relation("TenantCoaStructureFrozenBy")
+  twoFactorChallenges                          TwoFactorChallenge[]
+  tenant                                       Tenant                                 @relation(fields: [tenantId], references: [id])
+  delegationsCreated                           UserDelegation[]                       @relation("DelegationCreatedBy")
+  delegationsReceived                          UserDelegation[]                       @relation("DelegationDelegate")
+  delegationsGiven                             UserDelegation[]                       @relation("DelegationDelegator")
+  legalEntityAccessGranted                     UserLegalEntityAccess[]                @relation("UserLegalEntityAccessGrantedBy")
+  legalEntityAccess                            UserLegalEntityAccess[]
+  userRoles                                    UserRole[]
+  sessionsActingAs                             UserSession[]                          @relation("UserSessionActingAs")
+  sessionsRealUser                             UserSession[]                          @relation("UserSessionRealUser")
+  sessions                                     UserSession[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1957,9 +1832,8 @@ model Notification {
   entityId   String?
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([tenantId, userId])
@@ -1969,25 +1843,24 @@ model Notification {
 }
 
 model UserSession {
-  id         String   @id @default(uuid())
-  tenantId   String
-  userId     String
-  sessionId  String
-  delegationId String?
+  id             String          @id @default(uuid())
+  tenantId       String
+  userId         String
+  createdAt      DateTime        @default(now())
+  lastSeenAt     DateTime        @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  ipAddress      String?
+  userAgent      String?
+  sessionId      String
   actingAsUserId String?
-  realUserId String?
-  createdAt  DateTime @default(now())
-  lastSeenAt DateTime @default(now())
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  ipAddress  String?
-  userAgent  String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  delegation UserDelegation? @relation(fields: [delegationId], references: [id], onDelete: SetNull)
-  actingAsUser User? @relation("UserSessionActingAs", fields: [actingAsUserId], references: [id], onDelete: SetNull)
-  realUser User? @relation("UserSessionRealUser", fields: [realUserId], references: [id], onDelete: SetNull)
+  delegationId   String?
+  realUserId     String?
+  actingAsUser   User?           @relation("UserSessionActingAs", fields: [actingAsUserId], references: [id])
+  delegation     UserDelegation? @relation(fields: [delegationId], references: [id])
+  realUser       User?           @relation("UserSessionRealUser", fields: [realUserId], references: [id])
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([userId])
@@ -1999,137 +1872,107 @@ model UserSession {
 }
 
 model GovernanceOverrideSession {
-  id              String   @id @default(uuid())
-  tenantId         String
-
-  overrideCode     String
-  entryPoint       String
-  status           String   @default("REQUESTED")
-
-  reason           String
-  justification    String
-
-  escalationType   String?
-  escalationReason String?
-
-  entityType       AuditEntityType?
-  entityId         String?
-
-  requestedById    String
-  approvedById     String?
-  rejectedById     String?
-  revokedById      String?
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now()) @updatedAt
-  expiresAt        DateTime
-  executedAt       DateTime?
-  revokedAt        DateTime?
-  approvedAt       DateTime?
-  rejectedAt       DateTime?
-
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  requestedBy      User     @relation("GovernanceOverrideSessionRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
-  approvedBy       User?    @relation("GovernanceOverrideSessionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  rejectedBy       User?    @relation("GovernanceOverrideSessionRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
-  revokedBy        User?    @relation("GovernanceOverrideSessionRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  id                                    String                                 @id @default(uuid())
+  tenantId                              String
+  overrideCode                          String
+  entryPoint                            String
+  status                                String                                 @default("REQUESTED")
+  reason                                String
+  justification                         String
+  escalationType                        String?
+  escalationReason                      String?
+  entityType                            AuditEntityType?
+  entityId                              String?
+  requestedById                         String
+  approvedById                          String?
+  rejectedById                          String?
+  revokedById                           String?
+  createdAt                             DateTime                               @default(now())
+  updatedAt                             DateTime                               @default(now()) @updatedAt
+  expiresAt                             DateTime
+  executedAt                            DateTime?
+  revokedAt                             DateTime?
+  approvedAt                            DateTime?
+  rejectedAt                            DateTime?
+  governanceAutomationExecutionSessions GovernanceAutomationExecutionSession[]
+  approvedBy                            User?                                  @relation("GovernanceOverrideSessionApprovedBy", fields: [approvedById], references: [id])
+  rejectedBy                            User?                                  @relation("GovernanceOverrideSessionRejectedBy", fields: [rejectedById], references: [id])
+  requestedBy                           User                                   @relation("GovernanceOverrideSessionRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  revokedBy                             User?                                  @relation("GovernanceOverrideSessionRevokedBy", fields: [revokedById], references: [id])
+  tenant                                Tenant                                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([tenantId, overrideCode])
   @@index([tenantId, status])
   @@index([tenantId, expiresAt])
   @@index([tenantId, requestedById])
-
-  governanceAutomationExecutionSessions GovernanceAutomationExecutionSession[]
 }
 
 model GovernanceAutomationExecutionSession {
-  id               String   @id @default(uuid())
-  tenantId          String
-
-  automationCode    String
-  scheduleId        String?
-  executionStatus   String   @default("STARTED")
-
-  actorType         String
-  actorUserId       String?
-
-  governanceDomain  String?
-  severity          String?
-  auditSensitivity  String?
-
-  overrideSessionId String?
-  escalationType    String?
-  escalationReason  String?
-
-  evidenceMetadata  Json?
+  id                 String                     @id @default(uuid())
+  tenantId           String
+  automationCode     String
+  scheduleId         String?
+  executionStatus    String                     @default("STARTED")
+  actorType          String
+  actorUserId        String?
+  governanceDomain   String?
+  severity           String?
+  auditSensitivity   String?
+  overrideSessionId  String?
+  escalationType     String?
+  escalationReason   String?
+  evidenceMetadata   Json?
   governanceMetadata Json?
-
-  executionResult   Json?
-  failureReason     String?
-  retryCount        Int      @default(0)
-
-  startedAt         DateTime @default(now())
-  completedAt       DateTime?
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @default(now()) @updatedAt
-
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  actorUser         User?    @relation("GovernanceAutomationExecutionSessionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  overrideSession   GovernanceOverrideSession? @relation(fields: [overrideSessionId], references: [id], onDelete: SetNull)
+  executionResult    Json?
+  failureReason      String?
+  retryCount         Int                        @default(0)
+  startedAt          DateTime                   @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @default(now()) @updatedAt
+  actorUser          User?                      @relation("GovernanceAutomationExecutionSessionActor", fields: [actorUserId], references: [id])
+  overrideSession    GovernanceOverrideSession? @relation(fields: [overrideSessionId], references: [id])
+  tenant             Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
-  @@index([tenantId, automationCode])
   @@index([tenantId, scheduleId])
-  @@index([tenantId, executionStatus])
   @@index([tenantId, startedAt])
   @@index([tenantId, completedAt])
   @@index([overrideSessionId])
+  @@index([tenantId, automationCode], map: "GovernanceAutomationExecutionSession_tenantId_automationCode_id")
+  @@index([tenantId, executionStatus], map: "GovernanceAutomationExecutionSession_tenantId_executionStatus_i")
 }
 
 model GovernanceAutomationSchedule {
-  id             String   @id @default(uuid())
-  tenantId        String
-
-  automationCode  String
-  scheduleStatus  String   @default("ACTIVE")
-
-  activationStatus String  @default("ACTIVE")
-
-  approvedById    String?
-  approvedAt      DateTime?
-
-  targetType      String
-  targetId        String
-
-  scheduleConfig  Json?
-
-  nextRunAt       DateTime?
-  lastRunAt       DateTime?
-
-  expiresAt       DateTime?
-
-  suspendedAt     DateTime?
-  suspendedById   String?
-
-  revokedAt       DateTime?
-  revokedById     String?
-
-  reviewRequiredAt DateTime?
-
-  consecutiveFailureCount Int @default(0)
-  lastFailureReason String?
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now()) @updatedAt
-  createdById    String
-
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdBy      User     @relation("GovernanceAutomationScheduleCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-  approvedBy     User?    @relation("GovernanceAutomationScheduleApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  suspendedBy    User?    @relation("GovernanceAutomationScheduleSuspendedBy", fields: [suspendedById], references: [id], onDelete: SetNull)
-  revokedBy      User?    @relation("GovernanceAutomationScheduleRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  id                      String    @id @default(uuid())
+  tenantId                String
+  automationCode          String
+  scheduleStatus          String    @default("ACTIVE")
+  targetType              String
+  targetId                String
+  scheduleConfig          Json?
+  nextRunAt               DateTime?
+  lastRunAt               DateTime?
+  expiresAt               DateTime?
+  suspendedAt             DateTime?
+  suspendedById           String?
+  revokedAt               DateTime?
+  revokedById             String?
+  reviewRequiredAt        DateTime?
+  consecutiveFailureCount Int       @default(0)
+  lastFailureReason       String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now()) @updatedAt
+  createdById             String
+  activationStatus        String    @default("ACTIVE")
+  approvedById            String?
+  approvedAt              DateTime?
+  approvedBy              User?     @relation("GovernanceAutomationScheduleApprovedBy", fields: [approvedById], references: [id])
+  createdBy               User      @relation("GovernanceAutomationScheduleCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  revokedBy               User?     @relation("GovernanceAutomationScheduleRevokedBy", fields: [revokedById], references: [id])
+  suspendedBy             User?     @relation("GovernanceAutomationScheduleSuspendedBy", fields: [suspendedById], references: [id])
+  tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([tenantId, automationCode])
@@ -2141,22 +1984,8 @@ model GovernanceAutomationSchedule {
   @@index([approvedById])
 }
 
-enum DelegationScope {
-  APPROVE
-  POST
-  BOTH
-}
-
-enum LegalEntityAccessLevel {
-  VIEW
-  PREPARE
-  POST
-  APPROVE
-  OVERRIDE
-}
-
 model UserDelegation {
-  id              String           @id @default(uuid())
+  id              String          @id @default(uuid())
   tenantId        String
   delegatorUserId String
   delegateUserId  String
@@ -2165,15 +1994,14 @@ model UserDelegation {
   revokedAt       DateTime?
   reason          String?
   createdByUserId String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @default(now()) @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now()) @updatedAt
   scope           DelegationScope
-
-  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  delegatorUser User @relation("DelegationDelegator", fields: [delegatorUserId], references: [id], onDelete: Cascade)
-  delegateUser  User @relation("DelegationDelegate", fields: [delegateUserId], references: [id], onDelete: Cascade)
-  createdByUser User? @relation("DelegationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  sessions   UserSession[]
+  createdByUser   User?           @relation("DelegationCreatedBy", fields: [createdByUserId], references: [id])
+  delegateUser    User            @relation("DelegationDelegate", fields: [delegateUserId], references: [id], onDelete: Cascade)
+  delegatorUser   User            @relation("DelegationDelegator", fields: [delegatorUserId], references: [id], onDelete: Cascade)
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions        UserSession[]
 
   @@index([tenantId])
   @@index([tenantId, delegatorUserId])
@@ -2183,22 +2011,21 @@ model UserDelegation {
 }
 
 model UserLegalEntityAccess {
-  id           String                @id @default(uuid())
-  tenantId     String
-  userId       String
+  id            String                 @id @default(uuid())
+  tenantId      String
+  userId        String
   legalEntityId String
-  accessLevel  LegalEntityAccessLevel
-  canPost      Boolean               @default(false)
-  canApprove   Boolean               @default(false)
-  canOverride  Boolean               @default(false)
-  grantedById  String?
-  grantedAt    DateTime              @default(now())
-  expiresAt    DateTime?
-
-  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
-  grantedBy   User?      @relation("UserLegalEntityAccessGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  accessLevel   LegalEntityAccessLevel
+  canPost       Boolean                @default(false)
+  canApprove    Boolean                @default(false)
+  canOverride   Boolean                @default(false)
+  grantedById   String?
+  grantedAt     DateTime               @default(now())
+  expiresAt     DateTime?
+  grantedBy     User?                  @relation("UserLegalEntityAccessGrantedBy", fields: [grantedById], references: [id])
+  legalEntity   LegalEntity            @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId, legalEntityId])
   @@index([tenantId])
@@ -2208,19 +2035,18 @@ model UserLegalEntityAccess {
 }
 
 model PasswordResetToken {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   userId      String?
   userEmail   String
   tokenHash   String
-  requestedAt DateTime @default(now())
+  requestedAt DateTime  @default(now())
   expiresAt   DateTime
   consumedAt  DateTime?
   ipAddress   String?
   userAgent   String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id])
 
   @@index([tenantId])
   @@index([userEmail])
@@ -2228,18 +2054,18 @@ model PasswordResetToken {
 }
 
 model TwoFactorChallenge {
-  id        String          @id @default(uuid())
-  tenantId  String
-  userId    String
-  method    TwoFactorMethod
-  otpHash   String
-  expiresAt DateTime
+  id         String          @id @default(uuid())
+  tenantId   String
+  userId     String
+  method     TwoFactorMethod
+  otpHash    String
+  expiresAt  DateTime
   consumedAt DateTime?
-  createdAt DateTime        @default(now())
-  ipAddress String?
-  userAgent String?
-  tenant    Tenant          @relation(fields: [tenantId], references: [id])
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime        @default(now())
+  ipAddress  String?
+  userAgent  String?
+  tenant     Tenant          @relation(fields: [tenantId], references: [id])
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([tenantId, userId])
@@ -2320,26 +2146,11 @@ model Account {
   code                                    String
   name                                    String
   type                                    AccountType
-  status                                  AccountLifecycleStatus         @default(DRAFT)
   isActive                                Boolean                        @default(true)
   createdAt                               DateTime                       @default(now())
   isCashEquivalent                        Boolean                        @default(false)
-  isIntercompanyAccount                   Boolean                        @default(false)
-  intercompanyEnabled                     Boolean                        @default(false)
-  intercompanyRole                        IntercompanyAccountRole?
-  importBatchId                           String?
   createdById                             String?
-  approvedAt                              DateTime?
-  approvedById                            String?
-  blockedAt                               DateTime?
-  blockedById                             String?
-  retiredAt                               DateTime?
-  retiredById                             String?
-  effectiveFrom                           DateTime?
-  effectiveTo                             DateTime?
-  changeReason                            String?
   ifrsMappingCode                         String?
-  ifrsNodeId                               String?
   isFrozen                                Boolean                        @default(false)
   isPosting                               Boolean                        @default(true)
   parentAccountId                         String?
@@ -2356,19 +2167,37 @@ model Account {
   fsMappingLevel2                         String?
   subCategory                             String?
   requiresDepartment                      Boolean                        @default(false)
-  createdBy                               User?                          @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedAt                              DateTime?
+  approvedById                            String?
+  blockedAt                               DateTime?
+  blockedById                             String?
+  changeReason                            String?
+  effectiveFrom                           DateTime?
+  effectiveTo                             DateTime?
+  retiredAt                               DateTime?
+  retiredById                             String?
+  status                                  AccountLifecycleStatus         @default(DRAFT)
+  ifrsNodeId                              String?
+  importBatchId                           String?
+  intercompanyEnabled                     Boolean                        @default(false)
+  intercompanyRole                        IntercompanyAccountRole?
+  isIntercompanyAccount                   Boolean                        @default(false)
   approvedBy                              User?                          @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
   blockedBy                               User?                          @relation("AccountBlockedBy", fields: [blockedById], references: [id], onDelete: Restrict)
-  retiredBy                               User?                          @relation("AccountRetiredBy", fields: [retiredById], references: [id], onDelete: Restrict)
-  importBatch                             CoaImportBatch?                @relation(fields: [importBatchId], references: [batchId], onDelete: SetNull)
+  createdBy                               User?                          @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   ifrsNode                                IfrsNode?                      @relation(fields: [ifrsNodeId], references: [id], onDelete: Restrict)
+  importBatch                             CoaImportBatch?                @relation(fields: [importBatchId], references: [batchId])
   parentAccount                           Account?                       @relation("AccountHierarchy", fields: [parentAccountId], references: [id], onDelete: Restrict)
   childAccounts                           Account[]                      @relation("AccountHierarchy")
-  reclassificationsAsNewParent            COAReclassification[]           @relation("COAReclassNewParent")
+  retiredBy                               User?                          @relation("AccountRetiredBy", fields: [retiredById], references: [id], onDelete: Restrict)
   tenant                                  Tenant                         @relation(fields: [tenantId], references: [id])
   bankAccounts                            BankAccount[]
-  imprestFacilitiesControl                ImprestFacility[]
   budgetLines                             BudgetLine[]
+  coaReclassifications                    COAReclassification[]
+  reclassificationsAsNewParent            COAReclassification[]          @relation("COAReclassNewParent")
+  coaStructuralChanges                    CoaStructuralChange[]          @relation("CoaStructuralChangeAccount")
+  coaStructuralChangesAsNewParent         CoaStructuralChange[]          @relation("CoaStructuralChangeNewParent")
+  coaStructuralChangesAsOldParent         CoaStructuralChange[]          @relation("CoaStructuralChangeOldParent")
   customerCreditNoteLinesAsRevenueAccount CustomerCreditNoteLine[]
   customerInvoiceLines                    CustomerInvoiceLine[]
   fixedAssetsAsAccumDepAccount            FixedAsset[]                   @relation("FixedAssetAccumDepAccount")
@@ -2378,26 +2207,21 @@ model Account {
   fixedAssetCategoriesAsAssetAccount      FixedAssetCategory[]           @relation("FixedAssetCategoryAssetAccount")
   fixedAssetCategoriesAsDepExpenseAccount FixedAssetCategory[]           @relation("FixedAssetCategoryDepExpenseAccount")
   forecastLines                           ForecastLine[]
-  invoiceCategoriesAsRevenueAccount       InvoiceCategory[]              @relation("InvoiceCategoryRevenueAccount")
+  imprestFacilitiesControl                ImprestFacility[]
   imprestSettlementLinesAsExpense         ImprestSettlementLine[]
+  invoiceCategoriesAsRevenueAccount       InvoiceCategory[]              @relation("InvoiceCategoryRevenueAccount")
   lines                                   JournalLine[]
   recurringTemplateLines                  RecurringJournalTemplateLine[]
   supplierInvoiceLines                    SupplierInvoiceLine[]
   taxRates                                TaxRate[]
-  tenantsAsArControlAccount               Tenant[]                       @relation("TenantArControlAccount")
   tenantsAsApControlAccount               Tenant[]                       @relation("TenantApControlAccount")
-  tenantsAsSupplierAdvanceAccount         Tenant[]                       @relation("TenantSupplierAdvanceAccount")
+  tenantsAsArControlAccount               Tenant[]                       @relation("TenantArControlAccount")
   tenantsAsCashClearingAccount            Tenant[]                       @relation("TenantCashClearingAccount")
   tenantsAsDefaultBankClearingAccount     Tenant[]                       @relation("TenantDefaultBankClearingAccount")
+  tenantsAsSupplierAdvanceAccount         Tenant[]                       @relation("TenantSupplierAdvanceAccount")
   tenantsAsUnappliedReceiptsAccount       Tenant[]                       @relation("TenantUnappliedReceiptsAccount")
   tenantTaxConfigsAsInputVatAccount       TenantTaxConfig[]              @relation("TenantTaxConfigInputVatAccount")
   tenantTaxConfigsAsOutputVatAccount      TenantTaxConfig[]              @relation("TenantTaxConfigOutputVatAccount")
-
-  coaReclassifications                    COAReclassification[]
-
-  coaStructuralChanges                    CoaStructuralChange[]           @relation("CoaStructuralChangeAccount")
-  coaStructuralChangesAsOldParent         CoaStructuralChange[]           @relation("CoaStructuralChangeOldParent")
-  coaStructuralChangesAsNewParent         CoaStructuralChange[]           @relation("CoaStructuralChangeNewParent")
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -2408,43 +2232,28 @@ model Account {
   @@index([tenantId, status])
 }
 
-enum CoaImportBatchStatus {
-  DRAFT
-  PENDING_APPROVAL
-  APPROVED
-  REJECTED
-  CANCELLED
-}
-
-enum IntercompanyAccountRole {
-  DUE_TO
-  DUE_FROM
-  INTERCOMPANY_CLEARING
-}
-
 model CoaImportBatch {
-  id               String               @id @default(uuid())
-  batchId          String               @unique
-  tenantId         String
-  createdByUserId  String
-  createdAt        DateTime             @default(now())
-  status           CoaImportBatchStatus @default(DRAFT)
-  accountCount     Int                  @default(0)
-  sourceFileName   String?
-  submittedAt      DateTime?
+  id                String               @id @default(uuid())
+  batchId           String               @unique
+  tenantId          String
+  createdByUserId   String
+  createdAt         DateTime             @default(now())
+  status            CoaImportBatchStatus @default(DRAFT)
+  accountCount      Int                  @default(0)
+  submittedAt       DateTime?
   submittedByUserId String?
-  approvedAt       DateTime?
-  approvedByUserId String?
-  reviewedAt       DateTime?
-  reviewedByUserId String?
-  rejectionReason  String?
-
-  tenant           Tenant               @relation(fields: [tenantId], references: [id])
-  createdByUser    User                 @relation("CoaImportBatchCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  submittedByUser  User?                @relation("CoaImportBatchSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: Restrict)
-  approvedByUser   User?                @relation("CoaImportBatchApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
-  reviewedByUser   User?                @relation("CoaImportBatchReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
-  accounts         Account[]
+  approvedAt        DateTime?
+  approvedByUserId  String?
+  rejectionReason   String?
+  sourceFileName    String?
+  reviewedAt        DateTime?
+  reviewedByUserId  String?
+  accounts          Account[]
+  approvedByUser    User?                @relation("CoaImportBatchApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  createdByUser     User                 @relation("CoaImportBatchCreatedBy", fields: [createdByUserId], references: [id])
+  reviewedByUser    User?                @relation("CoaImportBatchReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  submittedByUser   User?                @relation("CoaImportBatchSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  tenant            Tenant               @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -2455,26 +2264,25 @@ model CoaImportBatch {
 }
 
 model COAApprovalRequest {
-  id            String                @id @default(uuid())
-  tenantId      String
-  requestType   COAApprovalRequestType
-  entityType    AuditEntityType
-  entityId      String
-  payloadJson   Json
-  requestedById String
-  requestedAt   DateTime              @default(now())
-  status        COAApprovalStatus     @default(PENDING)
-  approvedById  String?
-  approvedAt    DateTime?
-  rejectedById  String?
-  rejectedAt    DateTime?
+  id              String                  @id @default(uuid())
+  tenantId        String
+  requestType     COAApprovalRequestType
+  entityType      AuditEntityType
+  entityId        String
+  payloadJson     Json
+  requestedById   String
+  requestedAt     DateTime                @default(now())
+  status          COAApprovalStatus       @default(PENDING)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
   rejectionReason String?
-
-  tenant        Tenant                @relation(fields: [tenantId], references: [id])
-  requestedBy   User                  @relation("COAApprovalRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
-  approvedBy    User?                 @relation("COAApprovalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  rejectedBy    User?                 @relation("COAApprovalRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
-  attachments   COAApprovalAttachment[]
+  attachments     COAApprovalAttachment[]
+  approvedBy      User?                   @relation("COAApprovalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy      User?                   @relation("COAApprovalRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  requestedBy     User                    @relation("COAApprovalRequestedBy", fields: [requestedById], references: [id])
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -2484,17 +2292,16 @@ model COAApprovalRequest {
 }
 
 model COAApprovalAttachment {
-  id           String            @id @default(uuid())
+  id           String             @id @default(uuid())
   tenantId     String
   requestId    String
   filePath     String
   fileName     String
   uploadedById String
-  uploadedAt   DateTime          @default(now())
-
-  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  uploadedAt   DateTime           @default(now())
   request      COAApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  uploadedBy   User              @relation("COAApprovalAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  uploadedBy   User               @relation("COAApprovalAttachmentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, requestId])
@@ -2502,31 +2309,30 @@ model COAApprovalAttachment {
 }
 
 model CoaStructureChangeRequest {
-  id            String                     @id @default(uuid())
-  tenantId      String
-  requestType   CoaStructureChangeRequestType
-  description   String
-  beforeState   Json
-  proposedState Json
-  status        CoaStructureChangeRequestStatus @default(DRAFT)
-  requestedById String
-  requestedAt   DateTime                   @default(now())
-  submittedAt   DateTime?
-  approvedById  String?
-  approvedAt    DateTime?
-  rejectedById  String?
-  rejectedAt    DateTime?
-  rejectionReason String?
-  implementedById String?
-  implementedAt DateTime?
-
-  tenant        Tenant                     @relation(fields: [tenantId], references: [id])
-  requestedBy   User                       @relation("CoaStructureChangeRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
-  approvedBy    User?                      @relation("CoaStructureChangeApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  rejectedBy    User?                      @relation("CoaStructureChangeRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
-  implementedBy User?                      @relation("CoaStructureChangeImplementedBy", fields: [implementedById], references: [id], onDelete: Restrict)
-  attachments   CoaStructureChangeRequestAttachment[]
+  id                String                                @id @default(uuid())
+  tenantId          String
+  requestType       CoaStructureChangeRequestType
+  description       String
+  beforeState       Json
+  proposedState     Json
+  status            CoaStructureChangeRequestStatus       @default(DRAFT)
+  requestedById     String
+  requestedAt       DateTime                              @default(now())
+  submittedAt       DateTime?
+  approvedById      String?
+  approvedAt        DateTime?
+  rejectedById      String?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  implementedById   String?
+  implementedAt     DateTime?
   structuralChanges CoaStructuralChange[]
+  approvedBy        User?                                 @relation("CoaStructureChangeApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  implementedBy     User?                                 @relation("CoaStructureChangeImplementedBy", fields: [implementedById], references: [id], onDelete: Restrict)
+  rejectedBy        User?                                 @relation("CoaStructureChangeRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  requestedBy       User                                  @relation("CoaStructureChangeRequestedBy", fields: [requestedById], references: [id])
+  tenant            Tenant                                @relation(fields: [tenantId], references: [id])
+  attachments       CoaStructureChangeRequestAttachment[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -2538,43 +2344,34 @@ model CoaStructureChangeRequest {
 }
 
 model CoaStructuralChange {
-  id                    String                 @id @default(uuid())
+  id                    String                    @id @default(uuid())
   tenantId              String
   accountId             String
   changeType            CoaStructuralChangeType
-
   oldParentAccountId    String?
   newParentAccountId    String?
-
   oldIfrsNodeId         String?
   newIfrsNodeId         String?
-
   effectiveFrom         DateTime
   effectiveTo           DateTime?
-
   reason                String
-
   sourceChangeRequestId String
-
   approvedByUserId      String
   approvedAt            DateTime
-
   implementedByUserId   String
   implementedAt         DateTime
-
-  isActive              Boolean                @default(true)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-
-  tenant                Tenant                 @relation(fields: [tenantId], references: [id])
-  account               Account                @relation("CoaStructuralChangeAccount", fields: [accountId], references: [id], onDelete: Cascade)
-  oldParentAccount      Account?               @relation("CoaStructuralChangeOldParent", fields: [oldParentAccountId], references: [id], onDelete: Restrict)
-  newParentAccount      Account?               @relation("CoaStructuralChangeNewParent", fields: [newParentAccountId], references: [id], onDelete: Restrict)
-  oldIfrsNode           IfrsNode?              @relation("CoaStructuralChangeOldIfrsNode", fields: [oldIfrsNodeId], references: [id], onDelete: Restrict)
-  newIfrsNode           IfrsNode?              @relation("CoaStructuralChangeNewIfrsNode", fields: [newIfrsNodeId], references: [id], onDelete: Restrict)
-  sourceChangeRequest   CoaStructureChangeRequest @relation(fields: [sourceChangeRequestId], references: [id], onDelete: Restrict)
-  approvedByUser        User                   @relation("CoaStructuralChangeApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
-  implementedByUser     User                   @relation("CoaStructuralChangeImplementedBy", fields: [implementedByUserId], references: [id], onDelete: Restrict)
+  isActive              Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  account               Account                   @relation("CoaStructuralChangeAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  approvedByUser        User                      @relation("CoaStructuralChangeApprovedBy", fields: [approvedByUserId], references: [id])
+  implementedByUser     User                      @relation("CoaStructuralChangeImplementedBy", fields: [implementedByUserId], references: [id])
+  newIfrsNode           IfrsNode?                 @relation("CoaStructuralChangeNewIfrsNode", fields: [newIfrsNodeId], references: [id], onDelete: Restrict)
+  newParentAccount      Account?                  @relation("CoaStructuralChangeNewParent", fields: [newParentAccountId], references: [id], onDelete: Restrict)
+  oldIfrsNode           IfrsNode?                 @relation("CoaStructuralChangeOldIfrsNode", fields: [oldIfrsNodeId], references: [id], onDelete: Restrict)
+  oldParentAccount      Account?                  @relation("CoaStructuralChangeOldParent", fields: [oldParentAccountId], references: [id], onDelete: Restrict)
+  sourceChangeRequest   CoaStructureChangeRequest @relation(fields: [sourceChangeRequestId], references: [id])
+  tenant                Tenant                    @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, accountId])
@@ -2583,17 +2380,16 @@ model CoaStructuralChange {
 }
 
 model CoaStructureChangeRequestAttachment {
-  id           String                  @id @default(uuid())
+  id           String                    @id @default(uuid())
   tenantId     String
   requestId    String
   filePath     String
   fileName     String
   uploadedById String
-  uploadedAt   DateTime                @default(now())
-
-  tenant       Tenant                  @relation(fields: [tenantId], references: [id])
+  uploadedAt   DateTime                  @default(now())
   request      CoaStructureChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  uploadedBy   User                    @relation("CoaStructureChangeRequestAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id])
+  uploadedBy   User                      @relation("CoaStructureChangeRequestAttachmentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, requestId])
@@ -2601,21 +2397,20 @@ model CoaStructureChangeRequestAttachment {
 }
 
 model CoaRootCategory {
-  id             String     @id @default(uuid())
-  tenantId       String
-  code           String
-  name           String
-  accountType    AccountType
+  id              String      @id @default(uuid())
+  tenantId        String
+  code            String
+  name            String
+  accountType     AccountType
   fsMappingLevel1 String?
   fsMappingLevel2 String?
   ifrsMappingCode String?
-  isActive       Boolean    @default(true)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @default(now()) @updatedAt
-  createdById    String?
-
-  tenant         Tenant     @relation("TenantCoaRootCategories", fields: [tenantId], references: [id])
-  createdBy      User?      @relation("CoaRootCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now()) @updatedAt
+  createdById     String?
+  createdBy       User?       @relation("CoaRootCategoryCreatedBy", fields: [createdById], references: [id])
+  tenant          Tenant      @relation("TenantCoaRootCategories", fields: [tenantId], references: [id])
 
   @@unique([tenantId, code])
   @@unique([tenantId, name])
@@ -2628,42 +2423,34 @@ model IfrsMappingMaster {
   code               String   @unique
   label              String
   statementType      String
-  section            String?
   allowedAccountType String
-  displayOrder       Int      @default(0)
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-}
-
-enum IfrsStatement {
-  BS
-  PL
-  CF
+  displayOrder       Int      @default(0)
+  section            String?
 }
 
 model IfrsNode {
-  id         String        @id @default(cuid())
-  tenantId   String
-  code       String
-  name       String
-  statement  IfrsStatement
-  parentId   String?
-  level      Int?
-  sortOrder  Int           @default(0)
-  isActive   Boolean       @default(true)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  createdById String?
-
-  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parent     IfrsNode?     @relation("IfrsNodeHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
-  children   IfrsNode[]    @relation("IfrsNodeHierarchy")
-  createdBy  User?         @relation("IfrsNodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  accounts   Account[]
-
-  coaStructuralChangesAsOldIfrsNode CoaStructuralChange[] @relation("CoaStructuralChangeOldIfrsNode")
+  id                                String                @id @default(cuid())
+  tenantId                          String
+  code                              String
+  name                              String
+  statement                         IfrsStatement
+  parentId                          String?
+  level                             Int?
+  sortOrder                         Int                   @default(0)
+  isActive                          Boolean               @default(true)
+  createdAt                         DateTime              @default(now())
+  updatedAt                         DateTime              @updatedAt
+  createdById                       String?
+  accounts                          Account[]
   coaStructuralChangesAsNewIfrsNode CoaStructuralChange[] @relation("CoaStructuralChangeNewIfrsNode")
+  coaStructuralChangesAsOldIfrsNode CoaStructuralChange[] @relation("CoaStructuralChangeOldIfrsNode")
+  createdBy                         User?                 @relation("IfrsNodeCreatedBy", fields: [createdById], references: [id])
+  parent                            IfrsNode?             @relation("IfrsNodeHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children                          IfrsNode[]            @relation("IfrsNodeHierarchy")
+  tenant                            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, statement, name])
   @@unique([tenantId, code])
@@ -2674,7 +2461,7 @@ model IfrsNode {
 }
 
 model COAReclassification {
-  id                 String                   @id @default(uuid())
+  id                 String                    @id @default(uuid())
   tenantId           String
   accountId          String
   newParentAccountId String?
@@ -2684,20 +2471,19 @@ model COAReclassification {
   effectiveStartDate DateTime
   reason             String?
   requestedById      String
-  requestedAt        DateTime                 @default(now())
+  requestedAt        DateTime                  @default(now())
   status             COAReclassificationStatus @default(DRAFT)
   approvedById       String?
   approvedAt         DateTime?
   rejectedById       String?
   rejectedAt         DateTime?
   rejectionReason    String?
-
-  tenant             Tenant                   @relation(fields: [tenantId], references: [id])
-  account            Account                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  newParentAccount   Account?                 @relation("COAReclassNewParent", fields: [newParentAccountId], references: [id], onDelete: Restrict)
-  requestedBy        User                     @relation("COAReclassRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
-  approvedBy         User?                    @relation("COAReclassApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  rejectedBy         User?                    @relation("COAReclassRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  account            Account                   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  approvedBy         User?                     @relation("COAReclassApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  newParentAccount   Account?                  @relation("COAReclassNewParent", fields: [newParentAccountId], references: [id], onDelete: Restrict)
+  rejectedBy         User?                     @relation("COAReclassRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  requestedBy        User                      @relation("COAReclassRequestedBy", fields: [requestedById], references: [id])
+  tenant             Tenant                    @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, accountId])
@@ -2724,81 +2510,80 @@ model CoaCanonicalSnapshot {
 }
 
 model JournalEntry {
-  id                          String                       @id @default(uuid())
-  tenantId                    String
-  reference                   String?
-  description                 String?
-  status                      JournalStatus                @default(DRAFT)
-  reviewMode                  JournalReviewMode?
-  intent                      JournalIntent                @default(OPERATIONAL)
-  intentNotes                 String?
-  intentReference             String?
-  createdById                 String
-  postedById                  String?
-  createdAt                   DateTime                     @default(now())
-  postedAt                    DateTime?
-  journalDate                 DateTime                     @default(now())
-  approvedById                String?
-  journalNumber               Int?
-  journalType                 JournalType                  @default(STANDARD)
-  periodId                    String?
-  reversalOfId                String?
-  reviewedById                String?
-  approvedAt                  DateTime?
-  reviewedAt                  DateTime?
-  submittedAt                 DateTime?
-  submittedById               String?
-  rejectedAt                  DateTime?
-  rejectedById                String?
-  rejectionReason             String?
-  returnReason                String?
-  returnedByPosterAt          DateTime?
-  returnedByPosterId          String?
-  reversalInitiatedAt         DateTime?
-  reversalInitiatedById       String?
-  reversalReason              String?
-  reversalPreparedById        String?
-  correctsJournalId           String?
-  voidedAt                    DateTime?
-  voidedById                  String?
-  voidReason                  String?
-  voidReference               String?
-  riskScore                   Int                          @default(0)
-  riskFlags                   Json                         @default("[]")
-  riskComputedAt              DateTime?
-  budgetCheckedAt             DateTime?
-  budgetFlags                 Json?
-  budgetOverrideJustification String?
-  budgetStatus                JournalBudgetStatus          @default(OK)
-  sourceType                  String?
-  sourceId                    String?
-  customerCreditNotesPosted   CustomerCreditNote[]         @relation("CustomerCreditNotePostedJournal")
-  customerReceiptsGl          CustomerReceipt[]            @relation("CustomerReceiptGlJournal")
-  customerRefundsPosted       CustomerRefund[]             @relation("CustomerRefundPostedJournal")
-  fixedAssetCapitalizations   FixedAsset[]                 @relation("FixedAssetCapitalizationJournal")
-  fixedAssetDisposals         FixedAsset[]                 @relation("FixedAssetDisposalJournal")
-  fixedAssetDepreciationRuns  FixedAssetDepreciationRun[]  @relation("FixedAssetDepreciationRunJournal")
-  approvedBy                  User?                        @relation("JournalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  correctsJournal             JournalEntry?                @relation("JournalCorrection", fields: [correctsJournalId], references: [id], onDelete: Restrict)
-  correctedBy                 JournalEntry[]               @relation("JournalCorrection")
-  createdBy                   User                         @relation("JournalCreatedBy", fields: [createdById], references: [id])
-  period                      AccountingPeriod?            @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  postedBy                    User?                        @relation("JournalPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
-  rejectedBy                  User?                        @relation("JournalRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
-  voidedBy                    User?                        @relation("JournalVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
-  returnedByPoster            User?                        @relation("JournalReturnedByPoster", fields: [returnedByPosterId], references: [id], onDelete: Restrict)
-  reversalInitiatedBy         User?                        @relation("JournalReversalInitiatedBy", fields: [reversalInitiatedById], references: [id], onDelete: Restrict)
-  reversalOf                  JournalEntry?                @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversedBy                  JournalEntry[]               @relation("JournalReversal")
-  reversalPreparedBy          User?                        @relation("JournalReversalPreparedBy", fields: [reversalPreparedById], references: [id], onDelete: Restrict)
-  reviewedBy                  User?                        @relation("JournalReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
-  submittedBy                 User?                        @relation("JournalSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
-  tenant                      Tenant                       @relation(fields: [tenantId], references: [id])
-  lines                       JournalLine[]
-  bankStatementLineAdjustments BankStatementLine[]          @relation("BankStatementLineAdjustmentJournal")
-  recurringGenerations        RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
-  imprestCasesIssued          ImprestCase[]                @relation("ImprestCaseIssuedJournal")
-  imprestCasesSettled         ImprestCase[]                @relation("ImprestCaseSettlementJournal")
+  id                           String                       @id @default(uuid())
+  tenantId                     String
+  reference                    String?
+  description                  String?
+  status                       JournalStatus                @default(DRAFT)
+  createdById                  String
+  postedById                   String?
+  createdAt                    DateTime                     @default(now())
+  postedAt                     DateTime?
+  journalDate                  DateTime                     @default(now())
+  approvedById                 String?
+  journalNumber                Int?
+  journalType                  JournalType                  @default(STANDARD)
+  periodId                     String?
+  reversalOfId                 String?
+  reviewedById                 String?
+  approvedAt                   DateTime?
+  reviewedAt                   DateTime?
+  submittedAt                  DateTime?
+  submittedById                String?
+  rejectedAt                   DateTime?
+  rejectedById                 String?
+  rejectionReason              String?
+  returnReason                 String?
+  returnedByPosterAt           DateTime?
+  returnedByPosterId           String?
+  reversalInitiatedAt          DateTime?
+  reversalInitiatedById        String?
+  reversalReason               String?
+  reversalPreparedById         String?
+  correctsJournalId            String?
+  riskScore                    Int                          @default(0)
+  riskFlags                    Json                         @default("[]")
+  riskComputedAt               DateTime?
+  budgetCheckedAt              DateTime?
+  budgetFlags                  Json?
+  budgetOverrideJustification  String?
+  budgetStatus                 JournalBudgetStatus          @default(OK)
+  sourceType                   String?
+  sourceId                     String?
+  reviewMode                   JournalReviewMode?
+  intent                       JournalIntent?
+  intentNotes                  String?
+  intentReference              String?
+  voidedAt                     DateTime?
+  voidedById                   String?
+  voidReason                   String?
+  voidReference                String?
+  bankStatementLineAdjustments BankStatementLine?           @relation("BankStatementLineAdjustmentJournal")
+  customerCreditNotesPosted    CustomerCreditNote[]         @relation("CustomerCreditNotePostedJournal")
+  customerReceiptsGl           CustomerReceipt[]            @relation("CustomerReceiptGlJournal")
+  customerRefundsPosted        CustomerRefund[]             @relation("CustomerRefundPostedJournal")
+  fixedAssetCapitalizations    FixedAsset[]                 @relation("FixedAssetCapitalizationJournal")
+  fixedAssetDisposals          FixedAsset[]                 @relation("FixedAssetDisposalJournal")
+  fixedAssetDepreciationRuns   FixedAssetDepreciationRun[]  @relation("FixedAssetDepreciationRunJournal")
+  imprestCasesIssued           ImprestCase[]                @relation("ImprestCaseIssuedJournal")
+  imprestCasesSettled          ImprestCase[]                @relation("ImprestCaseSettlementJournal")
+  approvedBy                   User?                        @relation("JournalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  correctsJournal              JournalEntry?                @relation("JournalCorrection", fields: [correctsJournalId], references: [id], onDelete: Restrict)
+  correctedBy                  JournalEntry[]               @relation("JournalCorrection")
+  createdBy                    User                         @relation("JournalCreatedBy", fields: [createdById], references: [id])
+  period                       AccountingPeriod?            @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  postedBy                     User?                        @relation("JournalPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  rejectedBy                   User?                        @relation("JournalRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  returnedByPoster             User?                        @relation("JournalReturnedByPoster", fields: [returnedByPosterId], references: [id], onDelete: Restrict)
+  reversalInitiatedBy          User?                        @relation("JournalReversalInitiatedBy", fields: [reversalInitiatedById], references: [id], onDelete: Restrict)
+  reversalOf                   JournalEntry?                @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy                   JournalEntry[]               @relation("JournalReversal")
+  reversalPreparedBy           User?                        @relation("JournalReversalPreparedBy", fields: [reversalPreparedById], references: [id], onDelete: Restrict)
+  reviewedBy                   User?                        @relation("JournalReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  submittedBy                  User?                        @relation("JournalSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  tenant                       Tenant                       @relation(fields: [tenantId], references: [id])
+  lines                        JournalLine[]
+  recurringGenerations         RecurringJournalGeneration[] @relation("RecurringGeneratedJournal")
 
   @@unique([tenantId, journalNumber])
   @@index([tenantId])
@@ -2814,9 +2599,6 @@ model RecurringJournalTemplate {
   tenantId            String
   name                String
   journalType         JournalType                    @default(STANDARD)
-  intent              JournalIntent                  @default(OPERATIONAL)
-  intentNotes         String?
-  intentReference     String?
   referenceTemplate   String
   descriptionTemplate String?
   frequency           RecurringJournalFrequency
@@ -2826,6 +2608,19 @@ model RecurringJournalTemplate {
   isActive            Boolean                        @default(true)
   createdById         String
   createdAt           DateTime                       @default(now())
+  intent              JournalIntent                  @default(OPERATIONAL)
+  intentNotes         String?
+  intentReference     String?
+  status              RecurringTemplateStatus        @default(DRAFT)
+  submittedById       String?
+  submittedAt         DateTime?                      @db.Timestamptz(6)
+  approvedById        String?
+  approvedAt          DateTime?                      @db.Timestamptz(6)
+  suspendedById       String?
+  suspendedAt         DateTime?                      @db.Timestamptz(6)
+  archivedById        String?
+  archivedAt          DateTime?                      @db.Timestamptz(6)
+  statusReason        String?
   history             RecurringJournalGeneration[]
   createdBy           User                           @relation("RecurringTemplateCreatedBy", fields: [createdById], references: [id])
   tenant              Tenant                         @relation(fields: [tenantId], references: [id])
@@ -2834,8 +2629,13 @@ model RecurringJournalTemplate {
   @@unique([tenantId, name])
   @@index([tenantId])
   @@index([tenantId, isActive])
+  @@index([tenantId, status])
   @@index([tenantId, nextRunDate])
   @@index([createdById])
+  @@index([submittedById])
+  @@index([approvedById])
+  @@index([suspendedById])
+  @@index([archivedById])
 }
 
 model RecurringJournalTemplateLine {
@@ -3000,28 +2800,28 @@ model PeriodCloseChecklistItem {
 }
 
 model JournalLine {
-  id             String       @id @default(uuid())
-  journalEntryId String
-  accountId      String
-  debit          Decimal      @default(0) @db.Decimal(18, 2)
-  credit         Decimal      @default(0) @db.Decimal(18, 2)
-  description    String?
-  lineNumber     Int?
-  departmentId   String?
-  legalEntityId  String?
-  fundId         String?
-  projectId      String?
-  cleared        Boolean      @default(false)
-  clearedAt      DateTime?
-  bankStatementLineId String?
-  account        Account      @relation(fields: [accountId], references: [id])
-  department     Department?  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  fund           Fund?        @relation(fields: [fundId], references: [id], onDelete: Restrict)
-  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  legalEntity    LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
-  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  bankStatementLine BankStatementLine? @relation("JournalLineClearedByStatementLine", fields: [bankStatementLineId], references: [id], onDelete: Restrict)
+  id                         String             @id @default(uuid())
+  journalEntryId             String
+  accountId                  String
+  debit                      Decimal            @default(0) @db.Decimal(18, 2)
+  credit                     Decimal            @default(0) @db.Decimal(18, 2)
+  description                String?
+  lineNumber                 Int?
+  departmentId               String?
+  legalEntityId              String?
+  fundId                     String?
+  projectId                  String?
+  bankStatementLineId        String?            @unique
+  cleared                    Boolean            @default(false)
+  clearedAt                  DateTime?
   matchedByBankStatementLine BankStatementLine? @relation("BankStatementLineMatchedJournalLine")
+  account                    Account            @relation(fields: [accountId], references: [id])
+  bankStatementLine          BankStatementLine? @relation("JournalLineClearedByStatementLine", fields: [bankStatementLineId], references: [id], onDelete: Restrict)
+  department                 Department?        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  fund                       Fund?              @relation(fields: [fundId], references: [id], onDelete: Restrict)
+  journalEntry               JournalEntry       @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  legalEntity                LegalEntity?       @relation(fields: [legalEntityId], references: [id], onDelete: Restrict)
+  project                    Project?           @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   @@index([journalEntryId])
   @@index([accountId])
@@ -3031,7 +2831,6 @@ model JournalLine {
   @@index([projectId])
   @@index([fundId])
   @@index([journalEntryId, lineNumber])
-  @@unique([bankStatementLineId])
 }
 
 model Budget {
@@ -3103,6 +2902,120 @@ model BudgetLine {
   @@index([departmentId])
   @@index([projectId])
   @@index([fundId])
+}
+
+enum BankStatementStatus {
+  DRAFT
+  IN_PROGRESS
+  RECONCILED
+  LOCKED
+}
+
+enum BankStatementLineClassification {
+  SYSTEM_MATCH
+  BANK_CHARGE
+  INTEREST
+  ERROR
+  UNIDENTIFIED
+}
+
+enum BankAccountType {
+  BANK
+  CASH
+}
+
+enum BankAccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ImprestRiskRating {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ImprestFundingSourceType {
+  BANK
+  CASH
+  MOBILE_MONEY
+}
+
+enum ImprestFacilityStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum ImprestEvidenceType {
+  REQUEST_SUPPORTING_DOC
+  FUNDING_PROOF
+  RECEIPT_BUNDLE
+  CASH_RETURN_PROOF
+  OTHER
+}
+
+enum ImprestCaseState {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ISSUANCE_PENDING_EVIDENCE
+  ISSUED
+  RETIREMENT_SUBMITTED
+  RETIREMENT_REVIEW
+  SETTLED
+  CLOSED
+}
+
+enum ImprestSettlementLineType {
+  EXPENSE
+  CASH_RETURN
+}
+
+enum PaymentProposalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
+
+enum PaymentRunStatus {
+  EXECUTED
+}
+
+enum DelegationScope {
+  APPROVE
+  POST
+  BOTH
+}
+
+enum LegalEntityAccessLevel {
+  VIEW
+  PREPARE
+  POST
+  APPROVE
+  OVERRIDE
+}
+
+enum CoaImportBatchStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum IntercompanyAccountRole {
+  DUE_TO
+  DUE_FROM
+  INTERCOMPANY_CLEARING
+}
+
+enum IfrsStatement {
+  BS
+  PL
+  CF
 }
 
 enum SupplierInvoiceStatus {
@@ -3194,8 +3107,8 @@ enum PaymentStatus {
 
 enum PaymentAllocationSourceType {
   SUPPLIER_INVOICE
-  SUPPLIER_ADVANCE
   CUSTOMER_INVOICE
+  SUPPLIER_ADVANCE
 }
 
 enum TaxRateType {
@@ -3249,30 +3162,13 @@ enum JournalStatus {
   SUBMITTED
   REVIEWED
   REJECTED
-  VOIDED
 }
 
- enum JournalIntent {
+enum JournalIntent {
   OPERATIONAL
   ACCRUAL
   ADJUSTMENT
-  CORRECTION
-  REVERSAL
-  RECLASSIFICATION
-  OPENING_BALANCE
-  CLOSING
-  TAX
-  INTERCOMPANY
-  AUDIT_ADJUSTMENT
-  SYSTEM_GENERATED
- }
-
- enum JournalNumberingScope {
-  TENANT_GLOBAL
-  LEGAL_ENTITY
-  FISCAL_YEAR
-  LEGAL_ENTITY_FISCAL_YEAR
- }
+}
 
 enum JournalReviewMode {
   MANUAL_REVIEW
@@ -3293,6 +3189,14 @@ enum RecurringJournalFrequency {
   YEARLY
 }
 
+enum RecurringTemplateStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SUSPENDED
+  ARCHIVED
+}
+
 enum NormalBalance {
   DEBIT
   CREDIT
@@ -3300,11 +3204,10 @@ enum NormalBalance {
 
 enum AccountingPeriodStatus {
   OPEN
+  CLOSED
   SOFT_CLOSED
   HARD_CLOSED
   ARCHIVED
-  // Legacy value retained for backward compatibility with existing data.
-  CLOSED
 }
 
 enum AccountingPeriodType {
@@ -3334,46 +3237,6 @@ enum ProjectStatus {
 }
 
 enum AuditEventType {
-  AUTH_LOGIN_SUCCESS
-  AUTH_LOGIN_FAILED
-  AUTH_LOGIN_LOCKED
-  ACCOUNT_UNLOCK_REQUESTED
-  ACCOUNT_UNLOCKED
-  ACCOUNT_UNLOCK_REQUEST_RESOLVED
-  AUTH_2FA_CHALLENGE_SENT
-  AUTH_2FA_VERIFY_SUCCESS
-  AUTH_2FA_VERIFY_FAILED
-  AUTH_2FA_LOCKED
-  PASSWORD_RESET_REQUESTED
-  PASSWORD_RESET_SUCCESS
-  PASSWORD_RESET_FAILED
-  PASSWORD_RESET_COMPLETED
-  PASSWORD_CHANGED
-  PASSWORD_EXPIRED_LOGIN_BLOCKED
-  FIRST_LOGIN_PASSWORD_CHANGE_REQUIRED
-  SESSION_CREATED
-  SESSION_REVOKED
-  SESSION_AUTO_REVOKED_STALE
-  SESSION_EXPIRED
-  CONCURRENT_SESSION_BLOCKED
-  SESSION_LOGIN_BLOCKED
-  AUTH_LOGOUT
-  LOGOUT
-  DELEGATION_CREATED
-  DELEGATION_REVOKED
-  DELEGATION_ACTIVATED
-  DELEGATION_EXPIRED
-  DELEGATION_EXPIRED_ACCESS_BLOCKED
-  DELEGATION_ACTION_BLOCKED_SOD
-  OTP_SUCCESS
-  OTP_FAILED
-  OVERRIDE_SESSION_CREATED
-  OVERRIDE_SESSION_UPDATED
-  OVERRIDE_SESSION_APPROVED
-  OVERRIDE_SESSION_REJECTED
-  OVERRIDE_SESSION_REVOKED
-  OVERRIDE_SESSION_EXPIRED
-  OVERRIDE_SESSION_EXECUTED
   JOURNAL_POST
   PERIOD_CHECKLIST_COMPLETE
   PERIOD_CLOSE
@@ -3410,17 +3273,9 @@ enum AuditEventType {
   USER_CREATE
   USER_STATUS_CHANGE
   USER_ROLE_ASSIGN
-  USER_PROFILE_UPDATED
-  USER_AVATAR_UPDATED
   COA_CREATE
   COA_UPDATE
   COA_DEACTIVATE
-  COA_SUBMITTED
-  COA_APPROVED
-  COA_REJECTED
-  COA_STATUS_CHANGE_REQUESTED
-  COA_STATUS_CHANGE_APPROVED
-  COA_UPDATE_REQUESTED
   COA_FREEZE
   COA_UNFREEZE
   COA_HIERARCHY_CHANGE
@@ -3433,31 +3288,15 @@ enum AuditEventType {
   RECURRING_TEMPLATE_CREATE
   RECURRING_TEMPLATE_UPDATE
   RECURRING_JOURNAL_GENERATED
-  AUTOMATION_EXECUTION_STARTED
-  AUTOMATION_EXECUTION_COMPLETED
-  AUTOMATION_EXECUTION_FAILED
-  AUTOMATION_SUSPENDED
-  AUTOMATION_ESCALATED
-  AUTOMATION_OVERRIDE_USED
-  AUTOMATION_SCHEDULE_CREATED
-  AUTOMATION_SCHEDULE_UPDATED
-  AUTOMATION_SCHEDULE_SUSPENDED
-  AUTOMATION_SCHEDULE_RESUMED
-  AUTOMATION_SCHEDULE_REVOKED
-  AUTOMATION_SCHEDULE_EXPIRED
   JOURNAL_UPLOAD
   JOURNAL_UPLOAD_FAILED
-  GL_JOURNAL_VOIDED
-  JOURNAL_NUMBERING_CONFIGURATION_CHANGED
   DISCLOSURE_NOTE_GENERATE
   DISCLOSURE_NOTE_VIEW
   GL_JOURNAL_SUBMITTED
   GL_JOURNAL_REVIEWED
-  GL_JOURNAL_SYSTEM_REVIEWED
   GL_JOURNAL_POSTED
   GL_JOURNAL_REVERSED
   GL_JOURNAL_POST_BLOCKED
-  GL_LIFECYCLE_BYPASS_BLOCKED
   FA_POST
   GL_JOURNAL_REJECTED
   GL_JOURNAL_RETURNED_BY_POSTER
@@ -3467,14 +3306,8 @@ enum AuditEventType {
   GL_JOURNAL_REVERSAL_ASSIGNED
   GL_JOURNAL_RISK_COMPUTED
   GL_JOURNAL_BUDGET_EVALUATED
-  GL_JOURNAL_OVERRIDE_POSTED
-  GL_JOURNAL_SOD_VIOLATION_BLOCKED
   COA_IMPORTED
   COA_CLEANUP_EXECUTED
-  COA_RECLASS_CREATED
-  COA_RECLASS_SUBMITTED
-  COA_RECLASS_APPROVED
-  COA_RECLASS_REJECTED
   PERIOD_CREATED
   PERIOD_REOPENED
   PERIOD_CLOSED
@@ -3496,25 +3329,19 @@ enum AuditEventType {
   PERIOD_CORRECTED
   AR_REMINDER_SENT
   AR_REMINDER_CONFIG_CHANGED
-
   PAYMENT_PROPOSAL_CREATED
   PAYMENT_PROPOSAL_SUBMITTED
   PAYMENT_PROPOSAL_APPROVED
   PAYMENT_PROPOSAL_REJECTED
-
   PAYMENT_RUN_CREATED
   PAYMENT_RUN_EXECUTED
-
   BILL_REJECTED
-
   IMPREST_TYPE_POLICY_CREATED
   IMPREST_TYPE_POLICY_UPDATED
   IMPREST_TYPE_POLICY_STATUS_CHANGE
-
   IMPREST_FACILITY_CREATED
   IMPREST_FACILITY_UPDATED
   IMPREST_FACILITY_STATUS_CHANGE
-
   IMPREST_CASE_CREATED
   IMPREST_CASE_SUBMITTED
   IMPREST_CASE_REVIEWED
@@ -3523,12 +3350,55 @@ enum AuditEventType {
   IMPREST_CASE_EVIDENCE_LINKED
   IMPREST_CASE_ISSUED
   IMPREST_CASE_SETTLED
-
+  USER_PROFILE_UPDATED
+  USER_AVATAR_UPDATED
+  AUTH_LOGIN_SUCCESS
+  AUTH_LOGIN_FAILED
+  AUTH_2FA_CHALLENGE_SENT
+  AUTH_2FA_VERIFY_SUCCESS
+  AUTH_2FA_VERIFY_FAILED
+  AUTH_2FA_LOCKED
+  AUTH_LOGIN_LOCKED
+  ACCOUNT_UNLOCK_REQUESTED
+  ACCOUNT_UNLOCKED
+  ACCOUNT_UNLOCK_REQUEST_RESOLVED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_CHANGED
+  PASSWORD_EXPIRED_LOGIN_BLOCKED
+  FIRST_LOGIN_PASSWORD_CHANGE_REQUIRED
+  SESSION_CREATED
+  SESSION_REVOKED
+  SESSION_EXPIRED
+  CONCURRENT_SESSION_BLOCKED
+  LOGOUT
+  OTP_SUCCESS
+  OTP_FAILED
+  PASSWORD_RESET_SUCCESS
+  PASSWORD_RESET_FAILED
+  SESSION_LOGIN_BLOCKED
+  AUTH_LOGOUT
+  DELEGATION_CREATED
+  DELEGATION_REVOKED
+  DELEGATION_ACTIVATED
+  DELEGATION_EXPIRED
+  DELEGATION_EXPIRED_ACCESS_BLOCKED
+  DELEGATION_ACTION_BLOCKED_SOD
+  SESSION_AUTO_REVOKED_STALE
+  COA_SUBMITTED
+  COA_APPROVED
+  COA_REJECTED
+  COA_STATUS_CHANGE_REQUESTED
+  COA_STATUS_CHANGE_APPROVED
+  COA_UPDATE_REQUESTED
+  COA_RECLASS_CREATED
+  COA_RECLASS_SUBMITTED
+  COA_RECLASS_APPROVED
+  COA_RECLASS_REJECTED
   COA_ROOT_CATEGORY_CREATED
   COA_ROOT_CATEGORY_UPDATED
   COA_ROOT_CATEGORY_DISABLED
   COA_ROOT_CATEGORY_SETUP_DEFAULT
-
   COA_STRUCTURE_FREEZE
   COA_STRUCTURE_UNFREEZE
   COA_STRUCTURE_CHANGE_REQUEST_CREATED
@@ -3537,6 +3407,15 @@ enum AuditEventType {
   COA_STRUCTURE_CHANGE_REQUEST_REJECTED
   COA_STRUCTURE_CHANGE_REQUEST_IMPLEMENTED
   COA_STRUCTURE_CHANGE_BLOCKED
+  GL_JOURNAL_OVERRIDE_POSTED
+  GL_JOURNAL_SOD_VIOLATION_BLOCKED
+  GL_JOURNAL_SYSTEM_REVIEWED
+  GL_LIFECYCLE_BYPASS_BLOCKED
+  RECURRING_TEMPLATE_SUBMITTED
+  RECURRING_TEMPLATE_APPROVED
+  RECURRING_TEMPLATE_SUSPENDED
+  RECURRING_TEMPLATE_ARCHIVED
+  RECURRING_TEMPLATE_REACTIVATED
 }
 
 enum BudgetStatus {
@@ -3545,9 +3424,9 @@ enum BudgetStatus {
 }
 
 enum BudgetControlMode {
-  NONE
   WARN
   BLOCK
+  NONE
 }
 
 enum JournalBudgetStatus {
@@ -3557,34 +3436,23 @@ enum JournalBudgetStatus {
 }
 
 enum AuditEntityType {
-  TWO_FACTOR_CHALLENGE
   JOURNAL_ENTRY
-  JOURNAL_UPLOAD_BATCH
   ACCOUNTING_PERIOD
   ACCOUNTING_PERIOD_CHECKLIST_ITEM
   SUPPLIER_INVOICE
   CUSTOMER_INVOICE
-  PAYMENT_PROPOSAL
-  PAYMENT
-  PAYMENT_RUN
-  REVIEW_PACK
-  REPORT
-  DISCLOSURE_NOTE
   FIXED_ASSET
   FIXED_ASSET_DEPRECIATION_RUN
   BANK_RECONCILIATION_MATCH
-  BANK_STATEMENT
-  BANK_STATEMENT_LINE
   USER
   BUDGET
+  REPORT
   FORECAST
   TENANT
   ACCOUNT
   RECURRING_JOURNAL_TEMPLATE
+  DISCLOSURE_NOTE
   CHART_OF_ACCOUNTS
-  COA_APPROVAL_REQUEST
-  COA_RECLASSIFICATION
-  COA_STRUCTURE_CHANGE_REQUEST
   CUSTOMER_RECEIPT
   INVOICE_CATEGORY
   TAX_RATE
@@ -3592,12 +3460,20 @@ enum AuditEntityType {
   DEPARTMENT
   PROJECT
   FUND
+  PAYMENT_PROPOSAL
+  PAYMENT
+  REVIEW_PACK
+  PAYMENT_RUN
   IMPREST_TYPE_POLICY
   IMPREST_FACILITY
   IMPREST_CASE
-  GOVERNANCE_OVERRIDE_SESSION
-  GOVERNANCE_AUTOMATION_EXECUTION_SESSION
-  GOVERNANCE_AUTOMATION_SCHEDULE
+  BANK_STATEMENT
+  BANK_STATEMENT_LINE
+  TWO_FACTOR_CHALLENGE
+  COA_APPROVAL_REQUEST
+  COA_RECLASSIFICATION
+  COA_STRUCTURE_CHANGE_REQUEST
+  JOURNAL_UPLOAD_BATCH
 }
 
 enum AccountLifecycleStatus {
@@ -3634,11 +3510,11 @@ enum CoaStructureChangeRequestType {
   SEGMENT_ORDER
   HIERARCHY_CHANGE
   ADD_ACCOUNT
-  EFFECTIVE_DATED_RECLASSIFICATION
   REPORTING_NODE_CHANGE
   TEMPLATE_EXTENSION
   ROOT_CATEGORY_MODIFICATION
   OTHER
+  EFFECTIVE_DATED_RECLASSIFICATION
 }
 
 enum CoaStructuralChangeType {
@@ -3664,7 +3540,7 @@ enum DisclosureNoteType {
 
 enum TwoFactorMethod {
   EMAIL
-  AUTHENTICATOR
   TOTP
   SMS
+  AUTHENTICATOR
 }

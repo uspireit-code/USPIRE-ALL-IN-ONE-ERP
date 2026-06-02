@@ -174,6 +174,10 @@ function isExpired(expiresAt: Date | string | null | undefined): boolean {
   return d.getTime() <= Date.now();
 }
 
+function isPostingMode(mode: IntercompanyGovernanceMode): boolean {
+  return mode === 'POST' || mode === 'REVERSE';
+}
+
 export function assertIntercompanyGovernance(ctx: IntercompanyGovernanceContext): {
   appliedRules: IntercompanyGovernanceRuleCode[];
   eliminationReady?: {
@@ -228,17 +232,42 @@ export function assertIntercompanyGovernance(ctx: IntercompanyGovernanceContext)
 
       const missing = Array.from(usedEntityIds).filter((le) => !allowed.has(le));
 
+      const insufficientPostAuthority = isPostingMode(ctx.mode)
+        ? Array.from(usedEntityIds).filter((le) => {
+            const row = accessList.find((a) => String(a.legalEntityId) === le);
+            return !row || !row.canPost;
+          })
+        : [];
+
       if (missing.length > 0) {
         const escalationAllowed = Boolean(ctx.escalation?.type);
         if (!escalationAllowed) {
           throwIntercompanyViolation({
             actionType: 'INTERCOMPANY_LEGAL_ENTITY_SCOPE_VIOLATION',
             message:
-              'Actor does not have explicit legal-entity access assignment for all legal entities involved in this journal',
+              'Your user account is not authorized to transact in the selected legal entity. Please contact your Finance Administrator for access.',
             ctx,
             ruleCode: rule.ruleCode,
             details: {
               missingLegalEntityIds: missing,
+              actorUserId: ctx.actorUserId,
+              eliminationReady: computeEliminationReadyMetadata(ctx),
+            },
+          });
+        }
+      }
+
+      if (insufficientPostAuthority.length > 0) {
+        const escalationAllowed = Boolean(ctx.escalation?.type);
+        if (!escalationAllowed) {
+          throwIntercompanyViolation({
+            actionType: 'INTERCOMPANY_LEGAL_ENTITY_SCOPE_VIOLATION',
+            message:
+              'You do not have posting authority for one or more legal entities used in this journal. Contact your Finance Administrator.',
+            ctx,
+            ruleCode: rule.ruleCode,
+            details: {
+              missingPostAuthorityLegalEntityIds: insufficientPostAuthority,
               actorUserId: ctx.actorUserId,
               eliminationReady: computeEliminationReadyMetadata(ctx),
             },

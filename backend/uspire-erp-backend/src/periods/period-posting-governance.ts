@@ -77,7 +77,7 @@ export function assertPeriodAllowsPosting(params: {
   permissionUsed: string;
 }) {
   const s = toStatus(params.period.status);
-  if (s === PeriodStatus.OPEN) return;
+  if (s === PeriodStatus.OPEN || String(s).toUpperCase() === 'ACTIVE') return;
 
   const periodName = String(params.period.name ?? '').trim();
   const suffix = periodName ? `: ${periodName}` : '';

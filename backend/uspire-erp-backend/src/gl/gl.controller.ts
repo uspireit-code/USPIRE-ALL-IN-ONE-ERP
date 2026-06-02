@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Post,
   Put,
@@ -51,6 +52,13 @@ export class GlController {
     private readonly exports: ReportExportService,
   ) {}
 
+  private isDebugLookupsEnabled(): boolean {
+    return (
+      (process.env.DEBUG_GL_LOOKUPS ?? '').toString().toLowerCase() === 'true' &&
+      (process.env.NODE_ENV ?? '').toString().toLowerCase() !== 'production'
+    );
+  }
+
   private getTenantPdfMetaOrThrow(req: Request) {
     const tenant: any = (req as any).tenant;
     const entityLegalName = String(tenant?.legalName ?? '').trim();
@@ -93,20 +101,44 @@ export class GlController {
 
   @Get('legal-entities')
   @Permissions(PERMISSIONS.GL.VIEW)
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   async listLegalEntities(
     @Req() req: Request,
     @Query('effectiveOn') effectiveOn?: string,
   ) {
-    return this.gl.listLegalEntities(req, { effectiveOn });
+    const out = await this.gl.listLegalEntities(req, { effectiveOn });
+    if (this.isDebugLookupsEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[GLController][legal-entities]', {
+        effectiveOn: effectiveOn ?? null,
+        count: Array.isArray(out) ? out.length : null,
+        sample: Array.isArray(out) ? out[0] ?? null : out,
+      });
+    }
+    return out;
   }
 
   @Get('departments')
   @Permissions(PERMISSIONS.GL.VIEW)
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   async listDepartments(
     @Req() req: Request,
     @Query('effectiveOn') effectiveOn?: string,
   ) {
-    return this.gl.listDepartments(req, { effectiveOn });
+    const out = await this.gl.listDepartments(req, { effectiveOn });
+    if (this.isDebugLookupsEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[GLController][departments]', {
+        effectiveOn: effectiveOn ?? null,
+        count: Array.isArray(out) ? out.length : null,
+        sample: Array.isArray(out) ? out[0] ?? null : out,
+      });
+    }
+    return out;
   }
 
   @Get('projects')
@@ -206,11 +238,22 @@ export class GlController {
 
   @Get('recurring-templates')
   @PermissionsAny(
+    PERMISSIONS.GL.RECURRING_VIEW,
     PERMISSIONS.GL.RECURRING_MANAGE,
     PERMISSIONS.GL.RECURRING_GENERATE,
   )
   async listRecurringTemplates(@Req() req: Request) {
     return this.gl.listRecurringTemplates(req);
+  }
+
+  @Get('recurring-templates/approved')
+  @PermissionsAny(
+    PERMISSIONS.GL.RECURRING_VIEW,
+    PERMISSIONS.GL.RECURRING_MANAGE,
+    PERMISSIONS.GL.RECURRING_GENERATE,
+  )
+  async listApprovedRecurringTemplates(@Req() req: Request) {
+    return this.gl.listApprovedRecurringTemplates(req);
   }
 
   @Put('recurring-templates/:id')
@@ -223,8 +266,62 @@ export class GlController {
     return this.gl.updateRecurringTemplate(req, id, dto);
   }
 
+  @Post('recurring-templates/:id/submit')
+  @Permissions(PERMISSIONS.GL.RECURRING_MANAGE)
+  async submitRecurringTemplateForApproval(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.gl.submitRecurringTemplateForApproval(req, id, {
+      reason: body?.reason,
+    });
+  }
+
+  @Post('recurring-templates/:id/approve')
+  @Permissions(PERMISSIONS.GL.APPROVE)
+  async approveRecurringTemplate(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.gl.approveRecurringTemplate(req, id, { reason: body?.reason });
+  }
+
+  @Post('recurring-templates/:id/suspend')
+  @Permissions(PERMISSIONS.GL.APPROVE)
+  async suspendRecurringTemplate(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.gl.suspendRecurringTemplate(req, id, { reason: body?.reason });
+  }
+
+  @Post('recurring-templates/:id/archive')
+  @Permissions(PERMISSIONS.GL.APPROVE)
+  async archiveRecurringTemplate(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.gl.archiveRecurringTemplate(req, id, { reason: body?.reason });
+  }
+
+  @Post('recurring-templates/:id/reactivate')
+  @Permissions(PERMISSIONS.GL.APPROVE)
+  async reactivateRecurringTemplate(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.gl.reactivateRecurringTemplate(req, id, {
+      reason: body?.reason,
+    });
+  }
+
   @Post('recurring-templates/:id/generate')
-  @Permissions(PERMISSIONS.GL.RECURRING_GENERATE)
+  @PermissionsAny(PERMISSIONS.GL.RECURRING_GENERATE, PERMISSIONS.GL.RECURRING_MANAGE)
   async generateRecurringTemplate(
     @Req() req: Request,
     @Param('id') id: string,
@@ -234,7 +331,7 @@ export class GlController {
   }
 
   @Post('recurring-templates/:id/automation/execute')
-  @Permissions(PERMISSIONS.GL.RECURRING_GENERATE)
+  @PermissionsAny(PERMISSIONS.GL.RECURRING_GENERATE, PERMISSIONS.GL.RECURRING_MANAGE)
   async executeRecurringAutomation(
     @Req() req: Request,
     @Param('id') id: string,
@@ -245,6 +342,7 @@ export class GlController {
 
   @Get('recurring-templates/:id/history')
   @PermissionsAny(
+    PERMISSIONS.GL.RECURRING_VIEW,
     PERMISSIONS.GL.RECURRING_MANAGE,
     PERMISSIONS.GL.RECURRING_GENERATE,
   )

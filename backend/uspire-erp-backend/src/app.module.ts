@@ -32,6 +32,7 @@ import { PeriodsModule } from './periods/periods.module';
 import { CorrelationIdMiddleware } from './internal/correlation-id.middleware';
 import { RequestLoggerMiddleware } from './internal/request-logger.middleware';
 import { TenantMiddleware } from './tenant/tenant.middleware';
+import { LegalEntityMiddleware } from './legal-entity/legal-entity.middleware';
 import { MasterDataModule } from './master-data/master-data.module';
 import { ImprestModule } from './imprest/imprest.module';
 import { BankReconModule } from './bank-recon/bank-recon.module';
@@ -40,6 +41,7 @@ import { UsersModule } from './users/users.module';
 import { BrandingModule } from './branding/branding.module';
 import { DelegationsModule } from './delegations/delegations.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { MeModule } from './me/me.module';
 
 @Module({
   imports: [
@@ -76,6 +78,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     BrandingModule,
     DelegationsModule,
     NotificationsModule,
+    MeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -83,7 +86,12 @@ import { NotificationsModule } from './notifications/notifications.module';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(CorrelationIdMiddleware, RequestLoggerMiddleware, TenantMiddleware)
+      .apply(
+        CorrelationIdMiddleware,
+        RequestLoggerMiddleware,
+        TenantMiddleware,
+        LegalEntityMiddleware,
+      )
       .exclude(
         { path: 'health', method: RequestMethod.ALL },
         { path: 'ready', method: RequestMethod.ALL },

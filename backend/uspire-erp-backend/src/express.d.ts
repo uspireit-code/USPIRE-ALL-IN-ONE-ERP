@@ -1,9 +1,10 @@
-import { Tenant } from '@prisma/client';
+import type { LegalEntity, Tenant } from '@prisma/client';
 
 declare global {
   namespace Express {
     interface Request {
       tenant?: Tenant;
+      legalEntity?: Pick<LegalEntity, 'id' | 'tenantId' | 'isActive' | 'effectiveFrom' | 'effectiveTo'>;
       requestId?: string;
       user?: {
         id: string;

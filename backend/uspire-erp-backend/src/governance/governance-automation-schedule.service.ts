@@ -174,6 +174,31 @@ export class GovernanceAutomationScheduleService {
     const nextRunAt = toDate(params.nextRunAt);
     const expiresAt = toDate(params.expiresAt);
 
+    if (automationCode === 'RECURRING_JOURNAL_AUTOMATION') {
+      const targetType = String(params.targetType ?? '').trim();
+      const targetId = String(params.targetId ?? '').trim();
+      if (targetType !== 'RECURRING_TEMPLATE') {
+        throw new BadRequestException('Recurring journal schedules must target a recurring template');
+      }
+      if (!targetId) {
+        throw new BadRequestException('targetId is required');
+      }
+
+      const tpl = await (this.prisma as any).recurringJournalTemplate.findFirst({
+        where: { id: targetId, tenantId: params.tenantId },
+        select: { id: true, status: true, isActive: true },
+      });
+
+      if (!tpl) {
+        throw new BadRequestException('Recurring template not found');
+      }
+
+      const status = String((tpl as any).status ?? ((tpl as any).isActive ? 'APPROVED' : 'SUSPENDED')).toUpperCase();
+      if (status !== 'APPROVED') {
+        throw new BadRequestException('Recurring template must be APPROVED before it can be scheduled');
+      }
+    }
+
     const row = await (this.prisma as any).governanceAutomationSchedule.create({
       data: {
         tenantId: params.tenantId,

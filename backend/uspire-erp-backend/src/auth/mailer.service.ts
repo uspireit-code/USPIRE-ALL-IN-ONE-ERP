@@ -42,6 +42,11 @@ export class MailerService {
     return process.env.NODE_ENV === 'production';
   }
 
+  private canSendEmails() {
+    if (this.isProd()) return true;
+    return String(process.env.MAIL_SEND_IN_DEV ?? '').trim().toLowerCase() === 'true';
+  }
+
   private getTransporter(): Transporter {
     if (this.transporter) return this.transporter;
 
@@ -191,7 +196,7 @@ export class MailerService {
   }): Promise<void> {
     const toValue = Array.isArray(params.to) ? params.to.join(',') : params.to;
 
-    if (!this.isProd()) {
+    if (!this.canSendEmails()) {
       // eslint-disable-next-line no-console
       console.log(`[MailerService][${params.logTag}][dev]`, {
         to: params.to,

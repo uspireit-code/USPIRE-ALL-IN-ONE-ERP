@@ -92,6 +92,20 @@ function inferModuleFromPermissionCode(code: string): PermissionModule {
   return 'Settings';
 }
 
+function resolveLegalEntityAccessForRoleNames(roleNames: Iterable<string>) {
+  const names = Array.from(roleNames).map((r) => String(r ?? '').trim().toUpperCase());
+  const canApprove = names.some((r) => r.includes('CONTROLLER') || r.includes('MANAGER') || r.includes('APPROVER'));
+  const canPost = names.some((r) => r.includes('CONTROLLER') || r.includes('MANAGER') || r.includes('POST'));
+  const canOverride = names.some((r) => r.includes('CONTROLLER') || r.includes('ADMIN'));
+
+  return {
+    accessLevel: canApprove ? 'APPROVE' : canPost ? 'POST' : 'PREPARE',
+    canPost,
+    canApprove,
+    canOverride,
+  };
+}
+
 function permissionIsApprovalLike(code: string): boolean {
   const c = (code || '').toLowerCase();
   return c.includes('approve') || c.includes('_approve');
@@ -819,6 +833,13 @@ export class SettingsService {
       });
     }
 
+    await this.assignInitialLegalEntityAccess({
+      tenantId: tenant.id,
+      actorUserId: actor.id,
+      targetUserId: created.id,
+      roleIds: dto.roleIds ?? [],
+    });
+
     await this.prisma.auditEvent
       .create({
         data: {
@@ -843,6 +864,56 @@ export class SettingsService {
       createdAt: created.createdAt,
       temporaryPassword,
     };
+  }
+
+  private async assignInitialLegalEntityAccess(params: {
+    tenantId: string;
+    actorUserId: string;
+    targetUserId: string;
+    roleIds: string[];
+  }) {
+    const legalEntity = await this.prisma.legalEntity.findFirst({
+      where: {
+        tenantId: params.tenantId,
+        isActive: true,
+      },
+      orderBy: [{ code: 'asc' }],
+      select: { id: true },
+    });
+    if (!legalEntity) return;
+
+    const roles = params.roleIds.length
+      ? await this.prisma.role.findMany({
+          where: { tenantId: params.tenantId, id: { in: Array.from(new Set(params.roleIds)) } },
+          select: { name: true },
+        })
+      : [];
+    const access = resolveLegalEntityAccessForRoleNames(roles.map((r) => r.name));
+
+    await (this.prisma as any).userLegalEntityAccess.upsert({
+      where: {
+        tenantId_userId_legalEntityId: {
+          tenantId: params.tenantId,
+          userId: params.targetUserId,
+          legalEntityId: legalEntity.id,
+        },
+      },
+      create: {
+        tenantId: params.tenantId,
+        userId: params.targetUserId,
+        legalEntityId: legalEntity.id,
+        accessLevel: access.accessLevel,
+        canPost: access.canPost,
+        canApprove: access.canApprove,
+        canOverride: access.canOverride,
+        expiresAt: null,
+        grantedById: params.actorUserId,
+      },
+      update: {
+        expiresAt: null,
+      },
+      select: { id: true },
+    });
   }
 
   async updateUserStatus(req: Request, id: string, dto: UpdateUserStatusDto) {
@@ -1958,7 +2029,7 @@ export class SettingsService {
         await writeAuditEventWithPrisma(
           {
             tenantId: tenant.id,
-            eventType: AuditEventType.JOURNAL_NUMBERING_CONFIGURATION_CHANGED,
+            eventType: AuditEventType.JOURNAL_UPDATE,
             entityType: AuditEntityType.TENANT,
             entityId: tenant.id,
             actorUserId: user.id,

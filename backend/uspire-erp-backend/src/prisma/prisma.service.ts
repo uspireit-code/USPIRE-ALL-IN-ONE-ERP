@@ -542,11 +542,43 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     try {
       const u = new URL(raw);
       const dbName = (u.pathname ?? '').replace(/^\//, '');
+      const sourceHint = process.env.DOTENV_CONFIG_PATH
+        ? `dotenv:${String(process.env.DOTENV_CONFIG_PATH)}`
+        : 'dotenv:default(.env)';
       this.logger.log(
-        `DATABASE_URL target: ${u.hostname}:${u.port || '(default)'} db=${dbName || '(unknown)'} schema=${u.searchParams.get('schema') || 'public'}`,
+        `DATABASE_URL target: ${u.hostname}:${u.port || '(default)'} db=${dbName || '(unknown)'} schema=${u.searchParams.get('schema') || 'public'} user=${u.username || '(none)'} src=${sourceHint}`,
       );
     } catch {
       this.logger.log('DATABASE_URL target: (unparseable)');
+    }
+  }
+
+  private logConnectionRemediationHint(err: any) {
+    const code = String(err?.code ?? '').trim();
+    if (code === 'P1000') {
+      this.logger.error(
+        'DB auth failed (P1000). Verify DATABASE_URL username/password matches the local Postgres role. If using pgAdmin, reset the role password or update DATABASE_URL (do not drop data).',
+      );
+      return;
+    }
+    if (code === 'P1001') {
+      this.logger.error(
+        'DB unreachable (P1001). Verify Postgres is running and the host/port in DATABASE_URL is correct.',
+      );
+      return;
+    }
+    if (code === 'P1010') {
+      this.logger.error(
+        'DB permission denied (P1010). Verify the database user has privileges on the target database/schema.',
+      );
+      return;
+    }
+
+    const msg = String(err?.message ?? '').toLowerCase();
+    if (msg.includes('no pg_hba.conf entry')) {
+      this.logger.error(
+        'Postgres rejected the connection due to pg_hba.conf rules. Check pg_hba.conf for localhost entries and auth method (md5 vs scram-sha-256 vs peer).',
+      );
     }
   }
 
@@ -557,7 +589,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       await this.$queryRaw`SELECT 1`;
       this.logger.log('Database connection check succeeded');
     } catch (error) {
-      this.logger.error('Database connection check failed', error as Error);
+      const err: any = error as any;
+      this.logger.error('Database connection check failed', err);
+      this.logConnectionRemediationHint(err);
 
       if (process.env.NODE_ENV !== 'production') {
         return;

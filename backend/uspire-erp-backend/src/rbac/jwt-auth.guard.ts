@@ -29,6 +29,13 @@ export class JwtAuthGuard implements CanActivate {
     private readonly prisma: PrismaService,
   ) {}
 
+  private isDebugAuthEnabled(): boolean {
+    return (
+      (process.env.DEBUG_AUTH ?? '').toString().toLowerCase() === 'true' &&
+      (process.env.NODE_ENV ?? '').toString().toLowerCase() !== 'production'
+    );
+  }
+
   private resolveSessionIdleTimeoutMinutes(): number {
     const isTestMode =
       (process.env.NODE_ENV ?? '').toLowerCase() === 'test' ||
@@ -45,6 +52,21 @@ export class JwtAuthGuard implements CanActivate {
     const cookieToken = (req as any)?.cookies?.uspire_access_token;
     const resolvedToken = scheme === 'Bearer' && token ? token : cookieToken;
 
+    if (this.isDebugAuthEnabled()) {
+      // eslint-disable-next-line no-console
+      console.debug('[JwtAuthGuard]', {
+        path: (req as any)?.originalUrl ?? req.url,
+        method: (req as any)?.method,
+        hasCookieHeader: Boolean(req.header('cookie')),
+        hasCookiesObject: Boolean((req as any)?.cookies),
+        hasAccessCookie: Boolean(cookieToken),
+        authScheme: scheme,
+        bearerTokenPresent: Boolean(token),
+        resolvedTokenSource: scheme === 'Bearer' && token ? 'authorization' : cookieToken ? 'cookie' : 'none',
+        resolvedTokenLength: typeof resolvedToken === 'string' ? resolvedToken.length : 0,
+      });
+    }
+
     if (!resolvedToken) {
       throw new UnauthorizedException('Missing access token');
     }
@@ -57,7 +79,14 @@ export class JwtAuthGuard implements CanActivate {
       payload = await this.jwtService.verifyAsync<JwtAccessPayload>(resolvedToken, {
         secret,
       });
-    } catch {
+    } catch (e: any) {
+      if (this.isDebugAuthEnabled()) {
+        // eslint-disable-next-line no-console
+        console.debug('[JwtAuthGuard] jwt.verify failed', {
+          message: String(e?.message ?? ''),
+          name: String(e?.name ?? ''),
+        });
+      }
       throw new UnauthorizedException('Invalid access token');
     }
 
@@ -110,6 +139,14 @@ export class JwtAuthGuard implements CanActivate {
     });
 
     if (!session) {
+      if (this.isDebugAuthEnabled()) {
+        // eslint-disable-next-line no-console
+        console.debug('[JwtAuthGuard] session not found', {
+          tenantId: payload.tenantId,
+          userId: payload.sub,
+          sessionId,
+        });
+      }
       throw new UnauthorizedException('Session expired or revoked');
     }
 

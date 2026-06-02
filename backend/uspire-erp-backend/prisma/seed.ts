@@ -61,6 +61,114 @@ async function seedJournalLineDimensionsMasters() {
   }
 }
 
+type AccountDimensionGovernance = {
+  requiresDepartment: boolean;
+  requiresProject: boolean;
+  requiresFund: boolean;
+};
+
+const DEFAULT_ACCOUNT_DIMENSION_GOVERNANCE_RULES: Array<{
+  name: string;
+  where: Prisma.AccountWhereInput;
+  governance: AccountDimensionGovernance;
+}> = [
+  {
+    name: 'bank-control-equity-clearing-optional',
+    where: {
+      OR: [
+        { isControlAccount: true },
+        { type: { in: ['ASSET', 'LIABILITY', 'EQUITY'] as any } },
+        { name: { contains: 'bank', mode: 'insensitive' as any } },
+        { name: { contains: 'cash', mode: 'insensitive' as any } },
+        { name: { contains: 'vat', mode: 'insensitive' as any } },
+        { name: { contains: 'tax', mode: 'insensitive' as any } },
+        { name: { contains: 'payable', mode: 'insensitive' as any } },
+        { name: { contains: 'receivable', mode: 'insensitive' as any } },
+        { name: { contains: 'clearing', mode: 'insensitive' as any } },
+        { name: { contains: 'retained earnings', mode: 'insensitive' as any } },
+      ],
+    },
+    governance: { requiresDepartment: false, requiresProject: false, requiresFund: false },
+  },
+  {
+  name: 'operational-expense-department-required',
+  where: {
+    AND: [
+      {
+        type: 'EXPENSE' as any,
+      },
+      {
+        isControlAccount: false,
+      },
+      {
+        NOT: {
+          OR: [
+            { name: { contains: 'tax', mode: 'insensitive' as any } },
+            { name: { contains: 'vat', mode: 'insensitive' as any } },
+            { name: { contains: 'withholding', mode: 'insensitive' as any } },
+            { name: { contains: 'payable', mode: 'insensitive' as any } },
+            { name: { contains: 'receivable', mode: 'insensitive' as any } },
+            { name: { contains: 'clearing', mode: 'insensitive' as any } },
+          ],
+        },
+      },
+    ],
+  },
+  governance: {
+    requiresDepartment: true,
+    requiresProject: false,
+    requiresFund: false,
+  },
+},
+  {
+    name: 'project-grant-job-costing-project-required',
+    where: {
+      OR: [
+        { name: { contains: 'project', mode: 'insensitive' as any } },
+        { name: { contains: 'grant', mode: 'insensitive' as any } },
+        { name: { contains: 'job', mode: 'insensitive' as any } },
+        { name: { contains: 'contract', mode: 'insensitive' as any } },
+        { code: { in: ['40120', '40160', '40180'] } },
+      ],
+    },
+    governance: { requiresDepartment: false, requiresProject: true, requiresFund: false },
+  },
+  {
+    name: 'donor-restricted-fund-required',
+    where: {
+      OR: [
+        { name: { contains: 'donor', mode: 'insensitive' as any } },
+        { name: { contains: 'restricted', mode: 'insensitive' as any } },
+        { name: { contains: 'fund', mode: 'insensitive' as any } },
+        { name: { contains: 'donation', mode: 'insensitive' as any } },
+        { code: { in: ['70140'] } },
+      ],
+    },
+    governance: { requiresDepartment: false, requiresProject: false, requiresFund: true },
+  },
+];
+
+async function seedAccountDimensionGovernance(tenantId: string) {
+  await prisma.account.updateMany({
+    where: { tenantId },
+    data: {
+      requiresDepartment: false,
+      requiresProject: false,
+      requiresFund: false,
+    },
+  });
+
+  for (const rule of DEFAULT_ACCOUNT_DIMENSION_GOVERNANCE_RULES) {
+    await prisma.account.updateMany({
+      where: {
+        tenantId,
+        ...rule.where,
+      },
+      data: rule.governance,
+    });
+  }
+}
+
 async function main() {
   await (prisma as any).ifrsMappingMaster.createMany({
     data: [
@@ -450,6 +558,25 @@ async function main() {
     PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
   ]);
 
+  // Recurring journals RBAC bootstrap/backfill (idempotent):
+  // - FINANCE_CONTROLLER / FINANCE_MANAGER: VIEW + GENERATE + MANAGE
+  // - FINANCE_OFFICER: VIEW + GENERATE only
+  // - AUDITOR: VIEW only
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.GL.RECURRING_VIEW,
+    PERMISSIONS.GL.RECURRING_GENERATE,
+    PERMISSIONS.GL.RECURRING_MANAGE,
+  ]);
+  await assignPermissionsByCode(financeManagerRole.id, [
+    PERMISSIONS.GL.RECURRING_VIEW,
+    PERMISSIONS.GL.RECURRING_GENERATE,
+    PERMISSIONS.GL.RECURRING_MANAGE,
+  ]);
+  await assignPermissionsByCode(financeOfficerRole.id, [
+    PERMISSIONS.GL.RECURRING_VIEW,
+    PERMISSIONS.GL.RECURRING_GENERATE,
+  ]);
+
   const auditorRole = await prisma.role.findUnique({
     where: {
       tenantId_name: {
@@ -463,6 +590,7 @@ async function main() {
     await assignPermissionsByCode(auditorRole.id, [
       PERMISSIONS.GOVERNANCE.AUTOMATION.VIEW,
       PERMISSIONS.GOVERNANCE.AUTOMATION.ANALYTICS,
+      PERMISSIONS.GL.RECURRING_VIEW,
     ]);
   }
 
@@ -611,6 +739,7 @@ async function main() {
     PERMISSIONS.GL.APPROVE,
     PERMISSIONS.GL.POST,
     PERMISSIONS.GL.FINAL_POST,
+    PERMISSIONS.GL.RECURRING_VIEW,
     PERMISSIONS.GL.RECURRING_MANAGE,
     PERMISSIONS.GL.RECURRING_GENERATE,
 
@@ -1202,6 +1331,19 @@ async function main() {
       skipDuplicates: true,
     });
   }
+
+  const glRecurringViewPerm = await prisma.permission.upsert({
+    where: { code: PERMISSIONS.GL.RECURRING_VIEW },
+    create: {
+      code: PERMISSIONS.GL.RECURRING_VIEW,
+      description: 'View recurring journal templates and history',
+    },
+    update: {
+      description: 'View recurring journal templates and history',
+    },
+    select: { id: true },
+  });
+
   const glRecurringGeneratePerm = await prisma.permission.upsert({
     where: { code: PERMISSIONS.GL.RECURRING_GENERATE },
     create: {
@@ -1228,9 +1370,9 @@ async function main() {
     select: { id: true },
   });
 
-  // Backfill: ensure all FINANCE_OFFICER roles (across all tenants) have recurring generate.
+  // Backfill: ensure all FINANCE_OFFICER roles (across all tenants) have recurring view + generate.
   // This is additive-only and safe to re-run.
-  if (glRecurringGeneratePerm?.id) {
+  if (glRecurringGeneratePerm?.id && glRecurringViewPerm?.id) {
     const allFinanceOfficerRoles = await prisma.role.findMany({
       where: { name: 'FINANCE_OFFICER' },
       select: { id: true },
@@ -1238,10 +1380,10 @@ async function main() {
 
     if (allFinanceOfficerRoles.length > 0) {
       await prisma.rolePermission.createMany({
-        data: allFinanceOfficerRoles.map((r) => ({
-          roleId: r.id,
-          permissionId: glRecurringGeneratePerm.id,
-        })),
+        data: allFinanceOfficerRoles.flatMap((r) => [
+          { roleId: r.id, permissionId: glRecurringViewPerm.id },
+          { roleId: r.id, permissionId: glRecurringGeneratePerm.id },
+        ]),
         skipDuplicates: true,
       });
     }
@@ -1538,6 +1680,9 @@ async function main() {
       PERMISSIONS.IMPREST.CASE_CREATE,
       PERMISSIONS.IMPREST.CASE_SUBMIT,
       PERMISSIONS.IMPREST.CASE_SETTLEMENT_EDIT,
+
+      PERMISSIONS.GL.RECURRING_VIEW,
+      PERMISSIONS.GL.RECURRING_GENERATE,
     ] as const;
 
     await prisma.rolePermission.deleteMany({
@@ -2416,6 +2561,52 @@ async function main() {
     },
   });
 
+  const defaultLegalEntity = await prisma.legalEntity.findFirst({
+    where: { tenantId: tenant.id, code: '001', isActive: true },
+    select: { id: true },
+  });
+
+  if (defaultLegalEntity?.id) {
+    await (prisma as any).userLegalEntityAccess.createMany({
+      data: [
+        {
+          tenantId: tenant.id,
+          userId: officerUser.id,
+          legalEntityId: defaultLegalEntity.id,
+          accessLevel: 'PREPARE',
+          canPost: false,
+          canApprove: false,
+          canOverride: false,
+          grantedById: null,
+          expiresAt: null,
+        },
+        {
+          tenantId: tenant.id,
+          userId: managerUser.id,
+          legalEntityId: defaultLegalEntity.id,
+          accessLevel: 'POST',
+          canPost: true,
+          canApprove: true,
+          canOverride: false,
+          grantedById: null,
+          expiresAt: null,
+        },
+        {
+          tenantId: tenant.id,
+          userId: controllerUser.id,
+          legalEntityId: defaultLegalEntity.id,
+          accessLevel: 'POST',
+          canPost: true,
+          canApprove: true,
+          canOverride: false,
+          grantedById: null,
+          expiresAt: null,
+        },
+      ],
+      skipDuplicates: true,
+    });
+  }
+
   await prisma.arReminderTemplate.upsert({
     where: {
       tenantId_level: {
@@ -2828,6 +3019,7 @@ async function main() {
   });
 
   await seedJournalLineDimensionsMasters();
+  await seedAccountDimensionGovernance(tenant.id);
 
   // eslint-disable-next-line no-console
   console.log('Seed complete:', { tenantId: tenant.id });

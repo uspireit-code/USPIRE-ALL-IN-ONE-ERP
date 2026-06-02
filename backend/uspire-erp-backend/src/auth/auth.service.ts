@@ -28,6 +28,7 @@ import { Verify2faDto } from './dto/verify-2fa.dto';
 import { ForceChangePasswordDto } from './dto/force-change-password.dto';
 import { MailerService } from './mailer.service';
 import { validatePasswordComplexity } from './password-policy';
+import { getEffectiveActorContext } from './actor-context';
 
 type JwtAccessPayload = {
   sub: string;
@@ -255,6 +256,275 @@ export class AuthService {
     });
 
     return { success: true };
+  }
+
+  async logout(req: Request) {
+    const sessionUser: any = req.user as any;
+    const tenantId = String((req.tenant as any)?.id ?? sessionUser?.tenantId ?? '').trim();
+    const userId = String(sessionUser?.id ?? '').trim();
+    const sessionId = String(sessionUser?.sessionId ?? '').trim();
+
+    if (!tenantId || !userId || !sessionId) {
+      return { success: true };
+    }
+
+    await (this.prisma.userSession as any).updateMany({
+      where: {
+        tenantId,
+        userId,
+        sessionId,
+        revokedAt: null,
+      } as any,
+      data: { revokedAt: new Date() } as any,
+    });
+
+    return { success: true };
+  }
+
+  async myLegalEntityAccess(req: Request) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new UnauthorizedException('Missing tenant or user context');
+    }
+
+    const actorCtx = getEffectiveActorContext(req);
+    const actorUserId = actorCtx.actingAsUserId ?? actorCtx.realUserId;
+
+    await this.maybeAutoProvisionLegalEntityAccess({
+      req,
+      tenantId: tenant.id,
+      actorUserId,
+    });
+
+    const rows = await (this.prisma as any).userLegalEntityAccess.findMany({
+      where: {
+        tenantId: tenant.id,
+        userId: actorUserId,
+      },
+      select: {
+        legalEntityId: true,
+        accessLevel: true,
+        canPost: true,
+        canApprove: true,
+        canOverride: true,
+        expiresAt: true,
+        legalEntity: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            isActive: true,
+          },
+        },
+      },
+      orderBy: [{ legalEntity: { code: 'asc' } }],
+    });
+
+    const items = Array.isArray(rows) ? rows : [];
+    return {
+      items: items.map((r) => ({
+        legalEntity: r.legalEntity
+          ? {
+              id: String((r as any).legalEntity.id),
+              code: String((r as any).legalEntity.code),
+              name: String((r as any).legalEntity.name),
+              isActive: Boolean((r as any).legalEntity.isActive),
+            }
+          : {
+              id: String(r.legalEntityId),
+              code: '',
+              name: '',
+              isActive: true,
+            },
+        legalEntityId: String(r.legalEntityId),
+        accessLevel: (r as any).accessLevel ?? null,
+        canPost: Boolean((r as any).canPost),
+        canApprove: Boolean((r as any).canApprove),
+        canOverride: Boolean((r as any).canOverride),
+        expiresAt: (r as any).expiresAt ?? null,
+      })),
+    };
+  }
+
+  private async resolveActorPermissionCodes(params: {
+    req: Request;
+    tenantId: string;
+    actorUserId: string;
+  }): Promise<Set<string>> {
+    const sessionUser: any = params.req.user as any;
+    const jwtPermissionCodes = Array.isArray(sessionUser?.permissions)
+      ? (sessionUser.permissions as string[])
+      : [];
+
+    if (jwtPermissionCodes.length > 0) {
+      return new Set(jwtPermissionCodes.map((p) => String(p)));
+    }
+
+    const scoped = await this.getTenantScopedRolesAndPermissions({
+      tenantId: params.tenantId,
+      userId: params.actorUserId,
+    });
+
+    return new Set((scoped.permissions ?? []).map((p) => String(p)));
+  }
+
+  private async maybeAutoProvisionLegalEntityAccess(params: {
+    req: Request;
+    tenantId: string;
+    actorUserId: string;
+  }) {
+    const enabledRaw = String(
+      this.config.get<string>('GL_AUTO_PROVISION_LEGAL_ENTITY_ACCESS') ?? 'true',
+    )
+      .trim()
+      .toLowerCase();
+    const enabled = enabledRaw === 'true' || enabledRaw === '1' || enabledRaw === 'yes';
+    if (!enabled) return;
+
+    const configuredLegalEntityId = String(
+      this.config.get<string>('GL_AUTO_PROVISION_LEGAL_ENTITY_ID') ?? '',
+    ).trim();
+
+    const permissionCodes = await this.resolveActorPermissionCodes({
+      req: params.req,
+      tenantId: params.tenantId,
+      actorUserId: params.actorUserId,
+    });
+
+    const qualifies =
+      permissionCodes.has('FINANCE_GL_CREATE') ||
+      permissionCodes.has('gl.journal.create');
+
+    if (!qualifies) return;
+
+    try {
+      const legalEntity = configuredLegalEntityId
+        ? await (this.prisma as any).legalEntity.findFirst({
+            where: {
+              id: configuredLegalEntityId,
+              tenantId: params.tenantId,
+              isActive: true,
+            },
+            select: { id: true },
+          })
+        : await (this.prisma as any).legalEntity.findFirst({
+            where: {
+              tenantId: params.tenantId,
+              isActive: true,
+            },
+            orderBy: [{ code: 'asc' }],
+            select: { id: true },
+          });
+      const legalEntityId = String((legalEntity as any)?.id ?? '').trim();
+      if (!legalEntityId) return;
+
+      const existing = await (this.prisma as any).userLegalEntityAccess.findUnique({
+        where: {
+          tenantId_userId_legalEntityId: {
+            tenantId: params.tenantId,
+            userId: params.actorUserId,
+            legalEntityId,
+          },
+        },
+        select: { id: true, accessLevel: true, expiresAt: true },
+      });
+
+      const level = String((existing as any)?.accessLevel ?? '').toUpperCase();
+      const isHigherThanPrepare =
+        level === 'POST' || level === 'APPROVE' || level === 'OVERRIDE' || level === 'BOTH';
+
+      if (existing) {
+        await (this.prisma as any).userLegalEntityAccess.update({
+          where: { id: existing.id },
+          data: {
+            accessLevel: isHigherThanPrepare ? undefined : 'PREPARE',
+            expiresAt: null,
+          },
+        });
+        return;
+      }
+
+      await (this.prisma as any).userLegalEntityAccess.create({
+        data: {
+          tenantId: params.tenantId,
+          userId: params.actorUserId,
+          legalEntityId,
+          accessLevel: 'PREPARE',
+          canPost: false,
+          canApprove: false,
+          canOverride: false,
+          expiresAt: null,
+          grantedById: null,
+        },
+        select: { id: true },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `[myLegalEntityAccess] auto-provision failed userId=${params.actorUserId} tenantId=${params.tenantId}`,
+      );
+    }
+  }
+
+  private async getUserLegalEntityBootstrap(params: {
+    tenantId: string;
+    userId: string;
+  }) {
+    const rows = await (this.prisma as any).userLegalEntityAccess.findMany({
+      where: {
+        tenantId: params.tenantId,
+        userId: params.userId,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        legalEntity: { isActive: true },
+      },
+      select: {
+        legalEntityId: true,
+        accessLevel: true,
+        canPost: true,
+        canApprove: true,
+        canOverride: true,
+        expiresAt: true,
+        legalEntity: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            isActive: true,
+          },
+        },
+      },
+      orderBy: [{ legalEntity: { code: 'asc' } }],
+    });
+
+    const legalEntityAccess = (Array.isArray(rows) ? rows : []).map((r) => ({
+      legalEntity: r.legalEntity
+        ? {
+            id: String((r as any).legalEntity.id),
+            code: String((r as any).legalEntity.code),
+            name: String((r as any).legalEntity.name),
+            isActive: Boolean((r as any).legalEntity.isActive),
+          }
+        : {
+            id: String(r.legalEntityId),
+            code: '',
+            name: '',
+            isActive: true,
+          },
+      legalEntityId: String(r.legalEntityId),
+      accessLevel: (r as any).accessLevel ?? null,
+      canPost: Boolean((r as any).canPost),
+      canApprove: Boolean((r as any).canApprove),
+      canOverride: Boolean((r as any).canOverride),
+      expiresAt: (r as any).expiresAt ?? null,
+    }));
+
+    const activeLegalEntity = legalEntityAccess[0]?.legalEntity ?? null;
+    return {
+      legalEntityAccess,
+      activeLegalEntity,
+      activeLegalEntityId: activeLegalEntity?.id ?? null,
+      requiresLegalEntitySelection: legalEntityAccess.length > 1,
+    };
   }
 
   private async getActiveSession(params: { tenantId: string; userId: string }) {
@@ -2391,6 +2661,95 @@ export class AuthService {
       }
     }
 
+    // Ensure recurring journal permissions exist + are assigned to finance roles (some environments may not have re-run seeds).
+    // Additive-only: create missing Permission rows and add missing role-permission assignments, no removals.
+    {
+      const requiredPermissionCodes = [
+        PERMISSIONS.GL.RECURRING_VIEW,
+        PERMISSIONS.GL.RECURRING_GENERATE,
+        PERMISSIONS.GL.RECURRING_MANAGE,
+      ] as const;
+
+      const controllerCodes = [
+        PERMISSIONS.GL.RECURRING_VIEW,
+        PERMISSIONS.GL.RECURRING_GENERATE,
+        PERMISSIONS.GL.RECURRING_MANAGE,
+      ] as const;
+      const managerCodes = [
+        PERMISSIONS.GL.RECURRING_VIEW,
+        PERMISSIONS.GL.RECURRING_GENERATE,
+        PERMISSIONS.GL.RECURRING_MANAGE,
+      ] as const;
+      const officerCodes = [
+        PERMISSIONS.GL.RECURRING_VIEW,
+        PERMISSIONS.GL.RECURRING_GENERATE,
+      ] as const;
+      const auditorCodes = [PERMISSIONS.GL.RECURRING_VIEW] as const;
+
+      const txResult = await this.prisma.$transaction(async (tx) => {
+        await tx.permission.createMany({
+          data: requiredPermissionCodes.map((code) => ({ code } as any)),
+          skipDuplicates: true,
+        });
+
+        const perms = await tx.permission.findMany({
+          where: { code: { in: [...requiredPermissionCodes] } },
+          select: { id: true, code: true },
+        });
+        const permIdByCode = new Map(perms.map((p) => [p.code, p.id] as const));
+
+        const rolesToBackfill = await tx.role.findMany({
+          where: {
+            tenantId: tenant.id,
+            name: { in: ['FINANCE_CONTROLLER', 'FINANCE_MANAGER', 'FINANCE_OFFICER', 'AUDITOR'] },
+          },
+          select: { id: true, name: true },
+        });
+
+        const rolePermissionRows: Array<{ roleId: string; permissionId: string }> = [];
+        for (const role of rolesToBackfill) {
+          const roleName = String(role.name ?? '').trim();
+          const codesForRole =
+            roleName === 'FINANCE_CONTROLLER'
+              ? controllerCodes
+              : roleName === 'FINANCE_MANAGER'
+                ? managerCodes
+                : roleName === 'FINANCE_OFFICER'
+                  ? officerCodes
+                  : roleName === 'AUDITOR'
+                    ? auditorCodes
+                    : [];
+
+          for (const code of codesForRole) {
+            const permId = permIdByCode.get(code);
+            if (permId) rolePermissionRows.push({ roleId: role.id, permissionId: permId });
+          }
+        }
+
+        const assignedCount = rolePermissionRows.length
+          ? await tx.rolePermission.createMany({
+              data: rolePermissionRows,
+              skipDuplicates: true,
+            })
+          : { count: 0 };
+
+        return {
+          ensuredPermissionCodes: [...requiredPermissionCodes],
+          roleBackfillCount: assignedCount.count,
+        };
+      });
+
+      if (process.env.NODE_ENV !== 'production') {
+        this.logger.log(
+          `[auth.me][recurring-permissions-backfill] ${JSON.stringify({
+            tenantId: tenant.id,
+            ensuredPermissionCodes: txResult.ensuredPermissionCodes,
+            rolePermissionRowsInserted: txResult.roleBackfillCount,
+          })}`,
+        );
+      }
+    }
+
     // Backfill governance visibility for finance governance roles where seeds may not have been re-run.
     // This is additive-only (no removals) to avoid unexpected RBAC changes.
     {
@@ -2509,6 +2868,11 @@ export class AuthService {
         })
       : null;
 
+    const legalEntityBootstrap = await this.getUserLegalEntityBootstrap({
+      tenantId: tenant.id,
+      userId: actingAsUserId || user.id,
+    });
+
     return {
       user: {
         id: user.id,
@@ -2540,6 +2904,10 @@ export class AuthService {
       permissions: Array.from(permissions),
       availableDelegations,
       delegation,
+      legalEntityAccess: legalEntityBootstrap.legalEntityAccess,
+      activeLegalEntity: legalEntityBootstrap.activeLegalEntity,
+      activeLegalEntityId: legalEntityBootstrap.activeLegalEntityId,
+      requiresLegalEntitySelection: legalEntityBootstrap.requiresLegalEntitySelection,
     };
   }
 

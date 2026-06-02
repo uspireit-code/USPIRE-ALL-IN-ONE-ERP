@@ -6,10 +6,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import {
+  AuditEntityType,
+  AuditEventType,
+  JournalReviewMode,
+  Prisma,
+  type JournalType,
+} from '@prisma/client';
 import type { Request } from 'express';
-import { Prisma } from '@prisma/client';
-import { AuditEntityType, AuditEventType, JournalReviewMode } from '@prisma/client';
-import type { JournalType } from '@prisma/client';
 import {
   sortBy,
   sumBy,
@@ -75,6 +79,13 @@ import {
 } from './journal-type-policy-engine';
 import { getJournalTypePolicy } from './journal-type-registry';
 import { assertCombinationGovernance } from './combination-governance-engine';
+
+type RecurringTemplateStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'SUSPENDED'
+  | 'ARCHIVED';
 
 export enum DepartmentRequirement {
   REQUIRED = 'REQUIRED',
@@ -561,6 +572,33 @@ export class GlService {
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return null;
     return d;
+  }
+
+  private isActiveFromRecurringTemplateStatus(status: RecurringTemplateStatus): boolean {
+    return status === 'APPROVED';
+  }
+
+  private assertRecurringTemplateStatusTransition(params: {
+    from: RecurringTemplateStatus;
+    to: RecurringTemplateStatus;
+  }) {
+    const { from, to } = params;
+
+    if (from === 'ARCHIVED') {
+      throw new BadRequestException('Archived templates cannot be transitioned');
+    }
+
+    const allowed: Record<RecurringTemplateStatus, RecurringTemplateStatus[]> = {
+      DRAFT: ['PENDING_APPROVAL'],
+      PENDING_APPROVAL: ['APPROVED'],
+      APPROVED: ['SUSPENDED', 'ARCHIVED'],
+      SUSPENDED: ['APPROVED', 'ARCHIVED'],
+      ARCHIVED: [],
+    };
+
+    if (!allowed[from]?.includes(to)) {
+      throw new BadRequestException(`Invalid template status transition: ${from} → ${to}`);
+    }
   }
 
   private assertJournalIntentRules(params: {
@@ -1772,16 +1810,7 @@ export class GlService {
       return DepartmentRequirement.REQUIRED;
     }
     if (account.isControlAccount) return DepartmentRequirement.FORBIDDEN;
-    if (account.type === 'INCOME' || account.type === 'EXPENSE')
-      return DepartmentRequirement.REQUIRED;
-    if (
-      account.type === 'ASSET' ||
-      account.type === 'LIABILITY' ||
-      account.type === 'EQUITY'
-    ) {
-      return DepartmentRequirement.OPTIONAL;
-    }
-    return DepartmentRequirement.REQUIRED;
+    return DepartmentRequirement.OPTIONAL;
   }
 
   private getDepartmentRequirementMessage(params: {
@@ -1794,11 +1823,7 @@ export class GlService {
     if (params.requirement === DepartmentRequirement.OPTIONAL) {
       return 'Department is optional for this account.';
     }
-    if (params.accountType === 'EXPENSE')
-      return 'Department is required for expense accounts';
-    if (params.accountType === 'INCOME')
-      return 'Department is required for revenue accounts';
-    return 'Department is required for this account type';
+    return 'Department is required for this account.';
   }
 
   async listLegalEntities(req: Request, params?: { effectiveOn?: string }) {
@@ -1812,13 +1837,29 @@ export class GlService {
       throw new BadRequestException('Invalid effectiveOn date');
     }
 
-    return this.prisma.legalEntity.findMany({
-      where: {
+    const debugLookupsEnabled =
+      (process.env.DEBUG_GL_LOOKUPS ?? '').toString().toLowerCase() === 'true' &&
+      (process.env.NODE_ENV ?? '').toString().toLowerCase() !== 'production';
+
+    const whereClause: Prisma.LegalEntityWhereInput = {
+      tenantId: tenant.id,
+      isActive: true,
+      effectiveFrom: { lte: effectiveOn },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveOn } }],
+    };
+
+    if (debugLookupsEnabled) {
+      // eslint-disable-next-line no-console
+      console.debug('[GL][legal-entities][filters]', {
         tenantId: tenant.id,
-        isActive: true,
-        effectiveFrom: { lte: effectiveOn },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveOn } }],
-      },
+        effectiveOn: effectiveOn.toISOString(),
+        userId: (req as any)?.user?.id ?? null,
+        whereClause,
+      });
+    }
+
+    const results = await this.prisma.legalEntity.findMany({
+      where: whereClause,
       orderBy: [{ code: 'asc' }],
       select: {
         id: true,
@@ -1829,6 +1870,16 @@ export class GlService {
         effectiveTo: true,
       },
     });
+
+    if (debugLookupsEnabled) {
+      // eslint-disable-next-line no-console
+      console.debug('[GL][legal-entities][rawResults]', {
+        count: Array.isArray(results) ? results.length : null,
+        sample: Array.isArray(results) ? results[0] ?? null : results,
+      });
+    }
+
+    return results;
   }
 
   async listEntities(req: Request) {
@@ -2041,6 +2092,9 @@ export class GlService {
       mode: 'RECURRING_TEMPLATE',
     });
 
+    const now = new Date();
+    const initialStatus: RecurringTemplateStatus = 'DRAFT';
+
     const created = await this.prisma.recurringJournalTemplate.create({
       data: {
         tenantId: tenant.id,
@@ -2055,7 +2109,12 @@ export class GlService {
         startDate: new Date(dto.startDate),
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         nextRunDate: new Date(dto.nextRunDate),
-        isActive: dto.isActive ?? true,
+        status: initialStatus,
+        isActive: this.isActiveFromRecurringTemplateStatus(initialStatus),
+        approvedById: null,
+        approvedAt: null,
+        suspendedById: null,
+        suspendedAt: null,
         createdById: user.id,
         lines: {
           create: dto.lines
@@ -2093,6 +2152,312 @@ export class GlService {
     );
 
     return created;
+  }
+
+  async submitRecurringTemplateForApproval(
+    req: Request,
+    id: string,
+    params?: { reason?: string },
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const existing = await (this.prisma.recurringJournalTemplate.findFirst as any)({
+      where: { id, tenantId: tenant.id },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundException('Recurring template not found');
+
+    const from = (existing as any).status as RecurringTemplateStatus;
+    this.assertRecurringTemplateStatusTransition({ from, to: 'PENDING_APPROVAL' });
+
+    const now = new Date();
+    const updated = await (this.prisma.recurringJournalTemplate.update as any)({
+      where: { id: existing.id },
+      data: {
+        status: 'PENDING_APPROVAL',
+        isActive: false,
+        submittedById: user.id,
+        submittedAt: now,
+        statusReason: params?.reason ? String(params.reason).trim() : null,
+      },
+      include: { lines: { orderBy: { lineOrder: 'asc' } } },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType:
+          ((AuditEventType as any).RECURRING_TEMPLATE_SUBMITTED as any) ??
+          ('RECURRING_TEMPLATE_SUBMITTED' as any),
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: existing.id,
+        actorUserId: user.id,
+        timestamp: now,
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_RECURRING_MANAGE',
+        permissionUsed: PERMISSIONS.GL.RECURRING_MANAGE,
+        lifecycleType: 'SUBMIT',
+        reason: params?.reason ? String(params.reason) : undefined,
+        metadata: {
+          recurringTemplateId: existing.id,
+          fromStatus: from,
+          toStatus: 'PENDING_APPROVAL',
+        },
+      },
+      this.prisma,
+    );
+
+    return updated;
+  }
+
+  async approveRecurringTemplate(
+    req: Request,
+    id: string,
+    params?: { reason?: string },
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const existing = await (this.prisma.recurringJournalTemplate.findFirst as any)({
+      where: { id, tenantId: tenant.id },
+      select: { id: true, status: true, createdById: true },
+    });
+    if (!existing) throw new NotFoundException('Recurring template not found');
+
+    if ((existing as any).createdById === user.id) {
+      throw new ForbiddenException(
+        'Segregation of duties: you cannot approve a template that you created.',
+      );
+    }
+
+    const from = (existing as any).status as RecurringTemplateStatus;
+    this.assertRecurringTemplateStatusTransition({ from, to: 'APPROVED' });
+
+    const now = new Date();
+    const updated = await (this.prisma.recurringJournalTemplate.update as any)({
+      where: { id: existing.id },
+      data: {
+        status: 'APPROVED',
+        isActive: true,
+        approvedById: user.id,
+        approvedAt: now,
+        statusReason: params?.reason ? String(params.reason).trim() : null,
+      },
+      include: { lines: { orderBy: { lineOrder: 'asc' } } },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType:
+          ((AuditEventType as any).RECURRING_TEMPLATE_APPROVED as any) ??
+          ('RECURRING_TEMPLATE_APPROVED' as any),
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: existing.id,
+        actorUserId: user.id,
+        timestamp: now,
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_APPROVE',
+        permissionUsed: PERMISSIONS.GL.APPROVE,
+        lifecycleType: 'APPROVE',
+        reason: params?.reason ? String(params.reason) : undefined,
+        metadata: {
+          recurringTemplateId: existing.id,
+          fromStatus: from,
+          toStatus: 'APPROVED',
+        },
+      },
+      this.prisma,
+    );
+
+    return updated;
+  }
+
+  async suspendRecurringTemplate(
+    req: Request,
+    id: string,
+    params?: { reason?: string },
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const existing = await this.prisma.recurringJournalTemplate.findFirst({
+      where: { id, tenantId: tenant.id },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundException('Recurring template not found');
+
+    const from = (existing as any).status as RecurringTemplateStatus;
+    this.assertRecurringTemplateStatusTransition({ from, to: 'SUSPENDED' });
+
+    const now = new Date();
+    const updated = await (this.prisma.recurringJournalTemplate.update as any)({
+      where: { id: existing.id },
+      data: {
+        status: 'SUSPENDED',
+        isActive: false,
+        suspendedById: user.id,
+        suspendedAt: now,
+        statusReason: params?.reason ? String(params.reason).trim() : null,
+      },
+      include: { lines: { orderBy: { lineOrder: 'asc' } } },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType:
+          ((AuditEventType as any).RECURRING_TEMPLATE_SUSPENDED as any) ??
+          ('RECURRING_TEMPLATE_SUSPENDED' as any),
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: existing.id,
+        actorUserId: user.id,
+        timestamp: now,
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_APPROVE',
+        permissionUsed: PERMISSIONS.GL.APPROVE,
+        lifecycleType: 'UPDATE',
+        reason: params?.reason ? String(params.reason) : undefined,
+        metadata: {
+          recurringTemplateId: existing.id,
+          fromStatus: from,
+          toStatus: 'SUSPENDED',
+        },
+      },
+      this.prisma,
+    );
+
+    return updated;
+  }
+
+  async archiveRecurringTemplate(
+    req: Request,
+    id: string,
+    params?: { reason?: string },
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const existing = await this.prisma.recurringJournalTemplate.findFirst({
+      where: { id, tenantId: tenant.id },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundException('Recurring template not found');
+
+    const from = (existing as any).status as RecurringTemplateStatus;
+    this.assertRecurringTemplateStatusTransition({ from, to: 'ARCHIVED' });
+
+    const now = new Date();
+    const updated = await (this.prisma.recurringJournalTemplate.update as any)({
+      where: { id: existing.id },
+      data: {
+        status: 'ARCHIVED',
+        isActive: false,
+        archivedById: user.id,
+        archivedAt: now,
+        statusReason: params?.reason ? String(params.reason).trim() : null,
+      },
+      include: { lines: { orderBy: { lineOrder: 'asc' } } },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType:
+          ((AuditEventType as any).RECURRING_TEMPLATE_ARCHIVED as any) ??
+          ('RECURRING_TEMPLATE_ARCHIVED' as any),
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: existing.id,
+        actorUserId: user.id,
+        timestamp: now,
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_APPROVE',
+        permissionUsed: PERMISSIONS.GL.APPROVE,
+        lifecycleType: 'UPDATE',
+        reason: params?.reason ? String(params.reason) : undefined,
+        metadata: {
+          recurringTemplateId: existing.id,
+          fromStatus: from,
+          toStatus: 'ARCHIVED',
+        },
+      },
+      this.prisma,
+    );
+
+    return updated;
+  }
+
+  async reactivateRecurringTemplate(
+    req: Request,
+    id: string,
+    params?: { reason?: string },
+  ) {
+    const tenant = req.tenant;
+    const user = req.user;
+    if (!tenant || !user) {
+      throw new BadRequestException('Missing tenant or user context');
+    }
+
+    const existing = await this.prisma.recurringJournalTemplate.findFirst({
+      where: { id, tenantId: tenant.id },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundException('Recurring template not found');
+
+    const from = (existing as any).status as RecurringTemplateStatus;
+    this.assertRecurringTemplateStatusTransition({ from, to: 'APPROVED' });
+
+    const now = new Date();
+    const updated = await this.prisma.recurringJournalTemplate.update({
+      where: { id: existing.id },
+      data: {
+        status: 'APPROVED',
+        isActive: true,
+        approvedById: user.id,
+        approvedAt: now,
+        statusReason: params?.reason ? String(params.reason).trim() : null,
+      },
+      include: { lines: { orderBy: { lineOrder: 'asc' } } },
+    });
+
+    await writeAuditEventWithPrisma(
+      {
+        tenantId: tenant.id,
+        eventType:
+          ((AuditEventType as any).RECURRING_TEMPLATE_REACTIVATED as any) ??
+          ('RECURRING_TEMPLATE_REACTIVATED' as any),
+        entityType: AuditEntityType.RECURRING_JOURNAL_TEMPLATE,
+        entityId: existing.id,
+        actorUserId: user.id,
+        timestamp: now,
+        outcome: 'SUCCESS' as any,
+        action: 'FINANCE_GL_APPROVE',
+        permissionUsed: PERMISSIONS.GL.APPROVE,
+        lifecycleType: 'UPDATE',
+        reason: params?.reason ? String(params.reason) : undefined,
+        metadata: {
+          recurringTemplateId: existing.id,
+          fromStatus: from,
+          toStatus: 'APPROVED',
+        },
+      },
+      this.prisma,
+    );
+
+    return updated;
   }
 
   async uploadJournals(
@@ -2846,10 +3211,52 @@ export class GlService {
           startDate: { lte: j.journalDate },
           endDate: { gte: j.journalDate },
         },
-        select: { id: true, status: true, name: true, type: true },
+        select: { id: true, status: true, name: true, type: true, startDate: true, endDate: true },
+      });
+
+      const currentOperationalPeriod = await this.prisma.accountingPeriod.findFirst({
+        where: {
+          tenantId: tenant.id,
+          startDate: { lte: new Date() },
+          endDate: { gte: new Date() },
+        },
+        select: { id: true, status: true, name: true, startDate: true, endDate: true },
       });
 
       periodTypeByKey.set(key, (period as any)?.type ?? null);
+
+      const periodStatus = String((period as any)?.status ?? '').toUpperCase();
+      const periodAllowsNormalPosting = periodStatus === 'OPEN' || periodStatus === 'ACTIVE';
+      const retroPostingDecision = !period
+        ? { retroPosting: true, reason: 'NO_ACCOUNTING_PERIOD' }
+        : periodAllowsNormalPosting
+          ? { retroPosting: false, reason: 'JOURNAL_DATE_IN_OPEN_ACCOUNTING_PERIOD' }
+          : { retroPosting: true, reason: `ACCOUNTING_PERIOD_${periodStatus || 'UNKNOWN'}` };
+
+      // eslint-disable-next-line no-console
+      console.info('[GL][retroPosting]', {
+        journalDate: j.journalDate.toISOString().slice(0, 10),
+        resolvedPeriod: period
+          ? {
+              id: period.id,
+              name: period.name,
+              startDate: period.startDate.toISOString().slice(0, 10),
+              endDate: period.endDate.toISOString().slice(0, 10),
+            }
+          : null,
+        periodStatus: periodStatus || null,
+        currentOperationalPeriod: currentOperationalPeriod
+          ? {
+              id: currentOperationalPeriod.id,
+              name: currentOperationalPeriod.name,
+              status: currentOperationalPeriod.status,
+              startDate: currentOperationalPeriod.startDate.toISOString().slice(0, 10),
+              endDate: currentOperationalPeriod.endDate.toISOString().slice(0, 10),
+            }
+          : null,
+        retroPostingDecision,
+        reason: retroPostingDecision.reason,
+      });
 
       if (!period) {
         errors.push({
@@ -2871,23 +3278,25 @@ export class GlService {
         }
       }
 
-      try {
-        assertRetroPostingWithinToleranceOrEscalated({
-          req,
-          postingDate: j.journalDate,
-          toleranceDays: retroPostToleranceDays,
-          escalationType: 'RETRO_POSTING_OVERRIDE',
-        });
-      } catch (e: any) {
-        errors.push({
-          journalKey: key,
-          message:
-            typeof e?.response?.message === 'string'
-              ? e.response.message
-              : typeof e?.message === 'string'
-                ? e.message
-                : 'Retro posting is not allowed',
-        });
+      if (period && !periodAllowsNormalPosting) {
+        try {
+          assertRetroPostingWithinToleranceOrEscalated({
+            req,
+            postingDate: j.journalDate,
+            toleranceDays: retroPostToleranceDays,
+            escalationType: 'RETRO_POSTING_OVERRIDE',
+          });
+        } catch (e: any) {
+          errors.push({
+            journalKey: key,
+            message:
+              typeof e?.response?.message === 'string'
+                ? e.response.message
+                : typeof e?.message === 'string'
+                  ? e.message
+                  : 'Retro posting is not allowed',
+          });
+        }
       }
 
       const hasAnyDebit = lines.some((l) => (l.debit ?? 0) > 0);
@@ -3713,11 +4122,35 @@ export class GlService {
       throw new BadRequestException('Missing tenant context');
     }
 
-    return this.prisma.recurringJournalTemplate.findMany({
+    return (this.prisma.recurringJournalTemplate.findMany as any)({
       where: { tenantId: tenant.id },
       orderBy: { name: 'asc' },
       include: {
         lines: { orderBy: { lineOrder: 'asc' } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        submittedBy: { select: { id: true, name: true, email: true } },
+        approvedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
+
+  async listApprovedRecurringTemplates(req: Request) {
+    const tenant = req.tenant;
+    if (!tenant) {
+      throw new BadRequestException('Missing tenant context');
+    }
+
+    return (this.prisma.recurringJournalTemplate.findMany as any)({
+      where: {
+        tenantId: tenant.id,
+        OR: [{ status: 'APPROVED' }, { status: null, isActive: true }],
+      },
+      orderBy: { name: 'asc' },
+      include: {
+        lines: { orderBy: { lineOrder: 'asc' } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        submittedBy: { select: { id: true, name: true, email: true } },
+        approvedBy: { select: { id: true, name: true, email: true } },
       },
     });
   }
@@ -3739,6 +4172,15 @@ export class GlService {
     });
     if (!existing) {
       throw new NotFoundException('Recurring template not found');
+    }
+
+    const existingStatus: RecurringTemplateStatus =
+      ((existing as any).status as RecurringTemplateStatus) ??
+      ((existing as any).isActive ? 'APPROVED' : 'SUSPENDED');
+    if (existingStatus !== 'DRAFT') {
+      throw new ForbiddenException(
+        'Only DRAFT recurring templates can be edited. Submit for approval to proceed.',
+      );
     }
 
     if (dto.journalType && dto.journalType !== 'STANDARD') {
@@ -3779,6 +4221,9 @@ export class GlService {
       mode: 'RECURRING_TEMPLATE',
     });
 
+    const now = new Date();
+    const nextStatus: RecurringTemplateStatus = 'DRAFT';
+
     const updated = await this.prisma.recurringJournalTemplate.update({
       where: { id: existing.id },
       data: {
@@ -3804,7 +4249,12 @@ export class GlService {
         nextRunDate: dto.nextRunDate
           ? new Date(dto.nextRunDate)
           : existing.nextRunDate,
-        isActive: dto.isActive ?? existing.isActive,
+        status: nextStatus,
+        isActive: this.isActiveFromRecurringTemplateStatus(nextStatus),
+        approvedById: (existing as any).approvedById ?? null,
+        approvedAt: (existing as any).approvedAt ?? null,
+        suspendedById: (existing as any).suspendedById ?? null,
+        suspendedAt: (existing as any).suspendedAt ?? null,
         lines: dto.lines
           ? {
               deleteMany: { templateId: existing.id },
@@ -3864,8 +4314,13 @@ export class GlService {
     if (!template) {
       throw new NotFoundException('Recurring template not found');
     }
-    if (!template.isActive) {
-      throw new BadRequestException('Recurring template is inactive');
+
+    const status = String((template as any).status ?? '').trim() as RecurringTemplateStatus;
+    if (status !== 'APPROVED') {
+      throw new ForbiddenException({
+        error: 'Recurring template is not approved for generation',
+        status,
+      });
     }
 
     if (!dto.runDate) {
@@ -4077,7 +4532,9 @@ export class GlService {
         where: { id: template.id },
         data: {
           nextRunDate,
-          isActive: shouldDeactivate ? false : template.isActive,
+          status: shouldDeactivate ? 'SUSPENDED' : (template as any).status,
+          isActive: shouldDeactivate ? false : true,
+          suspendedAt: shouldDeactivate ? new Date() : (template as any).suspendedAt ?? null,
         },
         select: { id: true },
       });
@@ -6164,7 +6621,37 @@ export class GlService {
     const authz = await this.getUserAuthz(req);
     requirePermission(authz, 'FINANCE_GL_CREATE');
 
-    this.assertLinesBasicValid(dto.lines);
+    const activeLegalEntityId = String((req as any)?.legalEntity?.id ?? '').trim();
+    if (!activeLegalEntityId) {
+      throw new BadRequestException('Missing active legal entity context');
+    }
+
+    const escalationAllowed = Boolean((req as any)?.governanceEscalation?.type);
+    if (!escalationAllowed) {
+      const mismatched = (dto.lines ?? [])
+        .map((l, idx) => ({ idx, legalEntityId: String((l as any)?.legalEntityId ?? '').trim() }))
+        .filter((x) => x.legalEntityId && x.legalEntityId !== activeLegalEntityId)
+        .map((x) => x.idx);
+      if (mismatched.length > 0) {
+        throw new BadRequestException({
+          error: 'CROSS_ENTITY_LINES_BLOCKED',
+          message:
+            'Journal lines must belong to your active legal entity. Switch legal entity context to transact in a different legal entity.',
+          activeLegalEntityId,
+          mismatchedLineIndexes: mismatched,
+        });
+      }
+    }
+
+    const normalizedDto: CreateJournalDto = {
+      ...(dto as any),
+      lines: (dto.lines ?? []).map((l) => ({
+        ...(l as any),
+        legalEntityId: (l as any).legalEntityId ?? activeLegalEntityId,
+      })),
+    } as any;
+
+    this.assertLinesBasicValid(normalizedDto.lines);
 
     const journalDate = new Date(dto.journalDate);
     if (Number.isNaN(journalDate.getTime())) {
@@ -6220,7 +6707,7 @@ export class GlService {
     const accounts = (await this.prisma.account.findMany({
       where: {
         tenantId: authz.tenantId,
-        id: { in: dto.lines.map((l) => l.accountId) },
+        id: { in: normalizedDto.lines.map((l) => l.accountId) },
       },
       select: {
         id: true,
@@ -6243,7 +6730,7 @@ export class GlService {
 
     const accountMap = new Map<string, any>(accounts.map((a) => [a.id, a] as const));
 
-    for (const line of dto.lines) {
+    for (const line of normalizedDto.lines) {
       const account = accountMap.get(line.accountId);
       if (!account) {
         throw new BadRequestException(`Account not found: ${line.accountId}`);
@@ -6277,7 +6764,7 @@ export class GlService {
       description: dto.description ?? null,
       sourceType: null,
       sourceId: null,
-      lines: dto.lines.map((l) => ({
+      lines: normalizedDto.lines.map((l) => ({
         accountId: l.accountId,
         legalEntityId: l.legalEntityId ?? null,
         departmentId: l.departmentId ?? null,
@@ -6301,7 +6788,7 @@ export class GlService {
       description: dto.description ?? null,
       sourceType: null,
       sourceId: null,
-      lines: dto.lines.map((l) => {
+      lines: normalizedDto.lines.map((l) => {
         const acc = accountMap.get(l.accountId);
         return {
           lineNumber: l.lineNumber ?? null,
@@ -6355,7 +6842,7 @@ export class GlService {
       justificationText:
         String(req.header('x-governance-reason') ?? '').trim() || null,
       actorLegalEntityAccess,
-      lines: dto.lines.map((l) => {
+      lines: normalizedDto.lines.map((l) => {
         const acc = accountMap.get(l.accountId);
         return {
           lineNumber: l.lineNumber ?? null,
@@ -6373,34 +6860,79 @@ export class GlService {
       }),
     });
 
-    const created = await this.prisma.journalEntry.create({
-      data: {
-        tenantId: authz.tenantId,
-        journalDate,
-        journalType: dto.journalType ?? 'STANDARD',
-        intent: (dto as any).intent as any,
-        intentNotes: (dto as any).intentNotes ?? null,
-        intentReference: (dto as any).intentReference ?? null,
-        reference: dto.reference,
-        description: dto.description,
-        correctsJournalId: dto.correctsJournalId ?? null,
-        createdById: authz.realUserId,
-        lines: {
-          create: dto.lines.map((l) => ({
-            accountId: l.accountId,
-            lineNumber: l.lineNumber,
-            description: l.description,
-            legalEntityId: l.legalEntityId ?? null,
-            departmentId: l.departmentId ?? null,
-            projectId: (l as any).projectId as string | null | undefined,
-            fundId: (l as any).fundId as string | null | undefined,
-            debit: l.debit,
-            credit: l.credit,
-          })),
+    let created: any;
+    try {
+      created = await this.prisma.journalEntry.create({
+        data: {
+          tenantId: authz.tenantId,
+          journalDate,
+          journalType: dto.journalType ?? 'STANDARD',
+          intent: (dto as any).intent as any,
+          intentNotes: (dto as any).intentNotes ?? null,
+          intentReference: (dto as any).intentReference ?? null,
+          reference: dto.reference,
+          description: dto.description,
+          correctsJournalId: dto.correctsJournalId ?? null,
+          createdById: authz.realUserId,
+          lines: {
+            create: normalizedDto.lines.map((l) => ({
+              accountId: l.accountId,
+              lineNumber: l.lineNumber,
+              description: l.description,
+              legalEntityId: l.legalEntityId ?? null,
+              departmentId: l.departmentId ?? null,
+              projectId: (l as any).projectId as string | null | undefined,
+              fundId: (l as any).fundId as string | null | undefined,
+              debit: l.debit,
+              credit: l.credit,
+            })),
+          },
         },
-      },
-      include: { lines: true },
-    });
+        include: { lines: true },
+      });
+    } catch (err: any) {
+      const lineContext = (normalizedDto.lines ?? []).map((l) => ({
+        lineNumber: (l as any)?.lineNumber ?? null,
+        accountId: String((l as any)?.accountId ?? ''),
+        legalEntityId: (l as any)?.legalEntityId ?? null,
+        departmentId: (l as any)?.departmentId ?? null,
+        projectId: (l as any)?.projectId ?? null,
+        fundId: (l as any)?.fundId ?? null,
+      }));
+
+      // eslint-disable-next-line no-console
+      console.error('[GL][createDraftJournal][prismaCreateFailed]', {
+        tenantId: authz.tenantId,
+        actorUserId: authz.realUserId,
+        activeLegalEntityId,
+        journalDate: journalDate?.toISOString?.() ?? null,
+        prismaCode: String(err?.code ?? ''),
+        prismaMeta: (err as any)?.meta ?? null,
+        message: String(err?.message ?? ''),
+        lines: lineContext,
+      });
+
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2003') {
+          throw new BadRequestException({
+            code: 'INVALID_REFERENCE',
+            message:
+              'One or more journal lines reference a record that does not exist (e.g., account/department/project/fund/legal entity).',
+            prisma: { code: err.code, meta: (err as any)?.meta ?? null },
+          });
+        }
+
+        if (err.code === 'P2025') {
+          throw new BadRequestException({
+            code: 'RECORD_NOT_FOUND',
+            message: 'A referenced record was not found while creating the journal.',
+            prisma: { code: err.code, meta: (err as any)?.meta ?? null },
+          });
+        }
+      }
+
+      throw err;
+    }
 
     await writeAuditEventWithPrisma(
       {
@@ -6449,6 +6981,37 @@ export class GlService {
   async updateDraftJournal(req: Request, id: string, dto: UpdateJournalDto) {
     const authz = await this.getUserAuthz(req);
     requirePermission(authz, 'FINANCE_GL_CREATE');
+
+    const activeLegalEntityId = String((req as any)?.legalEntity?.id ?? '').trim();
+    if (!activeLegalEntityId) {
+      throw new BadRequestException('Missing active legal entity context');
+    }
+
+    const escalationAllowed = Boolean((req as any)?.governanceEscalation?.type);
+    if (!escalationAllowed) {
+      const mismatched = (dto.lines ?? [])
+        .map((l, idx) => ({ idx, legalEntityId: String((l as any)?.legalEntityId ?? '').trim() }))
+        .filter((x) => x.legalEntityId && x.legalEntityId !== activeLegalEntityId)
+        .map((x) => x.idx);
+
+      if (mismatched.length > 0) {
+        throw new BadRequestException({
+          error: 'CROSS_ENTITY_LINES_BLOCKED',
+          message:
+            'Journal lines must belong to your active legal entity. Switch legal entity context to transact in a different legal entity.',
+          activeLegalEntityId,
+          mismatchedLineIndexes: mismatched,
+        });
+      }
+    }
+
+    const normalizedDto: UpdateJournalDto = {
+      ...(dto as any),
+      lines: (dto.lines ?? []).map((l) => ({
+        ...(l as any),
+        legalEntityId: (l as any).legalEntityId ?? activeLegalEntityId,
+      })),
+    } as any;
 
     const entry = await this.prisma.journalEntry.findFirst({
       where: { id, tenantId: authz.tenantId },
@@ -6623,7 +7186,7 @@ export class GlService {
     if (proposedPeriod.type === 'OPENING') {
       await this.assertOpeningBalanceAccountsAllowed({
         tenantId: authz.tenantId,
-        lines: dto.lines.map((l) => ({
+        lines: normalizedDto.lines.map((l) => ({
           accountId: l.accountId,
           debit: Number(l.debit),
           credit: Number(l.credit),
@@ -6631,12 +7194,12 @@ export class GlService {
       });
     }
 
-    this.assertLinesBasicValid(dto.lines);
+    this.assertLinesBasicValid(normalizedDto.lines);
 
     const accounts = (await this.prisma.account.findMany({
       where: {
         tenantId: authz.tenantId,
-        id: { in: dto.lines.map((l) => l.accountId) },
+        id: { in: normalizedDto.lines.map((l) => l.accountId) },
       },
       select: {
         id: true,
@@ -6658,7 +7221,7 @@ export class GlService {
     })) as any[];
     const accountMap = new Map<string, any>(accounts.map((a) => [a.id, a] as const));
 
-    for (const line of dto.lines) {
+    for (const line of normalizedDto.lines) {
       const account = accountMap.get(line.accountId);
       if (!account) {
         throw new BadRequestException(`Account not found: ${line.accountId}`);
@@ -6692,7 +7255,7 @@ export class GlService {
       description: (dto.description ?? entry.description ?? null) as any,
       sourceType: (entry as any).sourceType ?? null,
       sourceId: (entry as any).sourceId ?? null,
-      lines: dto.lines.map((l) => ({
+      lines: normalizedDto.lines.map((l) => ({
         accountId: l.accountId,
         legalEntityId: l.legalEntityId ?? null,
         departmentId: l.departmentId ?? null,
@@ -6716,7 +7279,7 @@ export class GlService {
       description: (dto.description ?? entry.description ?? null) as any,
       sourceType: (entry as any).sourceType ?? null,
       sourceId: (entry as any).sourceId ?? null,
-      lines: dto.lines.map((l) => {
+      lines: normalizedDto.lines.map((l) => {
         const acc = accountMap.get(l.accountId);
         return {
           lineNumber: l.lineNumber ?? null,
@@ -6770,7 +7333,7 @@ export class GlService {
       justificationText:
         String(req.header('x-governance-reason') ?? '').trim() || null,
       actorLegalEntityAccess,
-      lines: dto.lines.map((l) => {
+      lines: normalizedDto.lines.map((l) => {
         const acc = accountMap.get(l.accountId);
         return {
           lineNumber: l.lineNumber ?? null,
@@ -6807,7 +7370,7 @@ export class GlService {
           : {}),
         lines: {
           deleteMany: { journalEntryId: entry.id },
-          create: dto.lines.map((l) => ({
+          create: normalizedDto.lines.map((l) => ({
             accountId: l.accountId,
             lineNumber: l.lineNumber,
             description: l.description,
@@ -6922,7 +7485,7 @@ export class GlService {
     if (entry.status === 'POSTED') {
       throw new BadRequestException('POSTED journals cannot be voided');
     }
-    if (entry.status === 'VOIDED') {
+    if (String(entry.status) === 'VOIDED') {
       throw new BadRequestException('Journal entry is already voided');
     }
 
@@ -6975,13 +7538,13 @@ export class GlService {
     await writeAuditEventWithPrisma(
       {
         tenantId: authz.tenantId,
-        eventType: AuditEventType.GL_JOURNAL_VOIDED,
+        eventType: AuditEventType.JOURNAL_UPDATE,
         entityType: AuditEntityType.JOURNAL_ENTRY,
         entityId: updated.id,
         actorUserId: authz.actorUserId,
         timestamp: new Date(),
         outcome: 'SUCCESS' as any,
-        action: permissionUsed,
+        action: 'GL_JOURNAL_VOIDED',
         permissionUsed,
         lifecycleType: 'VOID',
         reason,
@@ -7029,7 +7592,14 @@ export class GlService {
     const authz = await this.getUserAuthz(req);
     requirePermission(authz, 'FINANCE_GL_CREATE');
 
-    const entry = await this.prisma.journalEntry.findFirst({
+    const activeLegalEntityId = String((req as any)?.legalEntity?.id ?? '').trim();
+    if (!activeLegalEntityId) {
+      throw new BadRequestException('Missing active legal entity context');
+    }
+
+    const escalationAllowed = Boolean((req as any)?.governanceEscalation?.type);
+
+    let entry = await this.prisma.journalEntry.findFirst({
       where: { id, tenantId: authz.tenantId },
       include: { lines: true },
     });
@@ -7050,6 +7620,45 @@ export class GlService {
         createdById: entry.createdById,
         currentUserId: authz.realUserId,
       });
+    }
+
+    if (!escalationAllowed) {
+      const mismatchedLineIds = (entry.lines ?? [])
+        .filter((l) => l.legalEntityId && String(l.legalEntityId) !== activeLegalEntityId)
+        .map((l) => String(l.id));
+
+      if (mismatchedLineIds.length > 0) {
+        throw new BadRequestException({
+          error: 'CROSS_ENTITY_LINES_BLOCKED',
+          message:
+            'Journal lines must belong to your active legal entity. Switch legal entity context to transact in a different legal entity.',
+          activeLegalEntityId,
+          mismatchedLineIds,
+        });
+      }
+    }
+
+    const needsDefault = (entry.lines ?? []).some((l) => !l.legalEntityId);
+    if (needsDefault) {
+      await this.prisma.journalLine.updateMany({
+        where: {
+          journalEntryId: entry.id,
+          tenantId: authz.tenantId,
+          legalEntityId: null,
+        } as any,
+        data: {
+          legalEntityId: activeLegalEntityId,
+        } as any,
+      });
+
+      const refreshed = await this.prisma.journalEntry.findFirst({
+        where: { id, tenantId: authz.tenantId },
+        include: { lines: true },
+      });
+      if (!refreshed) {
+        throw new NotFoundException('Journal entry not found');
+      }
+      entry = refreshed;
     }
 
     const evidenceLinks = await (this.prisma as any).auditEvidenceLink.findMany({
