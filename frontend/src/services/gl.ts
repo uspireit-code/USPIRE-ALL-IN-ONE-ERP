@@ -115,6 +115,14 @@ export type DepartmentLookup = {
   effectiveTo: string | null;
 };
 
+function unwrapLookupArray<T>(out: unknown): T[] {
+  if (Array.isArray(out)) return out as T[];
+  const anyOut = out as any;
+  if (Array.isArray(anyOut?.items)) return anyOut.items as T[];
+  if (Array.isArray(anyOut?.data)) return anyOut.data as T[];
+  throw new Error('Unexpected lookup response shape');
+}
+
 export type JournalLine = {
   id: string;
   journalEntryId: string;
@@ -329,7 +337,10 @@ export async function listLegalEntities(params?: { effectiveOn?: string }) {
     qs.set('effectiveOn', params.effectiveOn.trim());
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiFetch<LegalEntityLookup[]>(`/gl/legal-entities${suffix}`, { method: 'GET' });
+  const path = `/gl/legal-entities${suffix}`;
+
+  const out = await apiFetch<unknown>(path, { method: 'GET' });
+  return unwrapLookupArray<LegalEntityLookup>(out);
 }
 
 export async function listEntities() {
@@ -342,7 +353,9 @@ export async function listDepartments(params?: { effectiveOn?: string }) {
     qs.set('effectiveOn', params.effectiveOn.trim());
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiFetch<DepartmentLookup[]>(`/gl/departments${suffix}`, { method: 'GET' });
+  const path = `/gl/departments${suffix}`;
+  const out = await apiFetch<unknown>(path, { method: 'GET' });
+  return unwrapLookupArray<DepartmentLookup>(out);
 }
 
 export type ListJournalsResponse = {

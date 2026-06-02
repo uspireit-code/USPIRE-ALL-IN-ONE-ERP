@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
+import { EmptyState } from '../../../components/EmptyState';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { DataTable } from '../../../components/DataTable';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
@@ -219,9 +220,9 @@ export function JournalBrowserPage() {
       <div>
         {header}
         <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Access Denied">
-            You do not have permission to view Journals.
-          </Alert>
+          <NoticeCard kind="permission" title="Access restricted">
+            You do not have permission to view the Journal Register.
+          </NoticeCard>
         </div>
       </div>
     );
@@ -233,17 +234,17 @@ export function JournalBrowserPage() {
 
       <div style={{ marginTop: 12 }}>
         {workbench ? (
-          <Alert tone="info" title="Preparer workbench">
+          <NoticeCard kind="info" title="Preparer workbench">
             Showing only your journals in DRAFT or REJECTED status.
-          </Alert>
+          </NoticeCard>
         ) : drilldown ? (
-          <Alert tone="info" title="Read-only drill-down">
+          <NoticeCard kind="info" title="Read-only drill-down">
             This drill-down is read-only and restricted to REVIEWED and POSTED journals.
-          </Alert>
+          </NoticeCard>
         ) : (
-          <Alert tone="info" title="Read-only register">
+          <NoticeCard kind="info" title="Read-only register">
             This register is read-only and shows journals across all statuses.
-          </Alert>
+          </NoticeCard>
         )}
       </div>
 
@@ -409,9 +410,9 @@ export function JournalBrowserPage() {
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', color: tokens.colors.text.muted }}>Loading…</div>
       ) : error ? (
         <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Error">
+          <NoticeCard kind="system" title="Unable to load journals">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
@@ -435,7 +436,35 @@ export function JournalBrowserPage() {
               </tr>
             </DataTable.Head>
             <DataTable.Body>
-              {rows.length === 0 ? <DataTable.Empty colSpan={workbench ? 6 : 12} title="No journals found." /> : null}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={workbench ? 6 : 12} style={{ padding: '20px 12px' }}>
+                    <EmptyState
+                      title="No journals match your current filters"
+                      description={
+                        workbench
+                          ? 'No DRAFT or REJECTED journals are available for you right now.'
+                          : 'Try adjusting the date range, status, or entity filters, or clear filters to return to the full register.'
+                      }
+                      primaryAction={{
+                        label: 'Refresh',
+                        onClick: () => refresh(),
+                        disabled: loading,
+                      }}
+                      secondaryAction={{
+                        label: 'Clear filters',
+                        onClick: () => {
+                          const qs = new URLSearchParams();
+                          if (workbench) qs.set('workbench', '1');
+                          if (drilldown) qs.set('drilldown', '1');
+                          setSearchParams(qs);
+                        },
+                        disabled: loading,
+                      }}
+                    />
+                  </td>
+                </tr>
+              ) : null}
               {rows.map((j, idx) => (
                 <DataTable.Row
                   key={j.id}

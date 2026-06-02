@@ -1,36 +1,36 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
 import { AccountContextPanel } from '../../../components/AccountContextPanel';
 import { DataTable } from '../../../components/DataTable';
 import { JournalActionBar } from '../../../components/JournalActionBar';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { tokens } from '../../../designTokens';
 import { getSegmentVisibility, validateSegments } from '../../../finance/segments/segmentRequirements';
 import { getApiErrorMessage } from '../../../services/api';
+import { getMyLegalEntityAccess, type MyLegalEntityAccessItem } from '../../../services/me';
 import {
   createJournal,
   getJournal,
   getJournalDetail,
-  listGlPeriods,
   listAllGlAccounts,
-  listProjects,
-  reverseJournal,
+  listGlPeriods,
   rejectJournal,
+  reverseJournal,
   reviewJournal,
   submitJournal,
   updateJournal,
-  getInvalidJournalDateMessage,
   type AccountingPeriod,
   type GlAccountLookup,
-  type JournalIntent,
-  type JournalEntry,
   type JournalDetailResponse,
+  type JournalEntry,
+  type JournalIntent,
   type JournalStatus,
   type JournalType,
   type ProjectLookup,
 } from '../../../services/gl';
+import { buildJournalRouteState } from './journalRouteState';
 
 type EditableLine = {
   id?: string;
@@ -116,15 +116,20 @@ function buildPayloadLinesFromState(lines: EditableLine[]) {
 
 export function JournalEntryPage() {
   const { id } = useParams();
-  const isNew = id === undefined;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  const routeState = useMemo(() => buildJournalRouteState({ idParam: id, searchParams }), [id, searchParams]);
+  const journalId = routeState.journalId;
+  const isNew = routeState.isNew;
+
   const { state, hasPermission } = useAuth();
+  const authLoading = state.isBootstrapping;
   const canView = hasPermission(PERMISSIONS.GL.VIEW);
   const canCreate = hasPermission(PERMISSIONS.GL.CREATE);
   const canApprove = hasPermission(PERMISSIONS.GL.APPROVE);
   const canPost = hasPermission(PERMISSIONS.GL.FINAL_POST);
+  const canOverride = hasPermission(PERMISSIONS.GOVERNANCE.GLOBAL_OVERRIDE.GOVERNANCE_OVERRIDE);
   const realUserId = state.me?.user?.id ?? '';
   const actingUserId = state.me?.delegation?.actingAsUserId ?? undefined;
 
@@ -161,6 +166,103 @@ export function JournalEntryPage() {
         account: GlAccountLookup;
       }
   >(null);
+  const dimensionReconcileOpenedSignaturesRef = useRef<Set<string>>(new Set());
+
+  const resolveAccountFromPickerValue = (v: string): GlAccountLookup | null => {
+    const raw = String(v ?? '').trim();
+    if (!raw) return null;
+
+    const exact = accounts.find((a) => `${a.code} — ${a.name}` === raw);
+    if (exact) return exact;
+
+    const normalized = raw.toLowerCase();
+    const ci = accounts.find((a) => `${a.code} — ${a.name}`.toLowerCase() === normalized);
+    if (ci) return ci;
+
+    const codeOnly = raw.split(/\s+|—|-/).map((s) => s.trim()).filter(Boolean)[0] ?? '';
+    if (codeOnly) {
+      const byCode = accounts.find((a) => String(a.code ?? '').trim().toLowerCase() === codeOnly.toLowerCase());
+      if (byCode) return byCode;
+    }
+
+    return null;
+  };
+
+  const getLineDimensionRequirementFlags = useCallback((params: { account: GlAccountLookup | undefined; projectId: string | null | undefined }) => {
+    const project = params.projectId ? projectById.get(params.projectId) : null;
+    const visibility = getSegmentVisibility({
+      account: params.account,
+      project,
+      legalEntityRequired: true,
+    });
+    const effectiveVisibility = {
+      ...visibility,
+      departmentVisible: Boolean(visibility.departmentVisible || visibility.departmentRequired || params.account?.requiresDepartment),
+      departmentRequired: Boolean(visibility.departmentRequired || params.account?.requiresDepartment),
+      projectVisible: Boolean(visibility.projectVisible || visibility.projectRequired || params.account?.requiresProject),
+      projectRequired: Boolean(visibility.projectRequired || params.account?.requiresProject),
+      fundVisible: Boolean(visibility.fundVisible || visibility.fundRequired || params.account?.requiresFund),
+      fundRequired: Boolean(visibility.fundRequired || params.account?.requiresFund),
+    };
+    return {
+      visibility: effectiveVisibility,
+      requiresLegalEntity: true,
+      requiresDepartment: Boolean(effectiveVisibility.departmentRequired),
+      requiresProject: Boolean(effectiveVisibility.projectRequired),
+      requiresFund: Boolean(effectiveVisibility.fundRequired),
+    };
+  }, [projectById]);
+
+  const getLineDimensionValidation = useCallback((params: {
+    account: GlAccountLookup | undefined;
+    line: Pick<EditableLine, 'legalEntityId' | 'departmentId' | 'projectId' | 'fundId'>;
+  }) => {
+    const req = getLineDimensionRequirementFlags({ account: params.account, projectId: params.line.projectId ?? null });
+    const selectedProject = params.line.projectId ? projectById.get(params.line.projectId) : null;
+    const errors = validateSegments({
+      visibility: req.visibility,
+      projectRestricted: Boolean(selectedProject?.isRestricted),
+      values: {
+        legalEntityId: params.line.legalEntityId ?? null,
+        departmentId: params.line.departmentId ?? null,
+        projectId: params.line.projectId ?? null,
+        fundId: params.line.fundId ?? null,
+      },
+    });
+    const missingByKey: { legalEntity?: string; department?: string; project?: string; fund?: string } = {};
+    if (errors.legalEntity) missingByKey.legalEntity = 'Legal Entity is required to submit.';
+    if (errors.department) missingByKey.department = 'Department is required to submit.';
+    if (errors.project) missingByKey.project = errors.project === 'Project is required.' ? 'Project is required to submit.' : errors.project;
+    if (errors.fund) missingByKey.fund = errors.fund === 'Fund is required.' ? 'Fund is required to submit.' : errors.fund;
+    const missingDimensions = [
+      missingByKey.legalEntity ? 'Legal Entity' : null,
+      missingByKey.department ? 'Department' : null,
+      missingByKey.project ? 'Project' : null,
+      missingByKey.fund ? 'Fund' : null,
+    ].filter((x): x is string => Boolean(x));
+
+    return {
+      req,
+      errors,
+      missingByKey,
+      missingDimensions,
+      valid: missingDimensions.length === 0,
+      invalid: missingDimensions.length > 0,
+    };
+  }, [getLineDimensionRequirementFlags, projectById]);
+
+  const getAccountContextModalDecision = useCallback((params: {
+    account: GlAccountLookup;
+    line: Pick<EditableLine, 'legalEntityId' | 'departmentId' | 'projectId' | 'fundId'>;
+  }) => {
+    const validation = getLineDimensionValidation({ account: params.account, line: params.line });
+    return {
+      req: validation.req,
+      shouldOpen: validation.missingDimensions.length > 0,
+      missingDimensions: validation.missingDimensions,
+      reasons: Object.fromEntries(Object.entries(validation.errors).filter(([, value]) => Boolean(value))),
+    };
+  }, [getLineDimensionValidation]);
 
   const [journal, setJournal] = useState<JournalEntry | null>(null);
   const [journalDetail, setJournalDetail] = useState<JournalDetailResponse | null>(null);
@@ -171,26 +273,41 @@ export function JournalEntryPage() {
   const [description, setDescription] = useState('');
   const [budgetOverrideJustification, setBudgetOverrideJustification] = useState('');
 
+  const correctsJournalIdFromUrl = routeState.correctsJournalId;
+
   const [intent, setIntent] = useState<JournalIntent>(() => {
     return correctsJournalIdFromUrl ? 'CORRECTION' : 'OPERATIONAL';
   });
   const [intentNotes, setIntentNotes] = useState('');
   const [intentReference, setIntentReference] = useState('');
 
-  const correctsJournalIdFromUrl = useMemo(() => {
-    const v = (searchParams.get('correctsJournalId') ?? '').trim();
-    return v || null;
-  }, [searchParams]);
-
   const [lines, setLines] = useState<EditableLine[]>([
     { lineNumber: 1, accountId: '', debit: 0, credit: 0 },
     { lineNumber: 2, accountId: '', debit: 0, credit: 0 },
   ]);
 
+  const [activeLegalEntityId, setActiveLegalEntityId] = useState<string>(() => {
+    try {
+      return (localStorage.getItem('legalEntityId') ?? '').trim();
+    } catch {
+      return '';
+    }
+  });
+
+  const [myLegalEntityAccessLoading, setMyLegalEntityAccessLoading] = useState(false);
+  const [myLegalEntityAccessLoaded, setMyLegalEntityAccessLoaded] = useState(false);
+  const [myLegalEntityAccess, setMyLegalEntityAccess] = useState<MyLegalEntityAccessItem[]>([]);
+
+  const authorizedLegalEntityIds = useMemo(() => {
+    return (myLegalEntityAccess ?? [])
+      .map((x) => String(x?.legalEntityId ?? x?.legalEntity?.id ?? '').trim())
+      .filter(Boolean);
+  }, [myLegalEntityAccess]);
+
   const status: JournalStatus = (journalDetail?.status ?? journal?.status ?? 'DRAFT') as any;
-  const forcedReadOnly = searchParams.get('readonly') === '1';
+  const forcedReadOnly = routeState.readonly;
   const readOnly = forcedReadOnly || (!isNew && status !== 'DRAFT' && status !== 'REJECTED');
-  const fromReviewQueue = searchParams.get('from') === 'review';
+  const fromReviewQueue = routeState.origin === 'review';
 
   const isReversal = Boolean(!isNew && journalDetail?.journalType === 'REVERSING' && journalDetail?.reversalOfId);
 
@@ -292,6 +409,120 @@ export function JournalEntryPage() {
   const totals = useMemo(() => computeTotals(normalizedLines), [normalizedLines]);
   const balanceOk = totals.net === 0 && totals.totalDebit > 0;
 
+  useEffect(() => {
+    if (authLoading) return;
+    if (!state.isAuthenticated) return;
+    if (!canView && !canCreate) return;
+    if (myLegalEntityAccessLoading) return;
+    if (myLegalEntityAccessLoaded) return;
+
+    setMyLegalEntityAccessLoading(true);
+    getMyLegalEntityAccess()
+      .then((resp) => {
+        const items = Array.isArray(resp?.items) ? resp.items : [];
+        setMyLegalEntityAccess(items);
+        setMyLegalEntityAccessLoaded(true);
+      })
+      .catch(() => {
+        setMyLegalEntityAccess([]);
+        setMyLegalEntityAccessLoaded(true);
+      })
+      .finally(() => {
+        setMyLegalEntityAccessLoading(false);
+      });
+  }, [authLoading, canCreate, canView, myLegalEntityAccessLoaded, myLegalEntityAccessLoading, state.isAuthenticated]);
+
+  useEffect(() => {
+    if (!myLegalEntityAccessLoaded) return;
+    if (myLegalEntityAccessLoading) return;
+    if (!state.isAuthenticated) return;
+
+    const current = String(activeLegalEntityId ?? '').trim();
+    if (current) return;
+
+    const fallback = String(myLegalEntityAccess[0]?.legalEntityId ?? myLegalEntityAccess[0]?.legalEntity?.id ?? '').trim();
+    if (!fallback) return;
+
+    setActiveLegalEntityId(fallback);
+    try {
+      localStorage.setItem('legalEntityId', fallback);
+    } catch {
+      // ignore
+    }
+  }, [activeLegalEntityId, myLegalEntityAccess, myLegalEntityAccessLoaded, myLegalEntityAccessLoading, state.isAuthenticated]);
+
+  const activeLegalEntity = useMemo(() => {
+    const leId = String(activeLegalEntityId ?? '').trim();
+    if (!leId) return null;
+    return (
+      myLegalEntityAccess.find((x) => String(x?.legalEntityId ?? '').trim() === leId) ??
+      myLegalEntityAccess.find((x) => String(x?.legalEntity?.id ?? '').trim() === leId) ??
+      null
+    );
+  }, [activeLegalEntityId, myLegalEntityAccess]);
+
+  const activeLegalEntityLabel = useMemo(() => {
+    if (activeLegalEntity?.legalEntity?.code || activeLegalEntity?.legalEntity?.name) {
+      const code = String(activeLegalEntity.legalEntity.code ?? '').trim();
+      const name = String(activeLegalEntity.legalEntity.name ?? '').trim();
+      return [code, name].filter(Boolean).join(' — ');
+    }
+    const leId = String(activeLegalEntityId ?? '').trim();
+    return leId || '—';
+  }, [activeLegalEntity, activeLegalEntityId]);
+
+  const legalEntityAuthorizationError = useMemo(() => {
+    if (!canCreate || readOnly) return null;
+    if (canOverride) return null;
+
+    const leId = String(activeLegalEntityId ?? '').trim();
+    if (!leId) {
+      return 'Active Legal Entity is required before you can capture or submit this journal.';
+    }
+
+    if (myLegalEntityAccessLoading) return null;
+    if (myLegalEntityAccess.length === 0) {
+      return 'Your user account is not authorized to transact in the selected legal entity. Please contact your Finance Administrator for access.';
+    }
+
+    const hasRow = myLegalEntityAccess.some((x) => String(x?.legalEntityId ?? '').trim() === leId);
+    if (hasRow) return null;
+    return 'Your user account is not authorized to transact in the selected legal entity. Please contact your Finance Administrator for access.';
+  }, [activeLegalEntityId, canCreate, canOverride, myLegalEntityAccess, myLegalEntityAccessLoading, readOnly]);
+
+  const legalEntityConsistencyError = useMemo(() => {
+    if (!canCreate || readOnly) return null;
+
+    const used = (normalizedLines ?? [])
+      .filter((l) => Boolean(l.accountId) || (l.debit ?? 0) !== 0 || (l.credit ?? 0) !== 0)
+      .map((l) => String(l.legalEntityId ?? '').trim())
+      .filter(Boolean);
+
+    const distinct = Array.from(new Set(used));
+    if (distinct.length <= 1) return null;
+    return 'All lines in a journal must use the same Legal Entity.';
+  }, [canCreate, normalizedLines, readOnly]);
+
+  useEffect(() => {
+    const used = (normalizedLines ?? [])
+      .filter((l) => Boolean(l.accountId) || (l.debit ?? 0) !== 0 || (l.credit ?? 0) !== 0)
+      .map((l) => String(l.legalEntityId ?? '').trim())
+      .filter(Boolean);
+
+    const distinct = Array.from(new Set(used));
+    if (distinct.length !== 1) return;
+
+    const le = distinct[0];
+    if (le && le !== activeLegalEntityId) {
+      setActiveLegalEntityId(le);
+      try {
+        localStorage.setItem('legalEntityId', le);
+      } catch {
+        // ignore
+      }
+    }
+  }, [activeLegalEntityId, normalizedLines]);
+
   const [changeAccountConfirm, setChangeAccountConfirm] = useState<null | { rowIndex: number }>(null);
 
   const lineValidationByIndex = useMemo(() => {
@@ -354,36 +585,99 @@ export function JournalEntryPage() {
       if (!isNonEmpty) return;
 
       const account = accountById.get(l.accountId);
-      const selectedProject = l.projectId ? projectById.get(l.projectId) : null;
-      const visibility = getSegmentVisibility({
-        account,
-        project: selectedProject,
-        legalEntityRequired: true,
-      });
-
-      const errors = validateSegments({
-        visibility,
-        projectRestricted: Boolean(selectedProject?.isRestricted),
-        values: {
-          legalEntityId: l.legalEntityId ?? null,
-          departmentId: l.departmentId ?? null,
-          projectId: l.projectId ?? null,
-          fundId: l.fundId ?? null,
-        },
-      });
-
-      const e: { legalEntity?: string; department?: string; project?: string; fund?: string } = {};
-      if (errors.legalEntity) e.legalEntity = 'Legal Entity is required to submit.';
-      if (errors.department) e.department = 'Department is required to submit.';
-      if (errors.project) e.project = errors.project === 'Project is required.' ? 'Project is required to submit.' : errors.project;
-      if (errors.fund) {
-        e.fund = errors.fund === 'Fund is required.' ? 'Fund is required to submit.' : errors.fund;
-      }
+      const validation = getLineDimensionValidation({ account, line: l });
+      const e = validation.missingByKey;
 
       if (e.legalEntity || e.department || e.project || e.fund) out.set(idx, e);
     });
     return out;
   }, [normalizedLines, accountById, isReversal, projectById]);
+
+  const lineDimensionValidationState = useMemo(() => {
+    return normalizedLines.map((line, idx) => {
+      const missing = dimensionMissingByIndex.get(idx);
+      const missingDimensions = missing
+        ? [
+            missing.legalEntity ? 'Legal Entity' : null,
+            missing.department ? 'Department' : null,
+            missing.project ? 'Project' : null,
+            missing.fund ? 'Fund' : null,
+          ].filter((x): x is string => Boolean(x))
+        : [];
+
+      return {
+        rowIndex: idx,
+        lineNumber: line.lineNumber ?? idx + 1,
+        accountId: line.accountId ?? '',
+        valid: missingDimensions.length === 0,
+        invalid: missingDimensions.length > 0,
+        missingDimensions,
+      };
+    });
+  }, [dimensionMissingByIndex, normalizedLines]);
+
+  const reconcileJournalLineDimensions = useCallback(() => {
+    const hydrationReady = Boolean(
+      !loading &&
+      accounts.length > 0 &&
+      myLegalEntityAccessLoaded &&
+      canEditLines &&
+      !readOnly &&
+      !isReversal,
+    );
+
+    if (!hydrationReady) {
+      return false;
+    }
+    if (accountPanel) {
+      return false;
+    }
+
+    for (let idx = 0; idx < normalizedLines.length; idx += 1) {
+      const line = normalizedLines[idx];
+      const isNonEmpty = Boolean(line.accountId) || (line.debit ?? 0) !== 0 || (line.credit ?? 0) !== 0;
+      if (!isNonEmpty) continue;
+
+      const account = accountById.get(line.accountId);
+      if (!account) continue;
+
+      const validation = getLineDimensionValidation({ account, line });
+
+      const signature = [
+        line.id ?? idx,
+        line.accountId,
+        line.legalEntityId ?? '',
+        line.departmentId ?? '',
+        line.projectId ?? '',
+        line.fundId ?? '',
+        validation.missingDimensions.join('|'),
+      ].join('::');
+      const modalQueued = validation.invalid && !dimensionReconcileOpenedSignaturesRef.current.has(signature);
+
+      if (!validation.invalid) continue;
+      if (!modalQueued) continue;
+
+      dimensionReconcileOpenedSignaturesRef.current.add(signature);
+      const nextPanel = {
+        rowIndex: idx,
+        priorLine: {
+          ...line,
+          legalEntityId: line.legalEntityId ?? (activeLegalEntityId ? activeLegalEntityId : null),
+        },
+        priorAccountPicker: accountPickerByRow[idx] ?? '',
+        account,
+      };
+
+      setAccountPanel(nextPanel);
+      return true;
+    }
+
+    return false;
+  }, [accountById, accountPanel, accountPickerByRow, accounts.length, activeLegalEntityId, canEditLines, getLineDimensionValidation, isReversal, loading, myLegalEntityAccessLoaded, normalizedLines, readOnly]);
+
+  useEffect(() => {
+    reconcileJournalLineDimensions();
+  }, [reconcileJournalLineDimensions]);
 
   const headerDescriptionError = useMemo(() => {
     if (!canCreate || readOnly) return null;
@@ -404,7 +698,14 @@ export function JournalEntryPage() {
   }, [canCreate, readOnly, totals.totalDebit, totals.totalCredit, totals.net]);
 
   const captureDisabledReason =
-    intentError || headerDescriptionError || lineValidationByIndex.size > 0 || totalsError || journalDateInfoMessage
+    intentError ||
+    headerDescriptionError ||
+    legalEntityConsistencyError ||
+    legalEntityAuthorizationError ||
+    (!isReversal && dimensionMissingByIndex.size > 0) ||
+    lineValidationByIndex.size > 0 ||
+    totalsError ||
+    journalDateInfoMessage
       ? 'Complete all required fields and fix validation errors before capturing.'
       : null;
 
@@ -413,6 +714,10 @@ export function JournalEntryPage() {
       ? 'Only the preparer can submit this journal.'
       : journalDateInfoMessage
         ? journalDateInfoMessage
+        : legalEntityConsistencyError
+          ? legalEntityConsistencyError
+        : legalEntityAuthorizationError
+          ? legalEntityAuthorizationError
         : !isReversal && dimensionMissingByIndex.size > 0
           ? (() => {
               const parts: string[] = [];
@@ -439,236 +744,210 @@ export function JournalEntryPage() {
           ? 'Journal must be complete, balanced, and dated in an open period before submission.'
           : null;
 
-  async function load() {
-    if (!canView && !canCreate) return;
-    setLoading(true);
-    setError(null);
-    setLegacyReversalBlocked(false);
+async function load() {
+  if (authLoading) return;
+  if (!canView && !canCreate) return;
+  setLoading(true);
+  setError(null);
+  setLegacyReversalBlocked(false);
 
-    try {
-      const [accs, ps, existing, detail] = await Promise.all([
-        listAllGlAccounts(),
-        listGlPeriods().catch(() => []),
-        !isNew && id ? getJournal(id) : Promise.resolve(null),
-        !isNew && id ? getJournalDetail(id) : Promise.resolve(null),
-      ]);
-      setAccounts(accs);
-      setPeriods(ps);
-      setProjects([]);
+  try {
+    const [accs, ps, existing, detail] = await Promise.all([
+      listAllGlAccounts(),
+      listGlPeriods().catch(() => []),
+      !isNew && journalId ? getJournal(journalId) : Promise.resolve(null),
+      !isNew && journalId ? getJournalDetail(journalId) : Promise.resolve(null),
+    ]);
+    setAccounts(accs);
+    setPeriods(ps);
+    setProjects([]);
 
-      if (existing) {
-        setJournal(existing);
-        setJournalDetail(detail);
-        setJournalDate(existing.journalDate.slice(0, 10));
-        setJournalType((existing.journalType ?? 'STANDARD') as JournalType);
-        setDescription(existing.description ?? '');
-        setIntent(((existing as any).intent ?? (detail as any)?.intent ?? 'OPERATIONAL') as JournalIntent);
-        setIntentNotes(String((existing as any).intentNotes ?? (detail as any)?.intentNotes ?? ''));
-        setIntentReference(String((existing as any).intentReference ?? (detail as any)?.intentReference ?? ''));
-        setBudgetOverrideJustification(String((detail as any)?.budgetOverrideJustification ?? (existing as any)?.budgetOverrideJustification ?? ''));
+    if (existing) {
+      setJournal(existing);
+      setJournalDetail(detail);
+      setJournalDate(existing.journalDate.slice(0, 10));
+      setJournalType((existing.journalType ?? 'STANDARD') as JournalType);
+      setDescription(existing.description ?? '');
+      setIntent(((existing as any).intent ?? (detail as any)?.intent ?? 'OPERATIONAL') as JournalIntent);
+      setIntentNotes(String((existing as any).intentNotes ?? (detail as any)?.intentNotes ?? ''));
+      setIntentReference(String((existing as any).intentReference ?? (detail as any)?.intentReference ?? ''));
+      setBudgetOverrideJustification(String((detail as any)?.budgetOverrideJustification ?? (existing as any)?.budgetOverrideJustification ?? ''));
 
-        setLines(
-          ((detail?.lines?.length ? detail.lines : existing.lines) ?? []).map((l, idx) => ({
-            id: (l as any).id,
-            lineNumber: ((l as any).lineNumber ?? idx + 1) as any,
-            accountId: (l as any).accountId,
-            legalEntityId: (l as any).legalEntityId ?? null,
-            departmentId: (l as any).departmentId ?? null,
-            projectId: (l as any).projectId ?? null,
-            fundId: (l as any).fundId ?? null,
-            description: (l as any).description ?? undefined,
-            debit: normalizeAmount((l as any).debit),
-            credit: normalizeAmount((l as any).credit),
-          })),
-        );
-      }
-
-      if (isNew && correctsJournalIdFromUrl) {
-        const source = await getJournalDetail(correctsJournalIdFromUrl);
-        setJournalType('STANDARD');
-        setHasLockedJournalType(true);
-        setDescription(source.description ? `Correction: ${source.description}` : 'Correcting journal');
-        setIntent('CORRECTION');
-        setIntentNotes('');
-        setIntentReference(correctsJournalIdFromUrl);
-        setBudgetOverrideJustification('');
-        setLines(
-          (source.lines ?? []).map((l, idx) => ({
-            lineNumber: l.lineNumber ?? idx + 1,
-            accountId: l.accountId,
-            legalEntityId: null,
-            departmentId: null,
-            projectId: null,
-            fundId: null,
-            description: l.description ?? undefined,
-            debit: normalizeAmount(l.debit),
-            credit: normalizeAmount(l.credit),
-          })),
-        );
-      }
-    } catch (e: any) {
-      setError(getApiErrorMessage(e, 'Failed to load journal'));
-    } finally {
-      setLoading(false);
+      setLines(
+        ((detail?.lines?.length ? detail.lines : existing.lines) ?? []).map((l, idx) => ({
+          id: (l as any).id,
+          lineNumber: ((l as any).lineNumber ?? idx + 1) as any,
+          accountId: (l as any).accountId,
+          legalEntityId: (l as any).legalEntityId ?? null,
+          departmentId: (l as any).departmentId ?? null,
+          projectId: (l as any).projectId ?? null,
+          fundId: (l as any).fundId ?? null,
+          description: (l as any).description ?? undefined,
+          debit: normalizeAmount((l as any).debit),
+          credit: normalizeAmount((l as any).credit),
+        })),
+      );
     }
+
+    if (isNew && correctsJournalIdFromUrl) {
+      const source = await getJournalDetail(correctsJournalIdFromUrl);
+      setJournalType('STANDARD');
+      setHasLockedJournalType(true);
+      setDescription(source.description ? `Correction: ${source.description}` : 'Correcting journal');
+      setIntent('CORRECTION');
+      setIntentNotes('');
+      setIntentReference(correctsJournalIdFromUrl);
+      setBudgetOverrideJustification('');
+      setLines(
+        (source.lines ?? []).map((l, idx) => ({
+          lineNumber: l.lineNumber ?? idx + 1,
+          accountId: l.accountId,
+          legalEntityId: null,
+          departmentId: null,
+          projectId: null,
+          fundId: null,
+          description: l.description ?? undefined,
+          debit: normalizeAmount(l.debit),
+          credit: normalizeAmount(l.credit),
+        })),
+      );
+    }
+  } catch (e: any) {
+    setError(getApiErrorMessage(e, 'Failed to load journal'));
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
-    load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, canView, canCreate]);
+  }, [authLoading, canView, canCreate, journalId, isNew, correctsJournalIdFromUrl]);
 
-  useEffect(() => {
-    if (!canView && !canCreate) return;
-    const effectiveOn = (journalDate ?? '').slice(0, 10);
-    if (!effectiveOn) return;
-    const needsProjects = lines.some((l) => Boolean(l.projectId));
-    if (needsProjects && projects.length === 0) {
-      listProjects({ effectiveOn })
-        .then((ps) => setProjects(Array.isArray(ps) ? ps : []))
-        .catch(() => undefined);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [journalDate, canView, canCreate, lines, projects.length]);
-
-  if (!canView && !canCreate) {
-    return <div>You do not have access to journals.</div>;
-  }
-
-  async function onSave() {
+  async function save() {
+    if (saving) return;
     if (!canCreate) return;
 
-    if (journalDateInfoMessage) {
-      setError(journalDateInfoMessage);
+    if (!isReversal && dimensionMissingByIndex.size > 0) {
+      reconcileJournalLineDimensions();
+      setError('Some journal lines are missing required dimensions');
       return;
     }
 
-    if (headerDescriptionError || lineValidationByIndex.size > 0 || totalsError) {
-      setError('Journal is not ready to capture. Please fix the highlighted fields.');
-      return;
-    }
-
-    if (intentError) {
-      setError(intentError);
+    if (!isNew && !journalId) {
+      setError('No journal id provided in the route. Return to the journal list and reopen the journal.');
       return;
     }
 
     setSaving(true);
     setError(null);
-    try {
-      const payloadLines = buildPayloadLinesFromState(lines);
 
+    try {
       const payload = {
-        journalDate: new Date(`${journalDate}T00:00:00.000Z`).toISOString(),
+        journalDate: (journalDate ?? '').slice(0, 10),
         journalType,
         reference: undefined,
-        description: description.trim() ? description.trim() : undefined,
+        description: description?.trim() ? description.trim() : undefined,
+        ...(correctsJournalIdFromUrl ? { correctsJournalId: correctsJournalIdFromUrl } : {}),
         intent,
-        intentNotes: intentNotes.trim() ? intentNotes.trim() : undefined,
-        intentReference: intentReference.trim() ? intentReference.trim() : undefined,
-        budgetOverrideJustification: budgetOverrideJustification.trim() ? budgetOverrideJustification.trim() : undefined,
-        correctsJournalId: correctsJournalIdFromUrl ?? undefined,
-        lines: payloadLines,
+        intentNotes: intentNotes?.trim() ? intentNotes.trim() : undefined,
+        intentReference: intentReference?.trim() ? intentReference.trim() : undefined,
+        budgetOverrideJustification: budgetOverrideJustification?.trim() ? budgetOverrideJustification.trim() : undefined,
+        lines: buildPayloadLinesFromState(lines),
       };
 
-      const saved = isNew ? await createJournal(payload) : await updateJournal(id as string, payload);
+      const saved = isNew ? await createJournal(payload) : await updateJournal(journalId as string, payload);
       setJournal(saved);
-      if (!isNew) {
-        const detail = await getJournalDetail(saved.id).catch(() => null);
-        setJournalDetail(detail);
-      }
-      setToast('Journal captured successfully');
-      window.setTimeout(() => setToast(null), 2500);
 
-      // Keep the same source-of-truth lines after save, but ensure our local values stay numeric.
-      // (Backend may return decimals as strings; we normalize on load.)
-      setLines((prev) => normalizeLinesForTotals(prev));
+      const detail = await getJournalDetail(saved.id).catch(() => null);
+      if (detail) setJournalDetail(detail);
 
       if (isNew) {
         navigate(`/finance/gl/journals/${saved.id}`, { replace: true });
       }
     } catch (e: any) {
-      const mapped = getInvalidJournalDateMessage((e as any)?.body);
-      const msg = mapped ?? getApiErrorMessage(e, 'Unable to capture journal. Please review your entries and try again.');
-      setError(msg);
+      setError(getApiErrorMessage(e, 'Failed to capture journal'));
     } finally {
       setSaving(false);
     }
   }
 
-  async function onSubmitForReview() {
-    if (!canCreate) return;
-    if (isNew) {
-      setError('Capture the journal first before submitting for review.');
-      return;
-    }
-
-    if (status !== 'DRAFT' && status !== 'REJECTED') {
-      setError('Only DRAFT or REJECTED journals can be submitted for review.');
-      return;
-    }
-
-    if (!isCreator) {
-      setError('Only the preparer can submit this journal.');
-      return;
-    }
-
-    if (submitDisabledReason) {
-      setError(submitDisabledReason);
-      return;
-    }
-
-    setWorkflowBusy(true);
-    setError(null);
-    try {
-      await submitJournal(id as string);
-      setToast('Submitted for review');
-      window.setTimeout(() => setToast(null), 2500);
-      window.setTimeout(() => navigate('/finance/gl/journals', { replace: true }), 600);
-    } catch (e: any) {
-      setError(getApiErrorMessage(e, 'Failed to submit journal for review'));
-    } finally {
-      setWorkflowBusy(false);
-    }
+async function onSubmit() {
+  if (workflowBusy) return;
+  if (!journalId) {
+    setError('No journal id provided in the route. Return to the journal list and reopen the journal.');
+    return;
   }
 
-  async function onApprove() {
-    if (!canApproveThis) return;
-    setWorkflowBusy(true);
-    setError(null);
-    try {
-      await reviewJournal(id as string);
-      setToast('Journal approved');
-      window.setTimeout(() => setToast(null), 2500);
-      window.setTimeout(() => navigate('/finance/gl/review', { replace: true }), 600);
-    } catch (e: any) {
-      setError(getApiErrorMessage(e, 'Failed to approve journal'));
-    } finally {
-      setWorkflowBusy(false);
-    }
+  if (!isReversal && dimensionMissingByIndex.size > 0) {
+    reconcileJournalLineDimensions();
+    setError('Some journal lines are missing required dimensions');
+    return;
   }
 
-  async function onReject() {
-    if (!canApproveThis) return;
-    const reason = rejectReason.trim();
-    if (!reason) {
-      setError('Rejection reason is required.');
-      return;
-    }
-
-    setWorkflowBusy(true);
-    setError(null);
-    try {
-      await rejectJournal(id as string, reason);
-      setToast('Journal rejected');
-      window.setTimeout(() => setToast(null), 2500);
-      window.setTimeout(() => navigate('/finance/gl/review', { replace: true }), 600);
-    } catch (e: any) {
-      setError(getApiErrorMessage(e, 'Failed to reject journal'));
-    } finally {
-      setWorkflowBusy(false);
-    }
+  setWorkflowBusy(true);
+  setError(null);
+  try {
+    await submitJournal(journalId);
+    setToast('Submitted for review');
+    window.setTimeout(() => setToast(null), 2500);
+    window.setTimeout(() => navigate('/finance/gl/journals', { replace: true }), 600);
+  } catch (e: any) {
+    setError(getApiErrorMessage(e, 'Failed to submit journal for review'));
+  } finally {
+    setWorkflowBusy(false);
   }
+}
+
+async function onApprove() {
+  if (workflowBusy) return;
+  if (!journalId) {
+    setError('No journal id provided in the route. Return to the journal list and reopen the journal.');
+    return;
+  }
+  setWorkflowBusy(true);
+  setError(null);
+  try {
+    await reviewJournal(journalId);
+    setToast('Journal approved');
+    window.setTimeout(() => setToast(null), 2500);
+    window.setTimeout(() => navigate('/finance/gl/review', { replace: true }), 600);
+  } catch (e: any) {
+    setError(getApiErrorMessage(e, 'Failed to approve journal'));
+  } finally {
+    setWorkflowBusy(false);
+  }
+}
+
+async function onReject() {
+  if (workflowBusy) return;
+  if (!journalId) {
+    setError('No journal id provided in the route. Return to the journal list and reopen the journal.');
+    return;
+  }
+
+  const reason = rejectReason.trim();
+  if (!reason) {
+    setError('Rejection reason is required.');
+    return;
+  }
+
+  setWorkflowBusy(true);
+  setError(null);
+  try {
+    await rejectJournal(journalId, reason);
+    setToast('Journal rejected');
+    window.setTimeout(() => setToast(null), 2500);
+    window.setTimeout(() => navigate('/finance/gl/review', { replace: true }), 600);
+  } catch (e: any) {
+    setError(getApiErrorMessage(e, 'Failed to reject journal'));
+  } finally {
+    setWorkflowBusy(false);
+  }
+}
+
+  const onSave = save;
+  const onSubmitForReview = onSubmit;
 
   return (
     <div>
@@ -776,48 +1055,56 @@ export function JournalEntryPage() {
 
       {error ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="warning" title="Notice">
+          <NoticeCard kind="validation" title="Action required">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
       {!error && journalDateInfoMessage ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="info" title="Journal date needs attention">
+          <NoticeCard kind="validation" title="Journal date needs attention">
             {journalDateInfoMessage}
-          </Alert>
+          </NoticeCard>
+        </div>
+      ) : null}
+
+      {!error && legalEntityAuthorizationError ? (
+        <div style={{ marginTop: 12, maxWidth: 820 }}>
+          <NoticeCard kind="governance" title="Legal entity access">
+            {legalEntityAuthorizationError}
+          </NoticeCard>
         </div>
       ) : null}
 
       {!isNew && journalDetail && journalDetail.returnedByPosterAt && journalDetail.returnReason ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="warning" title="Returned by Finance Controller">
+          <NoticeCard kind="governance" title="Returned by Finance Controller">
             {`Returned by ${journalDetail.returnedByPoster?.email ?? '—'} — Reason: ${journalDetail.returnReason}`}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
       {!isNew && journalDetail && journalDetail.journalType === 'REVERSING' && journalDetail.reversalOf ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="info" title="Reversal journal">
+          <NoticeCard kind="info" title="Reversal journal">
             This is a reversal of{' '}
             <Link to={`/finance/gl/journals/${journalDetail.reversalOf.id}`}>{journalDetail.reversalOf.reference ?? journalDetail.reversalOf.id.slice(0, 8)}</Link>.
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
       {!isNew && journalDetail && legacyReversalBlocked ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="warning" title="Reversal not available">
+          <NoticeCard kind="governance" title="Reversal not available">
             This journal predates dimensional controls and cannot be reversed automatically. Create a correcting journal instead.
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
       {!isNew && journalDetail && journalDetail.status === 'POSTED' && Array.isArray(journalDetail.reversedBy) && journalDetail.reversedBy.some((x) => x.status === 'POSTED') ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="info" title="Reversed">
+          <NoticeCard kind="info" title="Reversed">
             Reversed by{' '}
             {journalDetail.reversedBy
               .filter((x) => x.status === 'POSTED')
@@ -826,7 +1113,7 @@ export function JournalEntryPage() {
                 <Link key={x.id} to={`/finance/gl/journals/${x.id}`}>{x.reference ?? x.id.slice(0, 8)}</Link>
               ))}
             .
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
@@ -913,9 +1200,9 @@ export function JournalEntryPage() {
 
           {budgetStatus === 'BLOCK' ? (
             <div style={{ marginTop: 10 }}>
-              <Alert tone="error" title="Budget hard block">
+              <NoticeCard kind="governance" title="Budget hard block">
                 One or more journal lines exceed available budget. Posting will be blocked.
-              </Alert>
+              </NoticeCard>
             </div>
           ) : null}
 
@@ -1043,7 +1330,11 @@ export function JournalEntryPage() {
                   setWorkflowBusy(true);
                   setError(null);
                   try {
-                    const created = await reverseJournal(id as string, { reason });
+                    if (!journalId) {
+                      setError('No journal id provided in the route. Return to the journal list and reopen the journal.');
+                      return;
+                    }
+                    const created = await reverseJournal(journalId, { reason });
                     setToast('Reversal journal created');
                     window.setTimeout(() => setToast(null), 2500);
                     setReversalOpen(false);
@@ -1142,18 +1433,18 @@ export function JournalEntryPage() {
 
       {isApproverReviewMode && canApprove && !canApproveThis && status === 'SUBMITTED' ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="info" title="Controls">
+          <NoticeCard kind="governance" title="Approval controls">
             You cannot approve a journal you prepared.
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
       {!isNew && journalDetail && status === 'REJECTED' ? (
         <div style={{ marginTop: 12, maxWidth: 820 }}>
-          <Alert tone="warning" title="Rejected">
+          <NoticeCard kind="validation" title="Rejected">
             This journal was rejected.
             {journalDetail.rejectionReason ? ` Reason: ${journalDetail.rejectionReason}` : ''}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
@@ -1202,6 +1493,14 @@ export function JournalEntryPage() {
             background: tokens.colors.surface.subtle,
           }}
         >
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>Active Legal Entity</div>
+            <div style={{ fontSize: 14, fontWeight: 650, color: tokens.colors.text.primary }}>{activeLegalEntityLabel}</div>
+            {!canOverride && myLegalEntityAccessLoading ? (
+              <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>Checking access…</div>
+            ) : null}
+          </div>
+
           <label>
             Journal Date
             <input type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} disabled={!canEditJournalDate} />
@@ -1322,6 +1621,7 @@ export function JournalEntryPage() {
           <DataTable.Body>
             {lines.map((l, idx) => {
               const detailLine = readOnly ? journalDetail?.lines?.find((x) => x.id === (l as any).id) ?? null : null;
+              const dimensionState = lineDimensionValidationState[idx];
 
               const accountDisplay = readOnly
                 ? detailLine?.account
@@ -1361,9 +1661,26 @@ export function JournalEntryPage() {
                               if (!canEditLines) return;
                               const acc = accountById.get(l.accountId);
                               if (!acc) return;
+
+                              const actualLine = {
+                                legalEntityId: (l as any).legalEntityId ?? null,
+                                departmentId: (l as any).departmentId ?? null,
+                                projectId: (l as any).projectId ?? null,
+                                fundId: (l as any).fundId ?? null,
+                              };
+                              const decision = getAccountContextModalDecision({ account: acc, line: actualLine });
+                              const modalShouldOpen = decision.shouldOpen;
+
+                              if (!modalShouldOpen) return;
+
                               setAccountPanel({
                                 rowIndex: idx,
-                                priorLine: { ...l },
+                                priorLine: {
+                                  ...l,
+                                  legalEntityId:
+                                    (l as any).legalEntityId ??
+                                    (activeLegalEntityId ? activeLegalEntityId : null),
+                                },
                                 priorAccountPicker: accountPickerByRow[idx] ?? '',
                                 account: acc,
                               });
@@ -1374,13 +1691,15 @@ export function JournalEntryPage() {
                           </div>
 
                           {canEditLines ? (
-                            <button
-                              onClick={() => setChangeAccountConfirm({ rowIndex: idx })}
-                              style={{ fontSize: 12, fontWeight: 700 }}
-                              type="button"
-                            >
-                              Change Account
-                            </button>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              <button
+                                onClick={() => setChangeAccountConfirm({ rowIndex: idx })}
+                                style={{ fontSize: 12, fontWeight: 700 }}
+                                type="button"
+                              >
+                                Change Account
+                              </button>
+                            </div>
                           ) : null}
                         </div>
                       ) : (
@@ -1395,20 +1714,51 @@ export function JournalEntryPage() {
                               const v = e.target.value;
                               setAccountPickerByRow((prev) => ({ ...prev, [idx]: v }));
 
-                              const exact = accounts.find((a) => `${a.code} — ${a.name}` === v);
-                              if (exact) {
-                                setAccountPanel({
-                                  rowIndex: idx,
-                                  priorLine: { ...l },
-                                  priorAccountPicker: accountPickerByRow[idx] ?? '',
-                                  account: exact,
-                                });
+                              const hit = resolveAccountFromPickerValue(v);
+
+                              const actualLine = {
+                                legalEntityId: (l as any).legalEntityId ?? null,
+                                departmentId: (l as any).departmentId ?? null,
+                                projectId: (l as any).projectId ?? null,
+                                fundId: (l as any).fundId ?? null,
+                              };
+
+                              const decision = hit ? getAccountContextModalDecision({ account: hit, line: actualLine }) : null;
+                              const modalShouldOpen = Boolean(decision?.shouldOpen);
+
+                              if (hit) {
+                                if (modalShouldOpen) {
+                                  setAccountPanel({
+                                    rowIndex: idx,
+                                    priorLine: {
+                                      ...l,
+                                      legalEntityId:
+                                        (l as any).legalEntityId ??
+                                        (activeLegalEntityId ? activeLegalEntityId : null),
+                                    },
+                                    priorAccountPicker: accountPickerByRow[idx] ?? '',
+                                    account: hit,
+                                  });
+                                } else {
+                                  setLines((prev) =>
+                                    prev.map((row, i) =>
+                                      i === idx
+                                        ? {
+                                            ...row,
+                                            accountId: hit.id,
+                                            legalEntityId: (l as any).legalEntityId ?? (activeLegalEntityId ? activeLegalEntityId : null),
+                                          }
+                                        : row,
+                                    ),
+                                  );
+                                  setAccountPickerByRow((prev) => ({ ...prev, [idx]: '' }));
+                                }
                               }
                             }}
                             onBlur={() => {
                               const label = (accountPickerByRow[idx] ?? '').trim();
-                              const exact = accounts.find((a) => `${a.code} — ${a.name}` === label);
-                              if (!exact) {
+                              const hit = resolveAccountFromPickerValue(label);
+                              if (!hit) {
                                 setAccountPickerByRow((prev) => ({ ...prev, [idx]: '' }));
                               }
                             }}
@@ -1426,6 +1776,29 @@ export function JournalEntryPage() {
 
                       {!readOnly && canEditLines && lineValidationByIndex.get(idx)?.account ? (
                         <div style={{ fontSize: 12, color: '#9a3412' }}>{lineValidationByIndex.get(idx)?.account}</div>
+                      ) : null}
+
+                      {!readOnly && canEditLines && dimensionState?.invalid ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {dimensionState.missingDimensions.map((dimension) => (
+                            <span
+                              key={dimension}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                borderRadius: 999,
+                                padding: '2px 8px',
+                                fontSize: 12,
+                                fontWeight: 750,
+                                color: '#9a3412',
+                                background: '#ffedd5',
+                                border: '1px solid #fed7aa',
+                              }}
+                            >
+                              Missing {dimension}
+                            </span>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
                   )}
@@ -1535,6 +1908,7 @@ export function JournalEntryPage() {
                   {
                     lineNumber: (prev[prev.length - 1]?.lineNumber ?? prev.length) + 1,
                     accountId: '',
+                    legalEntityId: activeLegalEntityId ? activeLegalEntityId : null,
                     debit: 0,
                     credit: 0,
                   },
@@ -1598,9 +1972,7 @@ export function JournalEntryPage() {
                   saving ||
                   workflowBusy ||
                   !canEditLines ||
-                  Boolean(headerDescriptionError) ||
-                  lineValidationByIndex.size > 0 ||
-                  Boolean(totalsError)
+                  Boolean(captureDisabledReason)
                 }
                 title={captureDisabledReason ?? undefined}
               >
@@ -1619,7 +1991,7 @@ export function JournalEntryPage() {
               </button>
             ) : null}
 
-            {canCreate && !readOnly && canEditLines && (headerDescriptionError || lineValidationByIndex.size > 0 || totalsError || journalDateInfoMessage) ? (
+            {canCreate && !readOnly && canEditLines && captureDisabledReason ? (
               <div style={{ fontSize: 12, color: '#9a3412' }}>{captureDisabledReason}</div>
             ) : null}
 
@@ -1640,6 +2012,9 @@ export function JournalEntryPage() {
         open={Boolean(accountPanel)}
         journalDate={journalDate}
         account={accountPanel?.account ?? null}
+        restrictLegalEntities={!canOverride}
+        authorizedLegalEntityIds={myLegalEntityAccessLoading ? undefined : authorizedLegalEntityIds}
+        legalEntityAccessLoaded={myLegalEntityAccessLoaded}
         initialValues={
           accountPanel
             ? {
@@ -1657,8 +2032,25 @@ export function JournalEntryPage() {
           if (!accountPanel) return;
           const idx = accountPanel.rowIndex;
           const accId = accountPanel.account.id;
-          setLines((prev) =>
-            prev.map((row, i) =>
+
+          const nextLeId = String(values.legalEntityId ?? '').trim();
+          const currentLeId = String(activeLegalEntityId ?? '').trim();
+          if (!canOverride && currentLeId && nextLeId && currentLeId !== nextLeId) {
+            setError('All lines in a journal must use the same Legal Entity.');
+            return;
+          }
+
+          if (nextLeId && !currentLeId) {
+            setActiveLegalEntityId(nextLeId);
+            try {
+              localStorage.setItem('legalEntityId', nextLeId);
+            } catch {
+              // ignore
+            }
+          }
+
+          setLines((prev) => {
+            const next = prev.map((row, i) =>
               i === idx
                 ? {
                     ...row,
@@ -1669,8 +2061,9 @@ export function JournalEntryPage() {
                     fundId: values.fundId,
                   }
                 : row,
-            ),
-          );
+            );
+            return next;
+          });
           setAccountPickerByRow((prev) => ({ ...prev, [idx]: '' }));
           setAccountPanel(null);
         }}

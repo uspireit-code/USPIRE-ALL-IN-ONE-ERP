@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
+import { NoticeCard } from '../../../components/NoticeCard';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
 import { generateRecurringTemplate, listRecurringTemplates, type RecurringJournalTemplate } from '../../../services/glRecurring.ts';
@@ -21,6 +22,8 @@ export function RecurringGeneratePage() {
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
   const canGenerate = hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
+  const canManage = hasPermission(PERMISSIONS.GL.RECURRING_MANAGE);
+  const canAccess = canGenerate || canManage;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,7 +35,7 @@ export function RecurringGeneratePage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!canGenerate) return;
+    if (!canAccess) return;
     if (!id) return;
 
     setLoading(true);
@@ -50,7 +53,7 @@ export function RecurringGeneratePage() {
       })
       .catch((e) => setError(getApiErrorMessage(e, 'Failed to load template')))
       .finally(() => setLoading(false));
-  }, [authLoading, canGenerate, id]);
+  }, [authLoading, canAccess, id]);
 
   const totals = useMemo(() => {
     if (!template) return { debit: 0, credit: 0 };
@@ -65,6 +68,11 @@ export function RecurringGeneratePage() {
     const description = template.descriptionTemplate ? applyPlaceholders(template.descriptionTemplate, runDate) : '';
     return { reference, description };
   }, [template, runDate]);
+
+  const lifecycleStatus = useMemo(() => {
+    if (!template) return 'DRAFT';
+    return (template as any).status ?? (template.isActive ? 'APPROVED' : 'SUSPENDED');
+  }, [template]);
 
   const onConfirm = async () => {
     if (!template) return;
@@ -91,14 +99,14 @@ export function RecurringGeneratePage() {
 
   if (authLoading) return <div style={{ marginTop: 12, color: tokens.colors.text.muted }}>Loading…</div>;
 
-  if (!canGenerate) {
+  if (!canAccess) {
     return (
       <div>
         <h2>Generate Journal</h2>
-        <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Access Denied">
-            You do not have permission to generate recurring journals.
-          </Alert>
+        <div style={{ marginTop: 14, maxWidth: 820 }}>
+          <NoticeCard kind="permission" title="Access restricted">
+            You do not have permission to generate journals from recurring templates.
+          </NoticeCard>
         </div>
       </div>
     );
@@ -141,10 +149,10 @@ export function RecurringGeneratePage() {
 
       {loading ? <div style={{ marginTop: 12 }}>Loading…</div> : null}
       {error ? (
-        <div style={{ marginTop: 12 }}>
-          <Alert tone="error" title="Error">
+        <div style={{ marginTop: 12, maxWidth: 820 }}>
+          <NoticeCard kind="system" title="Unable to load template">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
@@ -187,17 +195,25 @@ export function RecurringGeneratePage() {
           </div>
 
           <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={onConfirm} disabled={saving || !runDate || !template.isActive} style={{ fontWeight: 750 }}>
+            <button
+              onClick={onConfirm}
+              disabled={saving || !runDate || String(lifecycleStatus) !== 'APPROVED'}
+              style={{ fontWeight: 750 }}
+            >
               {saving ? 'Generating…' : 'Confirm Generate'}
             </button>
             <Link to={`/finance/gl/recurring/${template.id}`}>Back to Template</Link>
           </div>
 
-          {!template.isActive ? (
-            <div style={{ marginTop: 10 }}>
-              <Alert tone="warning" title="Template inactive">
-                Activate the template before generating.
-              </Alert>
+          {String(lifecycleStatus) !== 'APPROVED' ? (
+            <div style={{ marginTop: 10, maxWidth: 820 }}>
+              <NoticeCard kind="governance" title="Template not approved">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>Status:</span>
+                  <StatusBadge state={String(lifecycleStatus)} />
+                </div>
+                <div style={{ marginTop: 6 }}>Only approved templates can be generated.</div>
+              </NoticeCard>
             </div>
           ) : null}
         </div>

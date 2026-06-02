@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
+import { EmptyState } from '../../../components/EmptyState';
 import { Input } from '../../../components/Input';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { AutomationIndicators } from '../../../components/governance/AutomationIndicators';
 import { AutomationSeverityBadge } from '../../../components/governance/AutomationSeverityBadge';
 import { SettingsPageHeader } from '../../../components/settings/SettingsPageHeader';
@@ -20,7 +21,7 @@ import {
   createAutomationSchedule,
   type GovernanceAutomationScheduleRow,
 } from '../../../services/automationSchedules';
-import { listRecurringTemplates, type RecurringJournalTemplate } from '../../../services/glRecurring';
+import { listApprovedRecurringTemplates, type RecurringJournalTemplate } from '../../../services/glRecurring';
 import { listJournalBrowser, type JournalBrowserRow } from '../../../services/gl';
 import {
   listAutomationExecutions,
@@ -52,6 +53,122 @@ function hasEvidence(row: GovernanceAutomationExecutionRow): boolean {
   return Boolean(ev);
 }
 
+function ModalShell(props: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const focusFirst = () => {
+      const root = panelRef.current;
+      if (!root) return;
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      const first = focusable?.[0];
+      (first ?? root).focus?.();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        props.onClose();
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+
+      const root = panelRef.current;
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
+      ).filter((el) => !el.hasAttribute('disabled') && !el.getAttribute('aria-disabled'));
+
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && (active === first || !root.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      }
+    };
+
+    focusFirst();
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, [props]);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        background: 'rgba(11,12,30,0.35)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) props.onClose();
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        style={{
+          width: 'min(760px, 100%)',
+          maxHeight: 'min(86vh, 900px)',
+          overflow: 'hidden',
+          background: '#fff',
+          borderRadius: 18,
+          border: '1px solid rgba(11,12,30,0.12)',
+          boxShadow: '0 1px 2px rgba(11,12,30,0.06), 0 14px 40px rgba(11,12,30,0.18)',
+        }}
+      >
+        <div style={{ padding: 16, borderBottom: '1px solid rgba(11,12,30,0.08)' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: tokens.colors.text.primary }}>{props.title}</div>
+          {props.subtitle ? (
+            <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.text.secondary, lineHeight: '18px' }}>{props.subtitle}</div>
+          ) : null}
+        </div>
+
+        <div style={{ padding: 16, overflowY: 'auto', maxHeight: 'calc(min(86vh, 900px) - 160px)' }}>{props.children}</div>
+
+        {props.footer ? (
+          <div style={{ padding: 16, borderTop: '1px solid rgba(11,12,30,0.08)' }}>{props.footer}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function AutomationGovernancePage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
@@ -76,6 +193,7 @@ export function AutomationGovernancePage() {
   const [sweepExecute, setSweepExecute] = useState(false);
   const [sweepRunning, setSweepRunning] = useState(false);
   const [sweepResult, setSweepResult] = useState<any | null>(null);
+  const [sweepConfirm, setSweepConfirm] = useState<null | { nowIso: string; limit: number }>(null);
 
   const [createAutomationCode, setCreateAutomationCode] = useState(
     'RECURRING_JOURNAL_AUTOMATION',
@@ -102,6 +220,7 @@ export function AutomationGovernancePage() {
   const [governanceActivationStatus, setGovernanceActivationStatus] = useState<'ACTIVE' | 'DRAFT' | 'SUSPENDED'>(
     'ACTIVE',
   );
+  const [moreComplianceOpen, setMoreComplianceOpen] = useState(false);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedTargetTypeOverride, setAdvancedTargetTypeOverride] = useState('');
@@ -224,6 +343,15 @@ export function AutomationGovernancePage() {
     useExplicitNextRunAt,
   ]);
 
+  const selectedRecurringTemplate = useMemo(() => {
+    const id = String(createTargetId ?? '').trim();
+    if (!id) return null;
+    return (recurringTemplates ?? []).find((t) => String(t.id) === id) ?? null;
+  }, [createTargetId, recurringTemplates]);
+
+  const isTargetSelected = Boolean(String(derivedTargetType ?? '').trim() && String(createTargetId ?? '').trim());
+  const canRunPreviewCreate = canCreate && isTargetSelected && !(computedScheduleConfig as any)?.__invalidJson;
+
   async function refresh() {
     setLoading(true);
     setError(null);
@@ -246,7 +374,7 @@ export function AutomationGovernancePage() {
 
   async function refreshCreateLookups() {
     try {
-      const t = await listRecurringTemplates();
+      const t = await listApprovedRecurringTemplates();
       setRecurringTemplates(Array.isArray(t) ? t : []);
     } catch {
       setRecurringTemplates([]);
@@ -427,27 +555,17 @@ export function AutomationGovernancePage() {
     </div>
   );
 
-  async function runSweep() {
+  async function executeSweep(params: { nowIso: string; limit: number }) {
     if (sweepRunning) return;
     setError(null);
     setSuccess(null);
     setSweepResult(null);
 
-    const nowIso = new Date(sweepNow).toISOString();
-    const limit = Math.max(1, Math.min(200, Math.floor(Number(sweepLimit || '50'))));
-
-    if (sweepExecute) {
-      const ok = window.confirm(
-        `Execute due schedules now?\n\nThis will attempt explicit execution for governance-eligible schedules (supervised).\n\nTime (UTC): ${nowIso}\nLimit: ${limit}`,
-      );
-      if (!ok) return;
-    }
-
     setSweepRunning(true);
     try {
       const res = await sweepDueAutomationSchedules({
-        now: nowIso,
-        limit,
+        now: params.nowIso,
+        limit: params.limit,
         includeSuspended: sweepIncludeSuspended,
         execute: sweepExecute,
         governanceReason: 'Supervised sweep (Automation Governance UI)',
@@ -463,6 +581,20 @@ export function AutomationGovernancePage() {
     }
   }
 
+  async function runSweep() {
+    if (sweepRunning) return;
+
+    const nowIso = new Date(sweepNow).toISOString();
+    const limit = Math.max(1, Math.min(200, Math.floor(Number(sweepLimit || '50'))));
+
+    if (sweepExecute) {
+      setSweepConfirm({ nowIso, limit });
+      return;
+    }
+
+    await executeSweep({ nowIso, limit });
+  }
+
   return (
     <div>
       <SettingsPageHeader
@@ -473,14 +605,14 @@ export function AutomationGovernancePage() {
 
       <div style={{ marginTop: 14 }}>
         {error ? (
-          <Alert tone="error" title="Error">
+          <NoticeCard kind="system" title="Unable to load automation governance">
             {error}
-          </Alert>
+          </NoticeCard>
         ) : null}
         {success ? (
-          <Alert tone="success" title="Success">
+          <NoticeCard kind="success" title="Completed">
             {success}
-          </Alert>
+          </NoticeCard>
         ) : null}
       </div>
 
@@ -543,30 +675,31 @@ export function AutomationGovernancePage() {
           </Card>
         </div>
 
-        <div style={{ gridColumn: 'span 12' }}>
+        <div id="automation-create-schedule" style={{ gridColumn: 'span 12' }}>
           <Card
-            title="Create Schedule"
-            subtitle="A guided workflow for creating business-friendly, governance-transparent automation schedules."
+            title="Activate Automation"
+            subtitle="Set up a recurring accounting automation in about 60 seconds."
             actions={
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <Button variant="secondary" size="sm" onClick={runPreview} disabled={!canCreate || previewLoading}>
-                  {previewLoading ? 'Previewing…' : 'Preview'}
+                <Button variant="secondary" size="sm" onClick={runPreview} disabled={!canRunPreviewCreate || previewLoading}>
+                  {previewLoading ? 'Reviewing…' : 'Review'}
                 </Button>
-                <Button variant="accent" size="sm" onClick={saveSchedule} disabled={!canCreate || createSaving}>
-                  {createSaving ? 'Saving…' : 'Create Schedule'}
+                <Button variant="accent" size="sm" onClick={saveSchedule} disabled={!canRunPreviewCreate || createSaving}>
+                  {createSaving ? 'Activating…' : 'Activate automation'}
                 </Button>
               </div>
             }
           >
             {!canCreate ? (
-              <Alert tone="warning" title="Create permission required">
+              <NoticeCard kind="permission" title="Create permission required">
                 Schedule creation requires {(PERMISSIONS as any).GOVERNANCE?.AUTOMATION?.CREATE}.
-              </Alert>
+              </NoticeCard>
             ) : null}
 
-            <div style={{ marginTop: 12, display: 'grid', gap: 14 }}>
+            <div style={{ marginTop: 12, display: 'grid', gap: 22 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 1 — Choose automation</div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 1</div>
+                <div style={{ marginTop: 4, fontSize: 15, fontWeight: 900, color: tokens.colors.text.primary }}>What do you want to automate?</div>
                 <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
                   {[
                     { code: 'RECURRING_JOURNAL_AUTOMATION', label: 'Recurring Journal', desc: 'Create journals from a recurring template.' },
@@ -607,64 +740,84 @@ export function AutomationGovernancePage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 2 — Select target</div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 2</div>
+                <div style={{ marginTop: 4, fontSize: 15, fontWeight: 900, color: tokens.colors.text.primary }}>Which approved template should run?</div>
 
                 {automationDefinition.code === 'RECURRING_JOURNAL_AUTOMATION' ? (
-                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
-                    <div style={{ gridColumn: 'span 5' }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Recurring template</div>
-                      <div style={{ marginTop: 6 }}>
-                        <Input
-                          value={recurringTemplateQuery}
-                          onChange={(e) => setRecurringTemplateQuery(e.currentTarget.value)}
-                          placeholder="Search templates by name"
-                        />
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
+                      <div style={{ gridColumn: 'span 6' }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Template</div>
+                        <div style={{ marginTop: 6 }}>
+                          <Input
+                            value={recurringTemplateQuery}
+                            onChange={(e) => setRecurringTemplateQuery(e.currentTarget.value)}
+                            placeholder="Search approved templates"
+                          />
+                        </div>
                       </div>
-                      <div style={{ marginTop: 10, display: 'grid', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
-                        {(recurringTemplates ?? [])
-                          .filter((t) => {
-                            const q = String(recurringTemplateQuery ?? '').trim().toLowerCase();
-                            if (!q) return true;
-                            const name = String((t as any)?.name ?? '').toLowerCase();
-                            const id = String((t as any)?.id ?? '').toLowerCase();
-                            return name.includes(q) || id.includes(q);
-                          })
-                          .slice(0, 25)
-                          .map((t) => {
-                            const selected = String(createTargetId) === String(t.id);
-                            return (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => {
-                                  setCreateTargetId(String(t.id));
-                                  setPreviewResult(null);
-                                }}
-                                style={{
-                                  textAlign: 'left',
-                                  padding: 10,
-                                  borderRadius: 12,
-                                  border: `1px solid ${selected ? tokens.colors.border.default : tokens.colors.border.subtle}`,
-                                  background: selected ? tokens.colors.surface.subtle : tokens.colors.white,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <div style={{ fontSize: 13, fontWeight: 900, color: tokens.colors.text.primary }}>{t.name}</div>
-                                <div style={{ marginTop: 2, fontSize: 12, color: tokens.colors.text.muted }}>ID: {t.id}</div>
-                              </button>
-                            );
-                          })}
+                      <div style={{ gridColumn: 'span 6' }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Select</div>
+                        <div style={{ marginTop: 6 }}>
+                          <select
+                            value={createTargetId}
+                            onChange={(e) => {
+                              setCreateTargetId(String(e.currentTarget.value));
+                              setPreviewResult(null);
+                            }}
+                            style={{
+                              width: '100%',
+                              height: 40,
+                              padding: '0 12px',
+                              borderRadius: tokens.radius.sm,
+                              border: `1px solid ${tokens.colors.border.default}`,
+                              background: tokens.colors.white,
+                              fontSize: 14,
+                            }}
+                          >
+                            <option value="">Select an approved template…</option>
+                            {(['MONTHLY', 'QUARTERLY', 'YEARLY'] as const).map((freq) => {
+                              const items = (recurringTemplates ?? [])
+                                .filter((t) => {
+                                  if (String((t as any)?.frequency ?? '') !== freq) return false;
+                                  const q = String(recurringTemplateQuery ?? '').trim().toLowerCase();
+                                  if (!q) return true;
+                                  const name = String((t as any)?.name ?? '').toLowerCase();
+                                  return name.includes(q);
+                                })
+                                .slice(0, 200);
+                              if (items.length === 0) return null;
+                              const label = freq === 'MONTHLY' ? 'Monthly' : freq === 'QUARTERLY' ? 'Quarterly' : 'Yearly';
+                              return (
+                                <optgroup key={freq} label={label}>
+                                  {items.map((t) => (
+                                    <option key={t.id} value={String(t.id)}>
+                                      {t.name} — {label} • Approved
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              );
+                            })}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
-                    <div style={{ gridColumn: 'span 7' }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Target summary</div>
-                      <div style={{ marginTop: 8, padding: 12, borderRadius: 14, border: `1px solid ${tokens.colors.border.subtle}`, background: tokens.colors.surface.subtle }}>
-                        <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>Target type</div>
-                        <div style={{ marginTop: 6, fontSize: 13, fontWeight: 900, color: tokens.colors.text.primary }}>{derivedTargetType || '—'}</div>
-                        <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.muted }}>Selected target</div>
-                        <div style={{ marginTop: 6, fontSize: 13, fontWeight: 900, color: tokens.colors.text.primary }}>{createTargetId || '—'}</div>
-                      </div>
+                    <div style={{ marginTop: 10 }}>
+                      {selectedRecurringTemplate ? (
+                        <div style={{ padding: 12, borderRadius: 14, background: tokens.colors.surface.subtle }}>
+                          <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Selected template</div>
+                          <div style={{ marginTop: 4, fontSize: 14, fontWeight: 900, color: tokens.colors.text.primary }}>{selectedRecurringTemplate.name}</div>
+                          <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.secondary, lineHeight: '18px' }}>
+                            Approved • {String((selectedRecurringTemplate as any).frequency ?? '—')} • Created by{' '}
+                            {String((selectedRecurringTemplate as any)?.createdBy?.name ?? (selectedRecurringTemplate as any)?.createdBy?.email ?? '—')}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
+                          Only approved templates are available for scheduling.
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : automationDefinition.code === 'REVERSAL_AUTOMATION' ? (
@@ -729,9 +882,9 @@ export function AutomationGovernancePage() {
                   </div>
                 ) : (
                   <div style={{ marginTop: 10 }}>
-                    <Alert tone="warning" title="Target configuration">
+                    <NoticeCard kind="governance" title="Target configuration">
                       This automation type requires tenant-specific targeting. Use Advanced Technical Configuration to set target type and target id.
-                    </Alert>
+                    </NoticeCard>
                     <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
                       <div style={{ gridColumn: 'span 6' }}>
                         <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Target ID</div>
@@ -751,56 +904,23 @@ export function AutomationGovernancePage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 3 — Schedule timing</div>
-                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
-                  <div style={{ gridColumn: 'span 3' }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Run time (UTC)</div>
-                    <div style={{ marginTop: 6 }}>
-                      <Input type="time" value={scheduleTimeUtc} onChange={(e) => setScheduleTimeUtc(e.currentTarget.value)} />
-                    </div>
-                  </div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 3</div>
+                <div style={{ marginTop: 4, fontSize: 15, fontWeight: 900, color: tokens.colors.text.primary }}>When should it run?</div>
 
-                  {automationDefinition.code === 'RECURRING_JOURNAL_AUTOMATION' ? (
-                    <>
-                      <div style={{ gridColumn: 'span 3' }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Frequency</div>
-                        <div style={{ marginTop: 6 }}>
-                          <select
-                            value={scheduleFrequency}
-                            onChange={(e) => setScheduleFrequency(e.currentTarget.value as any)}
-                            style={{
-                              width: '100%',
-                              height: 40,
-                              padding: '0 12px',
-                              borderRadius: tokens.radius.sm,
-                              border: `1px solid ${tokens.colors.border.default}`,
-                              background: tokens.colors.white,
-                              fontSize: 14,
-                            }}
-                          >
-                            <option value="MONTHLY">Monthly</option>
-                            <option value="QUARTERLY">Quarterly</option>
-                            <option value="YEARLY">Yearly</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div style={{ gridColumn: 'span 3' }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Day of month</div>
-                        <div style={{ marginTop: 6 }}>
-                          <Input
-                            value={scheduleDayOfMonth}
-                            onChange={(e) => setScheduleDayOfMonth(e.currentTarget.value)}
-                            placeholder="1-28"
-                          />
-                        </div>
-                      </div>
-                      {scheduleFrequency === 'YEARLY' ? (
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 14, background: tokens.colors.surface.subtle }}>
+                  <div style={{ fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
+                    This schedule will automatically generate journals on the selected recurrence.
+                  </div>
+                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12, alignItems: 'end' }}>
+                    {automationDefinition.code === 'RECURRING_JOURNAL_AUTOMATION' ? (
+                      <>
                         <div style={{ gridColumn: 'span 3' }}>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Month</div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Frequency</div>
                           <div style={{ marginTop: 6 }}>
                             <select
-                              value={scheduleMonthUtc}
-                              onChange={(e) => setScheduleMonthUtc(e.currentTarget.value)}
+                              value={scheduleFrequency}
+                              onChange={(e) => setScheduleFrequency(e.currentTarget.value as any)}
+                              disabled={!isTargetSelected}
                               style={{
                                 width: '100%',
                                 height: 40,
@@ -811,22 +931,68 @@ export function AutomationGovernancePage() {
                                 fontSize: 14,
                               }}
                             >
-                              {Array.from({ length: 12 }).map((_, i) => (
-                                <option key={i} value={String(i)}>
-                                  {new Date(Date.UTC(2020, i, 1)).toLocaleString(undefined, { month: 'long' })}
-                                </option>
-                              ))}
+                              <option value="MONTHLY">Monthly</option>
+                              <option value="QUARTERLY">Quarterly</option>
+                              <option value="YEARLY">Yearly</option>
                             </select>
                           </div>
                         </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div style={{ gridColumn: 'span 9' }}>
-                      <div style={{ padding: 12, borderRadius: 14, border: `1px solid ${tokens.colors.border.subtle}`, background: tokens.colors.surface.subtle }}>
-                        <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>One-time or externally-defined cadence</div>
-                        <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
-                          This automation may require an explicit next run time or advanced schedule configuration.
+                        <div style={{ gridColumn: 'span 3' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Run day</div>
+                          <div style={{ marginTop: 6 }}>
+                            <Input
+                              value={scheduleDayOfMonth}
+                              onChange={(e) => setScheduleDayOfMonth(e.currentTarget.value)}
+                              placeholder="1-28"
+                              disabled={!isTargetSelected}
+                            />
+                          </div>
+                        </div>
+                        {scheduleFrequency === 'YEARLY' ? (
+                          <div style={{ gridColumn: 'span 3' }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Month</div>
+                            <div style={{ marginTop: 6 }}>
+                              <select
+                                value={scheduleMonthUtc}
+                                onChange={(e) => setScheduleMonthUtc(e.currentTarget.value)}
+                                disabled={!isTargetSelected}
+                                style={{
+                                  width: '100%',
+                                  height: 40,
+                                  padding: '0 12px',
+                                  borderRadius: tokens.radius.sm,
+                                  border: `1px solid ${tokens.colors.border.default}`,
+                                  background: tokens.colors.white,
+                                  fontSize: 14,
+                                }}
+                              >
+                                {Array.from({ length: 12 }).map((_, i) => (
+                                  <option key={i} value={String(i)}>
+                                    {new Date(Date.UTC(2020, i, 1)).toLocaleString(undefined, { month: 'long' })}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ gridColumn: 'span 3' }} />
+                        )}
+                        <div style={{ gridColumn: 'span 3' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Run time (UTC)</div>
+                          <div style={{ marginTop: 6 }}>
+                            <Input
+                              type="time"
+                              value={scheduleTimeUtc}
+                              onChange={(e) => setScheduleTimeUtc(e.currentTarget.value)}
+                              disabled={!isTargetSelected}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ gridColumn: 'span 9' }}>
+                        <div style={{ fontSize: 12, color: tokens.colors.text.secondary, lineHeight: '18px' }}>
+                          This automation may require an explicit next run time.
                         </div>
                         <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                           <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 13, color: tokens.colors.text.primary }}>
@@ -834,6 +1000,7 @@ export function AutomationGovernancePage() {
                               type="checkbox"
                               checked={useExplicitNextRunAt}
                               onChange={(e) => setUseExplicitNextRunAt(e.currentTarget.checked)}
+                              disabled={!isTargetSelected}
                             />
                             Set explicit next run time
                           </label>
@@ -843,84 +1010,121 @@ export function AutomationGovernancePage() {
                                 type="datetime-local"
                                 value={createNextRunAt}
                                 onChange={(e) => setCreateNextRunAt(e.currentTarget.value)}
+                                disabled={!isTargetSelected}
                               />
                             </div>
                           ) : null}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  <div style={{ gridColumn: 'span 3' }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Expiry (optional)</div>
-                    <div style={{ marginTop: 6 }}>
-                      <Input type="datetime-local" value={createExpiresAt} onChange={(e) => setCreateExpiresAt(e.currentTarget.value)} />
+                    <div style={{ gridColumn: 'span 3' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Expiry (optional)</div>
+                      <div style={{ marginTop: 6 }}>
+                        <Input
+                          type="datetime-local"
+                          value={createExpiresAt}
+                          onChange={(e) => setCreateExpiresAt(e.currentTarget.value)}
+                          disabled={!isTargetSelected}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 4 — Governance controls</div>
-                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
-                  <div style={{ gridColumn: 'span 4', padding: 12, borderRadius: 14, border: `1px solid ${tokens.colors.border.subtle}`, background: tokens.colors.surface.subtle }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>Review workflow</div>
-                    <div style={{ marginTop: 10 }}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.primary }}>
-                        <input
-                          type="checkbox"
-                          checked={governanceAutoSubmitForReview}
-                          onChange={(e) => setGovernanceAutoSubmitForReview(e.currentTarget.checked)}
-                        />
-                        Auto-submit generated journals for review
-                      </label>
+                <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.secondary }}>Step 4</div>
+                <div style={{ marginTop: 4, fontSize: 15, fontWeight: 900, color: tokens.colors.text.primary }}>Review & Compliance Options</div>
+
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 14, background: tokens.colors.surface.subtle }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
+                    <div style={{ gridColumn: 'span 8' }}>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>Approval workflow</div>
+                      <div style={{ marginTop: 10 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.primary }}>
+                          <input
+                            type="checkbox"
+                            checked={governanceAutoSubmitForReview}
+                            onChange={(e) => setGovernanceAutoSubmitForReview(e.currentTarget.checked)}
+                            disabled={!isTargetSelected}
+                          />
+                          Automatically send generated journals into the normal approval workflow
+                        </label>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
+                        This doesn’t change who can approve — it controls where generated journals start.
+                      </div>
                     </div>
-                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
-                      Stored as schedule metadata for governed execution orchestration.
+
+                    <div style={{ gridColumn: 'span 4' }}>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>Schedule status</div>
+                      <div style={{ marginTop: 10 }}>
+                        <select
+                          value={governanceActivationStatus}
+                          onChange={(e) => setGovernanceActivationStatus(e.currentTarget.value as any)}
+                          disabled={!isTargetSelected}
+                          style={{
+                            width: '100%',
+                            height: 40,
+                            padding: '0 12px',
+                            borderRadius: tokens.radius.sm,
+                            border: `1px solid ${tokens.colors.border.default}`,
+                            background: tokens.colors.white,
+                            fontSize: 14,
+                          }}
+                        >
+                          <option value="ACTIVE">Active</option>
+                          <option value="DRAFT">Draft</option>
+                          <option value="SUSPENDED">Suspended</option>
+                        </select>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
+                        You can keep it as draft if you’re not ready to run.
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ gridColumn: 'span 4', padding: 12, borderRadius: 14, border: `1px solid ${tokens.colors.border.subtle}`, background: tokens.colors.surface.subtle }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>Evidence</div>
-                    <div style={{ marginTop: 10 }}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.primary }}>
-                        <input
-                          type="checkbox"
-                          checked={governanceRequireEvidence}
-                          onChange={(e) => setGovernanceRequireEvidence(e.currentTarget.checked)}
-                        />
-                        Require evidence references for execution
-                      </label>
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
-                      If enabled, execution should attach evidence per policy.
-                    </div>
-                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      type="button"
+                      onClick={() => setMoreComplianceOpen(!moreComplianceOpen)}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: 10,
+                        borderRadius: 12,
+                        border: `1px solid ${tokens.colors.border.subtle}`,
+                        background: tokens.colors.white,
+                        cursor: 'pointer',
+                      }}
+                      disabled={!isTargetSelected}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 900, color: tokens.colors.text.primary }}>More compliance options</div>
+                      <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 900 }}>{moreComplianceOpen ? 'Hide' : 'Show'} ▼</div>
+                    </button>
 
-                  <div style={{ gridColumn: 'span 4', padding: 12, borderRadius: 14, border: `1px solid ${tokens.colors.border.subtle}`, background: tokens.colors.surface.subtle }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>Activation</div>
-                    <div style={{ marginTop: 10 }}>
-                      <select
-                        value={governanceActivationStatus}
-                        onChange={(e) => setGovernanceActivationStatus(e.currentTarget.value as any)}
-                        style={{
-                          width: '100%',
-                          height: 40,
-                          padding: '0 12px',
-                          borderRadius: tokens.radius.sm,
-                          border: `1px solid ${tokens.colors.border.default}`,
-                          background: tokens.colors.white,
-                          fontSize: 14,
-                        }}
-                      >
-                        <option value="ACTIVE">Active</option>
-                        <option value="DRAFT">Draft</option>
-                        <option value="SUSPENDED">Suspended</option>
-                      </select>
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
-                      Stored as metadata; runtime lifecycle state remains governed by backend policy.
-                    </div>
+                    {moreComplianceOpen ? (
+                      <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: tokens.colors.white }}>
+                        <div style={{ fontSize: 12, fontWeight: 900, color: tokens.colors.text.primary }}>Supporting documentation</div>
+                        <div style={{ marginTop: 10 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.primary }}>
+                            <input
+                              type="checkbox"
+                              checked={governanceRequireEvidence}
+                              onChange={(e) => setGovernanceRequireEvidence(e.currentTarget.checked)}
+                              disabled={!isTargetSelected}
+                            />
+                            Require supporting documentation for each execution
+                          </label>
+                        </div>
+                        <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
+                          If enabled, executions should attach documentation per policy.
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -942,16 +1146,21 @@ export function AutomationGovernancePage() {
                   }}
                 >
                   <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 900, color: tokens.colors.text.primary }}>Advanced Technical Configuration</div>
+                    <div style={{ fontSize: 13, fontWeight: 900, color: tokens.colors.text.primary }}>Advanced options</div>
                     <div style={{ marginTop: 4, fontSize: 12, color: tokens.colors.text.muted }}>
-                      Optional. Use to override target type or provide raw JSON schedule configuration.
+                      For technical administrators only.
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 900 }}>{advancedOpen ? 'Hide' : 'Show'}</div>
+                  <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 900 }}>{advancedOpen ? 'Hide' : 'Show'} ▼</div>
                 </button>
 
                 {advancedOpen ? (
-                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
+                  <div style={{ marginTop: 10 }}>
+                    <NoticeCard kind="validation" title="Advanced options">
+                      These options are intended for technical administrators. Incorrect settings may prevent the schedule from running.
+                    </NoticeCard>
+
+                    <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12 }}>
                     <div style={{ gridColumn: 'span 4' }}>
                       <div style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.text.secondary }}>Target type override</div>
                       <div style={{ marginTop: 6 }}>
@@ -983,6 +1192,7 @@ export function AutomationGovernancePage() {
                       </div>
                     </div>
                   </div>
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -993,17 +1203,17 @@ export function AutomationGovernancePage() {
 
                 {(previewResult.warnings ?? []).length > 0 ? (
                   <div style={{ marginTop: 10 }}>
-                    <Alert tone="warning" title="Preview warnings">
+                    <NoticeCard kind="validation" title="Preview warnings">
                       {(previewResult.warnings ?? []).slice(0, 5).map((w, idx) => (
                         <div key={idx}>{String(w)}</div>
                       ))}
-                    </Alert>
+                    </NoticeCard>
                   </div>
                 ) : (
                   <div style={{ marginTop: 10 }}>
-                    <Alert tone="success" title="Preview looks good">
+                    <NoticeCard kind="success" title="Preview looks good">
                       Next execution times computed successfully.
-                    </Alert>
+                    </NoticeCard>
                   </div>
                 )}
 
@@ -1070,9 +1280,9 @@ export function AutomationGovernancePage() {
             }
           >
             {!canExecute ? (
-              <Alert tone="warning" title="Execute permission required">
+              <NoticeCard kind="permission" title="Execute permission required">
                 You have view-only access. Supervised sweep execution requires {(PERMISSIONS as any).GOVERNANCE?.AUTOMATION?.EXECUTE}.
-              </Alert>
+              </NoticeCard>
             ) : null}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 12, marginTop: 12 }}>
@@ -1136,6 +1346,21 @@ export function AutomationGovernancePage() {
             title="Lifecycle-governed Schedules"
             subtitle="Schedules are governance entities with lifecycle state, failure counters, expiry, and supervised execution." 
           >
+            <div style={{ marginBottom: 12 }}>
+              <NoticeCard kind="info" title="Reading schedules (audit-friendly)">
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div>
+                    <span style={{ fontWeight: 900 }}>Status</span> reflects lifecycle state (e.g., review required, suspended, failed).
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: 900 }}>Activation</span> reflects whether the schedule is permitted to run (active/draft/suspended).
+                  </div>
+                  <div>
+                    Evidence and review settings are enforced during execution and recorded on execution sessions for audit.
+                  </div>
+                </div>
+              </NoticeCard>
+            </div>
             <DataTable>
               <DataTable.Head sticky>
                 <DataTable.Row>
@@ -1153,7 +1378,30 @@ export function AutomationGovernancePage() {
               </DataTable.Head>
               <DataTable.Body>
                 {(schedules ?? []).length === 0 ? (
-                  <DataTable.Empty colSpan={10} title={loading ? 'Loading…' : 'No automation schedules found.'} />
+                  <tr>
+                    <td colSpan={10} style={{ padding: '20px 12px' }}>
+                      <EmptyState
+                        title={loading ? 'Loading…' : 'No automation schedules found'}
+                        description="Schedules define what will run, when it will run, and what governance controls apply (activation status, evidence requirements, and review submission)."
+                        primaryAction={
+                          canCreate
+                            ? {
+                                label: 'Create schedule',
+                                onClick: () => {
+                                  const el = document.getElementById('automation-create-schedule');
+                                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                },
+                              }
+                            : undefined
+                        }
+                        secondaryAction={{
+                          label: 'Refresh',
+                          onClick: () => refresh(),
+                          disabled: loading,
+                        }}
+                      />
+                    </td>
+                  </tr>
                 ) : (
                   (schedules ?? []).map((s, idx) => (
                     <DataTable.Row key={s.id} zebra index={idx}>
@@ -1169,7 +1417,20 @@ export function AutomationGovernancePage() {
                       <DataTable.Td>
                         <div style={{ fontSize: 12 }}>
                           {s.targetType}:{' '}
-                          <span style={{ color: tokens.colors.text.muted }}>{s.targetId}</span>
+                          <span
+                            title={String(s.targetId ?? '')}
+                            style={{
+                              color: tokens.colors.text.muted,
+                              display: 'inline-block',
+                              maxWidth: 260,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              verticalAlign: 'bottom',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {s.targetId}
+                          </span>
                         </div>
                       </DataTable.Td>
                       <DataTable.Td>
@@ -1189,7 +1450,21 @@ export function AutomationGovernancePage() {
                         <div style={{ fontSize: 12 }}>
                           <span style={{ fontWeight: 900 }}>{String(s.consecutiveFailureCount ?? 0)}</span>
                           {s.lastFailureReason ? (
-                            <span style={{ color: tokens.colors.text.muted }}> — {String(s.lastFailureReason)}</span>
+                            <span
+                              title={String(s.lastFailureReason)}
+                              style={{
+                                color: tokens.colors.text.muted,
+                                display: 'inline-block',
+                                maxWidth: 320,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                verticalAlign: 'bottom',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {' '}
+                              — {String(s.lastFailureReason)}
+                            </span>
                           ) : null}
                         </div>
                       </DataTable.Td>
@@ -1215,6 +1490,18 @@ export function AutomationGovernancePage() {
             title="Recent Execution Activity"
             subtitle="Execution sessions capture governance metadata, evidence/override linkage, escalation and outcome for audit-defensible operations." 
           >
+            <div style={{ marginBottom: 12 }}>
+              <NoticeCard kind="info" title="Reading executions (audit-friendly)">
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div>
+                    <span style={{ fontWeight: 900 }}>Severity</span> reflects policy severity from governance metadata.
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: 900 }}>Indicators</span> highlight evidence linkage, escalations, and override association.
+                  </div>
+                </div>
+              </NoticeCard>
+            </div>
             <DataTable>
               <DataTable.Head sticky>
                 <DataTable.Row>
@@ -1228,7 +1515,19 @@ export function AutomationGovernancePage() {
               </DataTable.Head>
               <DataTable.Body>
                 {recentExecutions.length === 0 ? (
-                  <DataTable.Empty colSpan={6} title={loading ? 'Loading…' : 'No execution sessions found.'} />
+                  <tr>
+                    <td colSpan={6} style={{ padding: '20px 12px' }}>
+                      <EmptyState
+                        title={loading ? 'Loading…' : 'No execution sessions found'}
+                        description="Executions provide audit evidence of what ran, what was affected, and whether governance policy raised warnings or blocks."
+                        secondaryAction={{
+                          label: 'Refresh',
+                          onClick: () => refresh(),
+                          disabled: loading,
+                        }}
+                      />
+                    </td>
+                  </tr>
                 ) : (
                   recentExecutions.map((ex, idx) => {
                     const severity = getExecutionSeverity(ex);
@@ -1278,6 +1577,58 @@ export function AutomationGovernancePage() {
           </Card>
         </div>
       </div>
+
+      {sweepConfirm ? (
+        <ModalShell
+          title="Confirm supervised execution"
+          subtitle="This will attempt explicit execution for governance-eligible schedules. Executions will be recorded for audit and may be blocked by policy."
+          onClose={() => {
+            if (sweepRunning) return;
+            setSweepConfirm(null);
+          }}
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <Button variant="secondary" disabled={sweepRunning} onClick={() => setSweepConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={sweepRunning}
+                onClick={() => {
+                  const payload = sweepConfirm;
+                  setSweepConfirm(null);
+                  if (!payload) return;
+                  executeSweep(payload);
+                }}
+              >
+                Execute now
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            <NoticeCard kind="governance" title="Execution details">
+              <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                <div>
+                  <span style={{ color: tokens.colors.text.secondary }}>Time (UTC):</span>{' '}
+                  <span style={{ fontWeight: 900, color: tokens.colors.text.primary }}>{sweepConfirm.nowIso}</span>
+                </div>
+                <div>
+                  <span style={{ color: tokens.colors.text.secondary }}>Limit:</span>{' '}
+                  <span style={{ fontWeight: 900, color: tokens.colors.text.primary }}>{String(sweepConfirm.limit)}</span>
+                </div>
+                <div>
+                  <span style={{ color: tokens.colors.text.secondary }}>Include suspended:</span>{' '}
+                  <span style={{ fontWeight: 900, color: tokens.colors.text.primary }}>{sweepIncludeSuspended ? 'Yes' : 'No'}</span>
+                </div>
+              </div>
+            </NoticeCard>
+            <div style={{ fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
+              Use dry-run mode when you only want eligibility and governance outcome preview without executing changes.
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
     </div>
   );
 }

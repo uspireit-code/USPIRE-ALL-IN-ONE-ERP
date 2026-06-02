@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
+import { EmptyState } from '../../../components/EmptyState';
 import { Input } from '../../../components/Input';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { SettingsPageHeader } from '../../../components/settings/SettingsPageHeader';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
@@ -21,6 +22,13 @@ import {
 } from '../../../services/overrideSessions';
 
 type FilterStatus = 'ALL' | OverrideSessionStatus;
+
+type PendingAction =
+  | null
+  | {
+      type: 'APPROVE' | 'REJECT' | 'REVOKE';
+      row: GovernanceOverrideSessionRow;
+    };
 
 function formatDateTime(value: string) {
   const d = new Date(value);
@@ -121,6 +129,9 @@ export function OverrideSessionsPage() {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+
   const filteredRows = useMemo(() => {
     if (filter === 'ALL') return rows;
     return (rows ?? []).filter((r) => normalizeStatus(r.status) === filter);
@@ -188,51 +199,54 @@ export function OverrideSessionsPage() {
     }
   };
 
-  const onApprove = async (row: GovernanceOverrideSessionRow) => {
+  const onApprove = (row: GovernanceOverrideSessionRow) => {
     if (!row?.id) return;
-    const ok = window.confirm('Approve override session?');
-    if (!ok) return;
-
-    setError(null);
-    setSuccess(null);
-    try {
-      await approveOverrideSession(row.id);
-      setSuccess('Override session approved.');
-      await refresh();
-    } catch (e) {
-      setError(getApiErrorMessage(e, 'Failed to approve override session'));
-    }
+    setPendingAction({ type: 'APPROVE', row });
   };
 
-  const onReject = async (row: GovernanceOverrideSessionRow) => {
+  const onReject = (row: GovernanceOverrideSessionRow) => {
     if (!row?.id) return;
-    const ok = window.confirm('Reject override session?');
-    if (!ok) return;
-
-    setError(null);
-    setSuccess(null);
-    try {
-      await rejectOverrideSession(row.id);
-      setSuccess('Override session rejected.');
-      await refresh();
-    } catch (e) {
-      setError(getApiErrorMessage(e, 'Failed to reject override session'));
-    }
+    setPendingAction({ type: 'REJECT', row });
   };
 
-  const onRevoke = async (row: GovernanceOverrideSessionRow) => {
+  const onRevoke = (row: GovernanceOverrideSessionRow) => {
     if (!row?.id) return;
-    const ok = window.confirm('Revoke override session?');
-    if (!ok) return;
+    setPendingAction({ type: 'REVOKE', row });
+  };
 
+  const onConfirmPendingAction = async () => {
+    if (!pendingAction?.row?.id) return;
+    setActionBusy(true);
     setError(null);
     setSuccess(null);
     try {
-      await revokeOverrideSession(row.id);
-      setSuccess('Override session revoked.');
+      if (pendingAction.type === 'APPROVE') {
+        await approveOverrideSession(pendingAction.row.id);
+        setSuccess('Override session approved.');
+      }
+      if (pendingAction.type === 'REJECT') {
+        await rejectOverrideSession(pendingAction.row.id);
+        setSuccess('Override session rejected.');
+      }
+      if (pendingAction.type === 'REVOKE') {
+        await revokeOverrideSession(pendingAction.row.id);
+        setSuccess('Override session revoked.');
+      }
+      setPendingAction(null);
       await refresh();
     } catch (e) {
-      setError(getApiErrorMessage(e, 'Failed to revoke override session'));
+      setError(
+        getApiErrorMessage(
+          e,
+          pendingAction.type === 'APPROVE'
+            ? 'Failed to approve override session'
+            : pendingAction.type === 'REJECT'
+              ? 'Failed to reject override session'
+              : 'Failed to revoke override session',
+        ),
+      );
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -265,14 +279,14 @@ export function OverrideSessionsPage() {
 
       <div style={{ marginTop: 14 }}>
         {error ? (
-          <Alert tone="error" title="Error">
+          <NoticeCard kind="system" title="Unable to load override sessions">
             {error}
-          </Alert>
+          </NoticeCard>
         ) : null}
         {success ? (
-          <Alert tone="success" title="Success">
+          <NoticeCard kind="success" title="Completed">
             {success}
-          </Alert>
+          </NoticeCard>
         ) : null}
       </div>
 
@@ -317,7 +331,32 @@ export function OverrideSessionsPage() {
           </DataTable.Head>
           <DataTable.Body>
             {filteredRows.length === 0 ? (
-              <DataTable.Empty colSpan={7} title={loading ? 'Loading…' : 'No override sessions found.'} />
+              <tr>
+                <td colSpan={7} style={{ padding: '20px 12px' }}>
+                  <EmptyState
+                    title={loading ? 'Loading…' : 'No override sessions found'}
+                    description="Override sessions are auditable exception windows. Adjust the filter or request a new override session when a controlled action is blocked."
+                    primaryAction={
+                      canManage
+                        ? {
+                            label: 'Request override',
+                            onClick: () => {
+                              setSuccess(null);
+                              setError(null);
+                              setCreateError(null);
+                              setCreateOpen(true);
+                            },
+                          }
+                        : undefined
+                    }
+                    secondaryAction={{
+                      label: 'Refresh',
+                      onClick: () => refresh(),
+                      disabled: loading,
+                    }}
+                  />
+                </td>
+              </tr>
             ) : (
               filteredRows.map((r, idx) => {
                 const status = normalizeStatus(r.status) ?? 'REQUESTED';
@@ -398,9 +437,9 @@ export function OverrideSessionsPage() {
           }
         >
           {createError ? (
-            <Alert tone="error" title="Could not create override session">
+            <NoticeCard kind="system" title="Could not create override session">
               {createError}
-            </Alert>
+            </NoticeCard>
           ) : null}
 
           <div style={{ display: 'grid', gap: 14, marginTop: createError ? 12 : 0 }}>
@@ -441,6 +480,70 @@ export function OverrideSessionsPage() {
 
             <div style={{ fontSize: 12, color: tokens.colors.text.muted, lineHeight: '18px' }}>
               Override sessions are audited and must be approved before use.
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+
+      {pendingAction ? (
+        <ModalShell
+          title={
+            pendingAction.type === 'APPROVE'
+              ? 'Approve override session'
+              : pendingAction.type === 'REJECT'
+                ? 'Reject override session'
+                : 'Revoke override session'
+          }
+          subtitle={
+            pendingAction.type === 'APPROVE'
+              ? 'Approving allows the exception to be used until it expires (audited).'
+              : pendingAction.type === 'REJECT'
+                ? 'Rejecting closes the request. The controlled action will remain blocked.'
+                : 'Revoking immediately invalidates the session. Any subsequent attempt will be blocked.'
+          }
+          onClose={() => {
+            if (actionBusy) return;
+            setPendingAction(null);
+          }}
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <Button variant="secondary" disabled={actionBusy} onClick={() => setPendingAction(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant={pendingAction.type === 'APPROVE' ? 'accent' : pendingAction.type === 'REJECT' ? 'secondary' : 'destructive'}
+                disabled={actionBusy}
+                onClick={onConfirmPendingAction}
+              >
+                {actionBusy
+                  ? 'Working…'
+                  : pendingAction.type === 'APPROVE'
+                    ? 'Approve'
+                    : pendingAction.type === 'REJECT'
+                      ? 'Reject'
+                      : 'Revoke'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 12, color: tokens.colors.text.secondary, fontWeight: 800 }}>Session details</div>
+            <div style={{ display: 'grid', gap: 6, fontSize: 13, color: tokens.colors.text.primary }}>
+              <div>
+                <span style={{ color: tokens.colors.text.secondary }}>Override Code:</span> {pendingAction.row.overrideCode}
+              </div>
+              <div>
+                <span style={{ color: tokens.colors.text.secondary }}>Entry Point:</span> {pendingAction.row.entryPoint}
+              </div>
+              <div>
+                <span style={{ color: tokens.colors.text.secondary }}>Expires:</span>{' '}
+                {pendingAction.row.expiresAt ? formatDateTime(pendingAction.row.expiresAt) : '—'}
+              </div>
+              {pendingAction.row.reason ? (
+                <div>
+                  <span style={{ color: tokens.colors.text.secondary }}>Reason:</span> {pendingAction.row.reason}
+                </div>
+              ) : null}
             </div>
           </div>
         </ModalShell>

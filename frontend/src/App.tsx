@@ -915,10 +915,49 @@ export default function App() {
                   </PermissionOnlyRoute>
                 }
               />
-              <Route path="finance/gl/recurring" element={<RecurringTemplatesPage />} />
-              <Route path="finance/gl/recurring/new" element={<RecurringTemplateEditorPage />} />
-              <Route path="finance/gl/recurring/:id" element={<RecurringTemplateEditorPage />} />
-              <Route path="finance/gl/recurring/:id/generate" element={<RecurringGeneratePage />} />
+              <Route
+                path="finance/gl/recurring"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.GL.RECURRING_VIEW,
+                      PERMISSIONS.GL.RECURRING_MANAGE,
+                      PERMISSIONS.GL.RECURRING_GENERATE,
+                    ]}
+                  >
+                    <RecurringTemplatesPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/gl/recurring/new"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.GL.RECURRING_MANAGE}>
+                    <RecurringTemplateEditorPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/gl/recurring/:id"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.GL.RECURRING_MANAGE}>
+                    <RecurringTemplateEditorPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="finance/gl/recurring/:id/generate"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.GL.RECURRING_GENERATE,
+                      PERMISSIONS.GL.RECURRING_MANAGE,
+                    ]}
+                  >
+                    <RecurringGeneratePage />
+                  </PermissionAnyRoute>
+                }
+              />
               <Route
                 path="finance/gl/review"
                 element={

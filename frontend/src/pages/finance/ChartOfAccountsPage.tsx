@@ -904,8 +904,19 @@ export function ChartOfAccountsPage() {
   };
 
   return (
-    <div className="financePage" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {!hasRootCategories ? (
+<div
+  className="financePage"
+  style={{
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    height: '100%',
+  }}
+>
+        {!hasRootCategories ? (
         <Alert tone="info" title="Chart of Accounts setup required">
           No Chart of Accounts structure configured. Please create COA Root Categories in Settings before importing accounts.
         </Alert>
@@ -961,10 +972,51 @@ export function ChartOfAccountsPage() {
           ) : null}
         </div>
       </div>
+<div
+  className="coa-layout"
+  style={{
+    display: 'flex',
+    gap: 16,
 
-      <div className="coa-layout">
-        <div className="coaAccountsPanel coaCoaAccountsPanel coa-left">
-          <div className="coaAccountsCard">
+    alignItems: 'stretch',
+
+    flex: '1 1 0',
+
+    minHeight: 0,
+
+    overflow: 'hidden',
+  }}
+>
+      
+<div
+  className="coaAccountsPanel coaCoaAccountsPanel coa-left"
+  style={{
+    flex: '0 0 40%',
+    minWidth: 420,
+    maxWidth: 560,
+
+    display: 'flex',
+    flexDirection: 'column',
+
+    minHeight: 0,
+    alignSelf: 'stretch',
+
+    overflow: 'hidden',
+  }}
+>
+<div
+  className="coaAccountsCard"
+  style={{
+    display: 'flex',
+    flexDirection: 'column',
+
+    flex: 1,
+
+    minHeight: 0,
+
+    overflow: 'hidden',
+  }}
+>
             <div className="coaAccountsHeader" style={{ padding: 14, borderBottom: `1px solid ${tokens.colors.border.subtle}`, fontWeight: 850 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <div>Accounts</div>
@@ -979,14 +1031,45 @@ export function ChartOfAccountsPage() {
               </div>
             </div>
 
-            <div className="coaAccountsScroll coa-list" style={{ scrollBehavior: 'smooth', marginTop: 0 }}>
+<div
+  className="coaAccountsScroll coa-list"
+  style={{
+    scrollBehavior: 'smooth',
+
+    overflowY: 'auto',
+    overflowX: 'hidden',
+
+    flex: 1,
+
+    minHeight: 0,
+
+
+    paddingBottom: 40,
+
+    WebkitOverflowScrolling: 'touch',
+  }}
+>
               {loading ? <div style={{ padding: 10, color: tokens.colors.text.secondary }}>Loading…</div> : null}
               {!loading ? filteredTree.map((n) => renderNode(n, 0)) : null}
             </div>
           </div>
         </div>
 
-        <div className="coaDetailsPanel coa-right" style={{ flex: 1 }}>
+        <div
+  className="coaDetailsPanel coa-right"
+  style={{
+    flex: '1 1 0',
+    minWidth: 0,
+
+    display: 'flex',
+    flexDirection: 'column',
+
+    minHeight: 0,
+    alignSelf: 'stretch',
+
+    overflow: 'hidden',
+  }}
+>
           <div
             style={{
               padding: 14,
@@ -1049,8 +1132,29 @@ export function ChartOfAccountsPage() {
             </div>
           </div>
 
-          <div style={{ padding: 14, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="coaDetailsScroll">
+          <div
+  style={{
+    padding: 14,
+
+    display: 'flex',
+    flexDirection: 'column',
+
+    flex: 1,
+
+    minHeight: 0,
+
+    overflow: 'hidden',
+  }}
+>
+            <div
+  className="coaDetailsScroll"
+  style={{
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+  }}
+>
               {editMode === 'view' && !selected ? (
                 <div style={{ color: tokens.colors.text.secondary }}>Select an account from the tree to view details.</div>
               ) : null}

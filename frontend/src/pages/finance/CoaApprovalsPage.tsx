@@ -350,14 +350,6 @@ export function CoaApprovalsPage() {
   }, [canApprove]);
 
   useEffect(() => {
-    if (!selected) return;
-    // eslint-disable-next-line no-console
-    console.log('APPROVAL DATA:', selected);
-    // eslint-disable-next-line no-console
-    console.log('ACCOUNT OBJECT:', (selected as any)?.account);
-  }, [selected?.id]);
-
-  useEffect(() => {
     let cancelled = false;
     const isBatch =
       String((selected as any)?.requestType ?? '').toUpperCase() === 'IMPORT_BATCH' &&
@@ -592,7 +584,6 @@ export function CoaApprovalsPage() {
                 <div className="approvals-scroll">
                   {pendingAccountRequests.map((r) => {
                     const isSelected = selectedId === r.id;
-                    if (import.meta.env.DEV) console.log('ROW DATA:', r);
 
                     const rawPayloadJson: any = (r as any)?.payloadJson;
                     let payloadObj: any = null;

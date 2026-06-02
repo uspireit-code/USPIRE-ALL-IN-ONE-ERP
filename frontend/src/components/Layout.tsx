@@ -986,6 +986,10 @@ export function Layout() {
     reports: false,
   });
 
+  const [openGlL3, setOpenGlL3] = useState<{ recurring: boolean }>({
+    recurring: false,
+  });
+
   const path = location.pathname;
 
   const isFinanceActive = useMemo(() => {
@@ -1008,6 +1012,18 @@ export function Layout() {
       reports: path.startsWith('/reports'),
     };
   }, [path]);
+
+  const glActiveL3 = useMemo(() => {
+    return {
+      recurring: path.startsWith('/finance/gl/recurring'),
+    };
+  }, [path]);
+
+  useEffect(() => {
+    if (glActiveL3.recurring) {
+      setOpenGlL3((s) => ({ ...s, recurring: true }));
+    }
+  }, [glActiveL3.recurring]);
 
   const Indent = (props: { level: 2 | 3; children: React.ReactNode }) => {
     const pad = props.level === 2 ? 12 : 28;
@@ -1394,6 +1410,7 @@ export function Layout() {
   const showGlReviewQueue = hasPermission(PERMISSIONS.GL.APPROVE);
   const showGlPostQueue = hasPermission(PERMISSIONS.GL.FINAL_POST);
   const showGlRecurring =
+    hasPermission(PERMISSIONS.GL.RECURRING_VIEW) ||
     hasPermission(PERMISSIONS.GL.RECURRING_MANAGE) ||
     hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
   const showGlRiskIntelligence = showGlView;
@@ -1766,7 +1783,23 @@ export function Layout() {
                           />
                         ) : null}
                         {showGlRiskIntelligence ? <SidebarLink to="/finance/gl/risk" end label="Risk Intelligence" icon={<ShieldIcon />} level={3} /> : null}
-                        {showGlRecurring ? <SidebarLink to="/finance/gl/recurring" end label="Recurring Journals" icon={<RepeatIcon />} level={3} /> : null}
+                        {showGlRecurring ? (
+                          <>
+                            <SidebarToggle
+                              label="Recurring Journals"
+                              icon={<RepeatIcon />}
+                              open={openGlL3.recurring}
+                              active={glActiveL3.recurring}
+                              level={3}
+                              onToggle={() => setOpenGlL3((s) => ({ ...s, recurring: !s.recurring }))}
+                            />
+                            {openGlL3.recurring ? (
+                              <div style={{ paddingLeft: 16, display: 'grid', gap: 6 }}>
+                                <SidebarLink to="/finance/gl/recurring" end label="Templates" icon={<FileTextIcon />} level={3} />
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
                       </Indent>
                     ) : null}
 
@@ -2430,20 +2463,41 @@ export function Layout() {
       <ProfileDrawer />
 
       <div
-        className="mainContent"
-        style={{
-          marginLeft: SIDEBAR_WIDTH,
-          padding: 24,
-          paddingTop: 24 + (showTopBar ? TOPBAR_HEIGHT : 0),
-          boxSizing: 'border-box',
-        }}
-      >
-        <div className="pageContent" style={{ width: '100%', maxWidth: 1400, margin: '0 auto' }}>
-          <AuthBootstrapGate>
-            <Outlet />
-          </AuthBootstrapGate>
-        </div>
-      </div>
-    </div>
+  className="mainContent"
+  style={{
+    marginLeft: SIDEBAR_WIDTH,
+    padding: 24,
+    paddingTop: 24 + (showTopBar ? TOPBAR_HEIGHT : 0),
+    boxSizing: 'border-box',
+
+    height: '100vh',
+    overflow: 'hidden',
+
+    display: 'flex',
+    flexDirection: 'column',
+  }}
+>
+  <div
+    className="pageContent"
+    style={{
+      width: '100%',
+      maxWidth: 1400,
+      margin: '0 auto',
+
+      flex: 1,
+      minHeight: 0,
+
+      display: 'flex',
+      flexDirection: 'column',
+
+      overflow: 'hidden',
+    }}
+  >
+    <AuthBootstrapGate>
+      <Outlet />
+    </AuthBootstrapGate>
+  </div>
+</div>
+</div>
   );
 }

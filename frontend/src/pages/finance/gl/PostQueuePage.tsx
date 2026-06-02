@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
+import { Button } from '../../../components/Button';
 import { DataTable } from '../../../components/DataTable';
+import { EmptyState } from '../../../components/EmptyState';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
 import { listPostQueue, postJournal, returnJournalToReview, type JournalPostQueueItem } from '../../../services/gl';
@@ -112,9 +114,9 @@ export function PostQueuePage() {
       <div>
         <h2>Post Queue</h2>
         <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Access Denied">
+          <NoticeCard kind="permission" title="Access restricted">
             You do not have permission to access the Post Queue.
-          </Alert>
+          </NoticeCard>
         </div>
       </div>
     );
@@ -145,9 +147,9 @@ export function PostQueuePage() {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <h2>Post Queue</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button onClick={refresh} disabled={loading}>
+          <Button size="sm" variant="secondary" onClick={() => refresh()} disabled={loading}>
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -163,14 +165,27 @@ export function PostQueuePage() {
 
       {error ? (
         <div style={{ marginTop: 14 }}>
-          <Alert tone={error.toLowerCase().includes('403') ? 'warning' : 'error'} title={error.toLowerCase().includes('403') ? 'Blocked' : 'Error'}>
+          <NoticeCard
+            kind={error.toLowerCase().includes('403') ? 'governance' : 'system'}
+            title={error.toLowerCase().includes('403') ? 'Posting blocked by controls' : 'Unable to load post queue'}
+          >
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
       {!loading && !error && items.length === 0 ? (
-        <div style={{ marginTop: 12, color: tokens.colors.text.muted }}>No journals pending posting.</div>
+        <div style={{ marginTop: 12, maxWidth: 980 }}>
+          <EmptyState
+            title="No journals pending posting"
+            description="Approved journals appear here until they are posted to the ledger."
+            primaryAction={{
+              label: 'Refresh',
+              onClick: () => refresh(),
+              disabled: loading,
+            }}
+          />
+        </div>
       ) : null}
 
       {!loading && !error && items.length > 0 ? (
@@ -279,9 +294,16 @@ export function PostQueuePage() {
             </div>
             <div style={{ fontSize: 13, color: tokens.colors.text.primary }}>
               {confirmItem?.journalNumber ? `Journal J${String(confirmItem.journalNumber).padStart(6, '0')}` : 'Journal'}
+              {confirmItem?.reference ? ` • ${confirmItem.reference}` : ''}
+            </div>
+            <div style={{ fontSize: 12, lineHeight: '18px', color: tokens.colors.text.secondary }}>
+              This will create an auditable posting event with your user identity and timestamp. If posting is blocked by governance controls,
+              review the error message, correct the journal, or request an override session.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => {
                   if (busyId) return;
                   setConfirmId(null);
@@ -289,10 +311,10 @@ export function PostQueuePage() {
                 disabled={Boolean(busyId)}
               >
                 Cancel
-              </button>
-              <button onClick={onConfirmPost} disabled={Boolean(busyId)} style={{ fontWeight: 750 }}>
-                {busyId ? 'Posting…' : 'Confirm Post'}
-              </button>
+              </Button>
+              <Button size="sm" variant="accent" onClick={onConfirmPost} disabled={Boolean(busyId)}>
+                {busyId ? 'Posting…' : 'Post to Ledger'}
+              </Button>
             </div>
           </div>
         </>

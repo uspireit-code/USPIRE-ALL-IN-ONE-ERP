@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
+import { Button } from '../../../components/Button';
+import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
+import { Input } from '../../../components/Input';
+import { NoticeCard } from '../../../components/NoticeCard';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
 import { listAllGlAccounts } from '../../../services/gl';
 import {
+  approveRecurringTemplate,
+  archiveRecurringTemplate,
   createRecurringTemplate,
   listRecurringTemplates,
+  reactivateRecurringTemplate,
+  submitRecurringTemplate,
+  suspendRecurringTemplate,
   updateRecurringTemplate,
   type RecurringJournalFrequency,
   type RecurringJournalTemplate,
@@ -38,8 +47,11 @@ export function RecurringTemplateEditorPage() {
 
   const canManage = hasPermission(PERMISSIONS.GL.RECURRING_MANAGE);
   const canGenerate = hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
+  const canApprove = hasPermission(PERMISSIONS.GL.APPROVE);
   const canAccess = canManage || canGenerate;
   const readOnly = !canManage;
+
+  const actorUserId = state.me?.actingUser?.id ?? state.me?.user?.id ?? null;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,7 +65,6 @@ export function RecurringTemplateEditorPage() {
   const [startDate, setStartDate] = useState(toIsoDate(new Date()));
   const [endDate, setEndDate] = useState<string>('');
   const [nextRunDate, setNextRunDate] = useState(toIsoDate(new Date()));
-  const [isActive, setIsActive] = useState(true);
   const [referenceTemplate, setReferenceTemplate] = useState('');
   const [descriptionTemplate, setDescriptionTemplate] = useState('');
 
@@ -67,6 +78,106 @@ export function RecurringTemplateEditorPage() {
     { lineOrder: 1, accountId: '', descriptionTemplate: '', debitAmount: 0, creditAmount: 0 },
     { lineOrder: 2, accountId: '', descriptionTemplate: '', debitAmount: 0, creditAmount: 0 },
   ]);
+
+  const lifecycleStatus = useMemo(() => {
+    if (!template) return 'DRAFT';
+    return (template as any).status ?? (template.isActive ? 'APPROVED' : 'SUSPENDED');
+  }, [template]);
+
+  const isSelfCreatedTemplate = useMemo(() => {
+    if (!template) return false;
+    if (!actorUserId) return false;
+    return String((template as any).createdById ?? '') === String(actorUserId);
+  }, [template, actorUserId]);
+
+  const canGenerateNow = useMemo(() => {
+    return Boolean(canGenerate && !isNew && template && String(lifecycleStatus) === 'APPROVED');
+  }, [canGenerate, isNew, template, lifecycleStatus]);
+
+  const [confirmAction, setConfirmAction] = useState<
+    | null
+    | {
+        type: 'SUBMIT' | 'APPROVE' | 'SUSPEND' | 'ARCHIVE' | 'REACTIVATE';
+        title: string;
+        subtitle: string;
+      }
+  >(null);
+  const [actionReason, setActionReason] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+
+  function ModalShell(props: {
+    title: string;
+    subtitle?: string;
+    onClose: () => void;
+    children: React.ReactNode;
+    footer?: React.ReactNode;
+    width?: number;
+  }) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(11,12,30,0.38)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16,
+          zIndex: 50,
+        }}
+        onMouseDown={(e) => {
+          if (e.currentTarget === e.target) props.onClose();
+        }}
+      >
+        <div
+          style={{
+            width: props.width ?? 560,
+            maxWidth: '96vw',
+            maxHeight: '85vh',
+            background: '#fff',
+            borderRadius: 16,
+            border: '1px solid rgba(11,12,30,0.08)',
+            boxShadow: '0 10px 30px rgba(11,12,30,0.20)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div
+            style={{
+              padding: 16,
+              borderBottom: '1px solid rgba(11,12,30,0.08)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: tokens.colors.text.primary }}>{props.title}</div>
+              {props.subtitle ? <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(11,12,30,0.62)' }}>{props.subtitle}</div> : null}
+            </div>
+            <Button variant="ghost" size="sm" onClick={props.onClose}>
+              Close
+            </Button>
+          </div>
+          <div style={{ padding: 16, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>{props.children}</div>
+          {props.footer ? (
+            <div
+              style={{
+                padding: 16,
+                borderTop: '1px solid rgba(11,12,30,0.08)',
+                boxShadow: '0 -8px 20px rgba(11,12,30,0.06)',
+                background: '#fff',
+              }}
+            >
+              {props.footer}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   const lineXorErrorsByIndex = useMemo(() => {
     const errors = new Map<number, string>();
@@ -87,6 +198,102 @@ export function RecurringTemplateEditorPage() {
   }, [lines]);
 
   const balanceOk = totals.net === 0 && totals.totalDebit > 0;
+
+  const pageMaxWidth = 1100;
+  const controlLabelStyle: React.CSSProperties = {
+    display: 'grid',
+    gap: 6,
+  };
+
+  const runLifecycleAction = async () => {
+    if (!template || !confirmAction) return;
+    setActionBusy(true);
+    setError(null);
+    try {
+      const reason = actionReason.trim() ? actionReason.trim() : undefined;
+      const next =
+        confirmAction.type === 'SUBMIT'
+          ? await submitRecurringTemplate(template.id, { reason })
+          : confirmAction.type === 'APPROVE'
+            ? await approveRecurringTemplate(template.id, { reason })
+            : confirmAction.type === 'SUSPEND'
+              ? await suspendRecurringTemplate(template.id, { reason })
+              : confirmAction.type === 'ARCHIVE'
+                ? await archiveRecurringTemplate(template.id, { reason })
+                : await reactivateRecurringTemplate(template.id, { reason });
+
+      setTemplate(next);
+      setToast('Status updated');
+      window.setTimeout(() => setToast(null), 2500);
+      setConfirmAction(null);
+      setActionReason('');
+    } catch (e: any) {
+      setError(getApiErrorMessage(e, 'Failed to update status'));
+    } finally {
+      setActionBusy(false);
+    }
+  };
+  const labelTextStyle: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 750,
+    color: tokens.colors.text.primary,
+  };
+  const helperTextStyle: React.CSSProperties = {
+    fontSize: 12,
+    color: tokens.colors.text.muted,
+    lineHeight: '16px',
+  };
+  const selectStyle: React.CSSProperties = {
+    width: '100%',
+    height: 40,
+    padding: '0 12px',
+    borderRadius: tokens.radius.sm,
+    border: `1px solid ${tokens.colors.border.default}`,
+    background: tokens.colors.white,
+    color: tokens.colors.text.primary,
+    fontSize: 14,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+  const textareaStyle: React.CSSProperties = {
+    width: '100%',
+    minHeight: 72,
+    padding: '10px 12px',
+    borderRadius: tokens.radius.sm,
+    border: `1px solid ${tokens.colors.border.default}`,
+    background: tokens.colors.white,
+    color: tokens.colors.text.primary,
+    fontSize: 14,
+    outline: 'none',
+    boxSizing: 'border-box',
+    resize: 'vertical',
+  };
+  const lineNumberInputStyle: React.CSSProperties = {
+    width: 64,
+    height: 38,
+    padding: '0 10px',
+    borderRadius: tokens.radius.sm,
+    border: `1px solid ${tokens.colors.border.default}`,
+    background: tokens.colors.white,
+    color: tokens.colors.text.primary,
+    fontSize: 14,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+  const amountInputStyle: React.CSSProperties = {
+    width: 132,
+    height: 38,
+    padding: '0 10px',
+    borderRadius: tokens.radius.sm,
+    border: `1px solid ${tokens.colors.border.default}`,
+    background: tokens.colors.white,
+    color: tokens.colors.text.primary,
+    fontSize: 14,
+    fontVariantNumeric: 'tabular-nums',
+    outline: 'none',
+    boxSizing: 'border-box',
+    textAlign: 'right',
+  };
 
   useEffect(() => {
     if (!canAccess) return;
@@ -116,7 +323,6 @@ export function RecurringTemplateEditorPage() {
         setStartDate(found.startDate.slice(0, 10));
         setEndDate(found.endDate ? found.endDate.slice(0, 10) : '');
         setNextRunDate(found.nextRunDate.slice(0, 10));
-        setIsActive(Boolean(found.isActive));
         setReferenceTemplate(found.referenceTemplate ?? '');
         setDescriptionTemplate(found.descriptionTemplate ?? '');
         setIntent(String((found as any).intent ?? 'OPERATIONAL'));
@@ -162,7 +368,6 @@ export function RecurringTemplateEditorPage() {
         startDate: new Date(`${startDate}T00:00:00.000Z`).toISOString(),
         endDate: endDate.trim() ? new Date(`${endDate}T00:00:00.000Z`).toISOString() : undefined,
         nextRunDate: new Date(`${nextRunDate}T00:00:00.000Z`).toISOString(),
-        isActive,
         referenceTemplate: referenceTemplate.trim(),
         descriptionTemplate: descriptionTemplate.trim() ? descriptionTemplate.trim() : undefined,
         intent: String(intent ?? '').trim(),
@@ -209,17 +414,17 @@ export function RecurringTemplateEditorPage() {
     return (
       <div>
         <h2>Recurring Journal Template</h2>
-        <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Access Denied">
-            You do not have permission to access Recurring Journals.
-          </Alert>
+        <div style={{ marginTop: 14, maxWidth: 820 }}>
+          <NoticeCard kind="permission" title="Access restricted">
+            You do not have permission to access recurring journal templates.
+          </NoticeCard>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div style={{ maxWidth: pageMaxWidth }}>
       {toast ? (
         <div
           style={{
@@ -241,235 +446,547 @@ export function RecurringTemplateEditorPage() {
         </div>
       ) : null}
 
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h2>{isNew ? 'New Recurring Journal Template' : readOnly ? 'View Recurring Journal Template' : 'Edit Recurring Journal Template'}</h2>
-          <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.text.muted }}>
-            Placeholders supported: {'{MONTH}'}, {'{YEAR}'}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          paddingBottom: 8,
+          borderBottom: `1px solid ${tokens.colors.border.subtle}`,
+        }}
+      >
+        <div style={{ minWidth: 280 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/finance/gl/recurring')}>
+              Back
+            </Button>
+            <h2 style={{ margin: 0 }}>
+              {isNew
+                ? 'New Recurring Journal Template'
+                : readOnly
+                  ? 'View Recurring Journal Template'
+                  : 'Edit Recurring Journal Template'}
+            </h2>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 13, color: tokens.colors.text.muted, maxWidth: 820 }}>
+            Configure a controlled recurring journal template. Generated journals still pass through approval governance and audit controls.
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.text.muted }}>
+            Placeholders supported in reference/description: {'{MONTH}'}, {'{YEAR}'}
           </div>
         </div>
+
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link to="/finance/gl/recurring">Back to Templates</Link>
-          {canGenerate && !isNew && template ? (
-            <button onClick={() => navigate(`/finance/gl/recurring/${template.id}/generate`)}>Generate Journal</button>
+          {!isNew && template ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <StatusBadge state={String(lifecycleStatus)} />
+              {canGenerate ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate(`/finance/gl/recurring/${template.id}/generate`)}
+                  disabled={!canGenerateNow}
+                >
+                  Generate Journal
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!isNew && template ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {canManage && String(lifecycleStatus) === 'DRAFT' ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: 'SUBMIT',
+                      title: 'Submit for approval?',
+                      subtitle: 'This will lock the template for editing until approved.',
+                    })
+                  }
+                >
+                  Submit
+                </Button>
+              ) : null}
+
+              {canApprove && String(lifecycleStatus) === 'PENDING_APPROVAL' ? (
+                isSelfCreatedTemplate ? (
+                  <div style={{ fontSize: 12, color: tokens.colors.text.muted, fontWeight: 650, maxWidth: 240 }}>
+                    Maker-checker: you cannot approve a template you created.
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() =>
+                      setConfirmAction({
+                        type: 'APPROVE',
+                        title: 'Approve template?',
+                        subtitle:
+                          'Approval enables generation. This action is audit recorded and does not bypass journal approval workflow.',
+                      })
+                    }
+                  >
+                    Approve
+                  </Button>
+                )
+              ) : null}
+
+              {canApprove && String(lifecycleStatus) === 'APPROVED' ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: 'SUSPEND',
+                      title: 'Suspend template?',
+                      subtitle: 'Suspended templates cannot be generated until reactivated.',
+                    })
+                  }
+                >
+                  Suspend
+                </Button>
+              ) : null}
+
+              {canApprove && String(lifecycleStatus) === 'SUSPENDED' ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: 'REACTIVATE',
+                      title: 'Reactivate template?',
+                      subtitle: 'Reactivated templates return to Approved status.',
+                    })
+                  }
+                >
+                  Reactivate
+                </Button>
+              ) : null}
+
+              {canApprove && (String(lifecycleStatus) === 'APPROVED' || String(lifecycleStatus) === 'SUSPENDED') ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: 'ARCHIVE',
+                      title: 'Archive template?',
+                      subtitle: 'Archived templates cannot be transitioned and cannot be generated.',
+                    })
+                  }
+                >
+                  Archive
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
 
       {loading ? <div style={{ marginTop: 12 }}>Loading…</div> : null}
       {error ? (
-        <div style={{ marginTop: 12 }}>
-          <Alert tone="error" title="Error">
+        <div style={{ marginTop: 12, maxWidth: 820 }}>
+          <NoticeCard kind="system" title="Unable to load template">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
-      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-        <label>
-          Template name
-          <input value={name} onChange={(e) => setName(e.target.value)} disabled={readOnly} />
-        </label>
-
-        <label>
-          Frequency
-          <select value={frequency} onChange={(e) => setFrequency(e.target.value as any)} disabled={readOnly}>
-            <option value="MONTHLY">MONTHLY</option>
-            <option value="QUARTERLY">QUARTERLY</option>
-            <option value="YEARLY">YEARLY</option>
-          </select>
-        </label>
-
-        <label>
-          Start date
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={readOnly} />
-        </label>
-
-        <label>
-          End date (optional)
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={readOnly} />
-        </label>
-
-        <label>
-          Next run date
-          <input type="date" value={nextRunDate} onChange={(e) => setNextRunDate(e.target.value)} disabled={readOnly} />
-        </label>
-
-        <label>
-          Status
-          <select value={isActive ? 'ACTIVE' : 'INACTIVE'} onChange={(e) => setIsActive(e.target.value === 'ACTIVE')} disabled={readOnly}>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-        </label>
-
-        <label style={{ gridColumn: '1 / -1' }}>
-          Reference template
-          <input value={referenceTemplate} onChange={(e) => setReferenceTemplate(e.target.value)} disabled={readOnly} />
-        </label>
-
-        <label style={{ gridColumn: '1 / -1' }}>
-          Intent *
-          <select value={intent} onChange={(e) => setIntent(e.target.value)} disabled={readOnly}>
-            <option value="OPERATIONAL">OPERATIONAL</option>
-            <option value="ACCRUAL">ACCRUAL</option>
-            <option value="ADJUSTMENT">ADJUSTMENT</option>
-            <option value="CORRECTION">CORRECTION</option>
-            <option value="REVERSAL">REVERSAL</option>
-            <option value="RECLASSIFICATION">RECLASSIFICATION</option>
-            <option value="OPENING_BALANCE">OPENING_BALANCE</option>
-            <option value="CLOSING">CLOSING</option>
-            <option value="TAX">TAX</option>
-            <option value="INTERCOMPANY">INTERCOMPANY</option>
-            <option value="AUDIT_ADJUSTMENT">AUDIT_ADJUSTMENT</option>
-            <option value="SYSTEM_GENERATED">SYSTEM_GENERATED</option>
-          </select>
-        </label>
-
-        <label style={{ gridColumn: '1 / -1' }}>
-          Intent Notes
-          <textarea value={intentNotes} onChange={(e) => setIntentNotes(e.target.value)} disabled={readOnly} rows={3} />
-        </label>
-
-        <label style={{ gridColumn: '1 / -1' }}>
-          Intent Reference
-          <input value={intentReference} onChange={(e) => setIntentReference(e.target.value)} disabled={readOnly} />
-        </label>
-
-        <label style={{ gridColumn: '1 / -1' }}>
-          Description template (optional)
-          <input value={descriptionTemplate} onChange={(e) => setDescriptionTemplate(e.target.value)} disabled={readOnly} />
-        </label>
+      <div style={{ marginTop: 12, maxWidth: 820 }}>
+        <NoticeCard kind="info" title="Governance notice">
+          Recurring journal generation does not bypass journal approval or posting controls. Generated journals still enter the standard GL governance workflow.
+        </NoticeCard>
       </div>
 
-      <div style={{ marginTop: 16, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <h3 style={{ margin: 0 }}>Template lines</h3>
-        {!readOnly ? <button onClick={onAddLine}>Add line</button> : null}
-      </div>
+      <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
+        <Card
+          title="Template setup"
+          subtitle="Define scheduling, activation, and reference metadata used when journals are generated."
+          style={{ padding: tokens.spacing.x2 }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 10,
+              alignItems: 'start',
+            }}
+          >
+            <label style={controlLabelStyle}>
+              <div style={labelTextStyle}>Template name</div>
+              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={readOnly} placeholder="e.g. Monthly rent accrual" />
+              <div style={helperTextStyle}>Unique per tenant. Use an operationally recognizable name.</div>
+            </label>
 
-      <DataTable style={{ marginTop: 10 }}>
-        <DataTable.Head>
-          <tr>
-            <DataTable.Th style={{ width: 64 }}>#</DataTable.Th>
-            <DataTable.Th>Account</DataTable.Th>
-            <DataTable.Th>Description template</DataTable.Th>
-            <DataTable.Th align="right">Debit</DataTable.Th>
-            <DataTable.Th align="right">Credit</DataTable.Th>
-            <DataTable.Th align="right">Actions</DataTable.Th>
-          </tr>
-        </DataTable.Head>
-        <DataTable.Body>
-          {lines.map((l, idx) => {
-            const xorError = lineXorErrorsByIndex.get(idx);
-            return (
-              <DataTable.Row key={`${l.lineOrder}-${idx}`} zebra index={idx}>
-                <DataTable.Td>
-                  <input
-                    type="number"
-                    value={l.lineOrder}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, lineOrder: Number.isFinite(v) ? v : x.lineOrder } : x)));
-                    }}
-                    disabled={readOnly}
-                    style={{ width: 60 }}
-                  />
-                </DataTable.Td>
-                <DataTable.Td>
-                  <select
-                    value={l.accountId}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, accountId: v } : x)));
-                    }}
-                    disabled={readOnly}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">Select account…</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.code} — {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </DataTable.Td>
-                <DataTable.Td>
-                  <input
-                    value={l.descriptionTemplate}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, descriptionTemplate: v } : x)));
-                    }}
-                    disabled={readOnly}
-                    style={{ width: '100%' }}
-                    placeholder="Optional"
-                  />
-                </DataTable.Td>
-                <DataTable.Td align="right">
-                  <input
-                    type="number"
-                    value={l.debitAmount}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, debitAmount: Number.isFinite(v) ? v : 0 } : x)));
-                    }}
-                    disabled={readOnly}
-                    style={{ width: 120, textAlign: 'right' }}
-                  />
-                </DataTable.Td>
-                <DataTable.Td align="right">
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    <input
-                      type="number"
-                      value={l.creditAmount}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, creditAmount: Number.isFinite(v) ? v : 0 } : x)));
-                      }}
-                      disabled={readOnly}
-                      style={{ width: 120, textAlign: 'right' }}
-                    />
-                    {xorError ? <div style={{ color: 'crimson', fontSize: 12 }}>{xorError}</div> : null}
+            <label style={controlLabelStyle}>
+              <div style={labelTextStyle}>Frequency</div>
+              <select value={frequency} onChange={(e) => setFrequency(e.target.value as any)} disabled={readOnly} style={selectStyle}>
+                <option value="MONTHLY">Monthly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="YEARLY">Yearly</option>
+              </select>
+              <div style={helperTextStyle}>Controls how scheduling dates are interpreted operationally.</div>
+            </label>
+
+            <div style={controlLabelStyle}>
+              <div style={labelTextStyle}>Lifecycle status</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 40 }}>
+                <StatusBadge state={String(lifecycleStatus)} />
+                <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>
+                  Templates must be approved before generation.
+                </div>
+              </div>
+              <div style={helperTextStyle}>Use the lifecycle actions in the header to submit, approve, suspend, archive, or reactivate.</div>
+            </div>
+
+            <label style={controlLabelStyle}>
+              <div style={labelTextStyle}>Start date</div>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={readOnly} />
+              <div style={helperTextStyle}>The earliest date the schedule is considered valid.</div>
+            </label>
+
+            <label style={controlLabelStyle}>
+              <div style={labelTextStyle}>End date</div>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={readOnly} placeholder="Optional" />
+              <div style={helperTextStyle}>Optional. Leave blank for an indefinite schedule.</div>
+            </label>
+
+            <label style={controlLabelStyle}>
+              <div style={labelTextStyle}>Next run date</div>
+              <Input type="date" value={nextRunDate} onChange={(e) => setNextRunDate(e.target.value)} disabled={readOnly} />
+              <div style={helperTextStyle}>Used to track the next planned generation point.</div>
+            </label>
+
+            <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 12, marginTop: 2 }}>
+              <label style={controlLabelStyle}>
+                <div style={labelTextStyle}>Reference template</div>
+                <Input
+                  value={referenceTemplate}
+                  onChange={(e) => setReferenceTemplate(e.target.value)}
+                  disabled={readOnly}
+                  placeholder="e.g. RENT-{MONTH}-{YEAR}"
+                />
+                <div style={helperTextStyle}>
+                  Required. This becomes the generated journal reference (supports {'{MONTH}'}, {'{YEAR}'}).
+                </div>
+              </label>
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          title="Governance & intent"
+          subtitle="Capture intent metadata for audit, governance reviews, and downstream controls."
+          style={{ padding: tokens.spacing.x2 }}
+        >
+          <div style={{ marginBottom: 10, maxWidth: 920 }}>
+            <NoticeCard kind="governance" tone="info" title="Governance reminder">
+              Generated journals still pass through approval governance and audit controls.
+            </NoticeCard>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 10,
+              alignItems: 'start',
+            }}
+          >
+            <label style={controlLabelStyle}>
+              <div style={labelTextStyle}>Intent</div>
+              <select value={intent} onChange={(e) => setIntent(e.target.value)} disabled={readOnly} style={selectStyle}>
+                <option value="OPERATIONAL">Operational</option>
+                <option value="ACCRUAL">Accrual</option>
+                <option value="ADJUSTMENT">Adjustment</option>
+                <option value="CORRECTION">Correction</option>
+                <option value="REVERSAL">Reversal</option>
+                <option value="RECLASSIFICATION">Reclassification</option>
+                <option value="OPENING_BALANCE">Opening balance</option>
+                <option value="CLOSING">Closing</option>
+                <option value="TAX">Tax</option>
+                <option value="INTERCOMPANY">Intercompany</option>
+                <option value="AUDIT_ADJUSTMENT">Audit adjustment</option>
+                <option value="SYSTEM_GENERATED">System generated</option>
+              </select>
+              <div style={helperTextStyle}>Required. Used for audit classification and governance reporting.</div>
+            </label>
+
+            <label style={{ ...controlLabelStyle, gridColumn: '1 / -1' }}>
+              <div style={labelTextStyle}>Intent notes</div>
+              <textarea value={intentNotes} onChange={(e) => setIntentNotes(e.target.value)} disabled={readOnly} style={textareaStyle} />
+              <div style={helperTextStyle}>Optional operator guidance and governance context (who/what/why).</div>
+            </label>
+
+            <label style={{ ...controlLabelStyle, gridColumn: '1 / -1' }}>
+              <div style={labelTextStyle}>Intent reference</div>
+              <Input
+                value={intentReference}
+                onChange={(e) => setIntentReference(e.target.value)}
+                disabled={readOnly}
+                placeholder="Policy ID, memo ref, ticket, or supporting document ID"
+              />
+              <div style={helperTextStyle}>Optional. Links the template to an external control, policy, or decision record.</div>
+            </label>
+
+            <label style={{ ...controlLabelStyle, gridColumn: '1 / -1' }}>
+              <div style={labelTextStyle}>Description template</div>
+              <Input
+                value={descriptionTemplate}
+                onChange={(e) => setDescriptionTemplate(e.target.value)}
+                disabled={readOnly}
+                placeholder="Optional. Appears on the generated journal description"
+              />
+              <div style={helperTextStyle}>Optional. Supports {'{MONTH}'}, {'{YEAR}'}.</div>
+            </label>
+          </div>
+        </Card>
+
+        <Card
+          title="Template lines"
+          subtitle="Define the balanced journal lines to generate. Each line must have either a debit or a credit."
+          style={{ padding: tokens.spacing.x2 }}
+        >
+          <DataTable style={{ marginTop: 6 }}>
+            <DataTable.Head>
+              <tr>
+                <DataTable.Th style={{ width: 72 }}>#</DataTable.Th>
+                <DataTable.Th style={{ minWidth: 260 }}>Account</DataTable.Th>
+                <DataTable.Th>Description template</DataTable.Th>
+                <DataTable.Th align="right" style={{ width: 150 }}>
+                  Debit
+                </DataTable.Th>
+                <DataTable.Th align="right" style={{ width: 150 }}>
+                  Credit
+                </DataTable.Th>
+                <DataTable.Th align="right" style={{ width: 148 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+                    {!readOnly ? (
+                      <Button size="sm" variant="secondary" onClick={onAddLine}>
+                        Add line
+                      </Button>
+                    ) : null}
                   </div>
-                </DataTable.Td>
-                <DataTable.Td align="right">
-                  {!readOnly ? (
-                    <button onClick={() => onRemoveLine(idx)} disabled={lines.length <= 2} style={{ fontSize: 12 }}>
-                      Remove
-                    </button>
-                  ) : null}
-                </DataTable.Td>
-              </DataTable.Row>
-            );
-          })}
-        </DataTable.Body>
-      </DataTable>
+                </DataTable.Th>
+              </tr>
+            </DataTable.Head>
+            <DataTable.Body>
+              {lines.map((l, idx) => {
+                const xorError = lineXorErrorsByIndex.get(idx);
+                return (
+                  <DataTable.Row key={`${l.lineOrder}-${idx}`} zebra index={idx}>
+                    <DataTable.Td>
+                      <input
+                        type="number"
+                        value={l.lineOrder}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setLines((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, lineOrder: Number.isFinite(v) ? v : x.lineOrder } : x)),
+                          );
+                        }}
+                        disabled={readOnly}
+                        style={lineNumberInputStyle}
+                      />
+                    </DataTable.Td>
+                    <DataTable.Td>
+                      <select
+                        value={l.accountId}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, accountId: v } : x)));
+                        }}
+                        disabled={readOnly}
+                        style={{ ...selectStyle, height: 38 }}
+                      >
+                        <option value="">Select account…</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.code} — {a.name}{a.isActive ? '' : ' (inactive)'}
+                          </option>
+                        ))}
+                      </select>
+                    </DataTable.Td>
+                    <DataTable.Td>
+                      <input
+                        value={l.descriptionTemplate}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, descriptionTemplate: v } : x)));
+                        }}
+                        disabled={readOnly}
+                        style={{ ...lineNumberInputStyle, width: '100%' }}
+                        placeholder="Optional"
+                      />
+                      {xorError ? (
+                        <div style={{ marginTop: 4, color: '#b91c1c', fontSize: 12, fontWeight: 650 }}>{xorError}</div>
+                      ) : null}
+                    </DataTable.Td>
+                    <DataTable.Td align="right">
+                      <input
+                        type="number"
+                        value={l.debitAmount}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, debitAmount: Number.isFinite(v) ? v : 0 } : x)));
+                        }}
+                        disabled={readOnly}
+                        style={amountInputStyle}
+                      />
+                    </DataTable.Td>
+                    <DataTable.Td align="right">
+                      <input
+                        type="number"
+                        value={l.creditAmount}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, creditAmount: Number.isFinite(v) ? v : 0 } : x)));
+                        }}
+                        disabled={readOnly}
+                        style={amountInputStyle}
+                      />
+                    </DataTable.Td>
+                    <DataTable.Td align="right">
+                      {!readOnly ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRemoveLine(idx)}
+                          disabled={lines.length <= 2}
+                          title="Remove line"
+                          style={{ padding: '7px 10px', minWidth: 0 }}
+                        >
+                          ×
+                        </Button>
+                      ) : null}
+                    </DataTable.Td>
+                  </DataTable.Row>
+                );
+              })}
+            </DataTable.Body>
+          </DataTable>
 
-      <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ width: 360, fontSize: 13 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Total debit</span>
-            <span style={{ fontWeight: 750 }}>{totals.totalDebit.toFixed(2)}</span>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                width: 420,
+                border: `1px solid ${tokens.colors.border.subtle}`,
+                borderRadius: tokens.radius.md,
+                padding: 12,
+                background: tokens.colors.surface.subtle,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: tokens.colors.text.muted, fontWeight: 650 }}>Total debit</span>
+                <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{totals.totalDebit.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 6 }}>
+                <span style={{ color: tokens.colors.text.muted, fontWeight: 650 }}>Total credit</span>
+                <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{totals.totalCredit.toFixed(2)}</span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTop: `1px solid ${tokens.colors.border.subtle}`,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      border: `1px solid ${balanceOk ? 'rgba(22,101,52,0.25)' : 'rgba(154,52,18,0.30)'}`,
+                      background: balanceOk ? 'rgba(22,101,52,0.08)' : 'rgba(154,52,18,0.08)',
+                      color: balanceOk ? '#166534' : '#9a3412',
+                    }}
+                  >
+                    {balanceOk ? 'Balanced' : 'Not balanced'}
+                  </span>
+                  <span style={{ fontSize: 12, color: tokens.colors.text.muted, fontWeight: 650 }}>
+                    Net
+                  </span>
+                </div>
+                <div style={{ fontWeight: 900, color: balanceOk ? '#166534' : '#9a3412' }}>{totals.net.toFixed(2)}</div>
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Total credit</span>
-            <span style={{ fontWeight: 750 }}>{totals.totalCredit.toFixed(2)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, color: balanceOk ? '#166534' : '#9a3412' }}>
-            <span>{balanceOk ? 'Balanced' : 'Not balanced'}</span>
-            <span style={{ fontWeight: 750 }}>{totals.net.toFixed(2)}</span>
-          </div>
+        </Card>
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+          paddingTop: 12,
+          borderTop: `1px solid ${tokens.colors.border.subtle}`,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={() => navigate('/finance/gl/recurring')}>
+            Cancel / Back
+          </Button>
+          {!balanceOk ? (
+            <div style={{ fontSize: 12, color: tokens.colors.text.muted, fontWeight: 650 }}>
+              Resolve balance issues before saving.
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {canManage ? (
+            <Button variant="primary" onClick={onSave} disabled={saving || readOnly}>
+              {saving ? 'Saving…' : 'Save Draft'}
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        {canManage ? (
-          <button onClick={onSave} disabled={saving || readOnly}>
-            {saving ? 'Saving…' : 'Save Template'}
-          </button>
-        ) : null}
-        <Link to="/finance/gl/recurring">Back to Templates</Link>
-      </div>
+      {confirmAction && template ? (
+        <ModalShell
+          title={confirmAction.title}
+          subtitle={confirmAction.subtitle}
+          onClose={() => (actionBusy ? undefined : setConfirmAction(null))}
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <Button variant="secondary" onClick={() => setConfirmAction(null)} disabled={actionBusy}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={runLifecycleAction} disabled={actionBusy}>
+                {actionBusy ? 'Working…' : 'Confirm'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'grid', gap: 10 }}>
+            {confirmAction.type === 'APPROVE' ? (
+              <div style={{ fontSize: 13, color: tokens.colors.text.secondary, lineHeight: '18px' }}>
+                Approval enables controlled generation from this template. Generated journals still require review, approval, and posting under normal GL governance.
+              </div>
+            ) : null}
+            <div style={{ fontSize: 13, color: tokens.colors.text.muted }}>
+              Reason (optional)
+            </div>
+            <Input value={actionReason} onChange={(e) => setActionReason(e.target.value)} disabled={actionBusy} placeholder="Optional reason for audit trail" />
+          </div>
+        </ModalShell>
+      ) : null}
     </div>
   );
 }

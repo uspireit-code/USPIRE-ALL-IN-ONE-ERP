@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
+import { Button } from '../../../components/Button';
+import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
+import { EmptyState } from '../../../components/EmptyState';
+import { NoticeCard } from '../../../components/NoticeCard';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
 import { listRecurringTemplates, type RecurringJournalTemplate } from '../../../services/glRecurring.ts';
@@ -12,14 +16,24 @@ function formatDate(iso: string) {
   return iso ? iso.slice(0, 10) : '';
 }
 
+function formatActor(a: any) {
+  if (!a) return '';
+  const name = String(a.name ?? '').trim();
+  if (name) return name;
+  return String(a.email ?? '').trim();
+}
+
 export function RecurringTemplatesPage() {
   const navigate = useNavigate();
   const { state, hasPermission } = useAuth();
   const authLoading = Boolean(state.isAuthenticated) && !state.me;
 
+  const pageMaxWidth = 1100;
+
+  const canView = hasPermission(PERMISSIONS.GL.RECURRING_VIEW);
   const canManage = hasPermission(PERMISSIONS.GL.RECURRING_MANAGE);
   const canGenerate = hasPermission(PERMISSIONS.GL.RECURRING_GENERATE);
-  const canAccess = canManage || canGenerate;
+  const canAccess = canView || canManage || canGenerate;
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +63,7 @@ export function RecurringTemplatesPage() {
   const rows = useMemo(() => {
     return items.map((t) => ({
       ...t,
-      statusLabel: t.isActive ? 'Active' : 'Inactive',
+      lifecycleStatus: (t as any).status ?? (t.isActive ? 'APPROVED' : 'SUSPENDED'),
     }));
   }, [items]);
 
@@ -61,49 +75,74 @@ export function RecurringTemplatesPage() {
     return (
       <div>
         <h2>Recurring Journals</h2>
-        <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Access Denied">
-            You do not have permission to access Recurring Journals.
-          </Alert>
+        <div style={{ marginTop: 14, maxWidth: 820 }}>
+          <NoticeCard kind="permission" title="Access restricted">
+            You do not have permission to access recurring journal templates.
+          </NoticeCard>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+    <div style={{ maxWidth: pageMaxWidth }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h2>Recurring Journal Templates</h2>
+          <h2 style={{ margin: 0 }}>Recurring Journal Templates</h2>
           <div style={{ marginTop: 6, fontSize: 13, color: tokens.colors.text.muted }}>
             Define templates and generate journals without bypassing approval controls.
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={refresh} disabled={loading}>
+          <Button variant="secondary" onClick={refresh} disabled={loading}>
             Refresh
-          </button>
+          </Button>
           {canManage ? (
-            <button onClick={() => navigate('/finance/gl/recurring/new')}>New Template</button>
+            <Button variant="primary" onClick={() => navigate('/finance/gl/recurring/new')}>
+              New Template
+            </Button>
           ) : null}
         </div>
       </div>
 
       {error ? (
-        <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Error">
+        <div style={{ marginTop: 14, maxWidth: 820 }}>
+          <NoticeCard kind="system" title="Unable to load templates">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
-      {loading ? (
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', color: tokens.colors.text.muted }}>Loading…</div>
-      ) : null}
+      {loading ? <div style={{ marginTop: 14, color: tokens.colors.text.muted }}>Loading…</div> : null}
+
+      <div style={{ marginTop: 12, maxWidth: 820 }}>
+        <NoticeCard kind="info" title="Governance notice">
+          Recurring journal generation does not bypass journal approval or posting controls. Generated journals still enter the standard GL governance workflow.
+        </NoticeCard>
+      </div>
 
       {!loading && !error && rows.length === 0 ? (
-        <div style={{ marginTop: 12, color: tokens.colors.text.muted }}>No templates yet.</div>
+        <Card style={{ marginTop: 12, padding: tokens.spacing.x2 }}>
+          <EmptyState
+            title="No recurring templates yet"
+            description="Create a recurring journal template to generate governed journals on a schedule without bypassing approval controls."
+            primaryAction={
+              canManage
+                ? {
+                    label: 'New Template',
+                    onClick: () => navigate('/finance/gl/recurring/new'),
+                  }
+                : undefined
+            }
+            secondaryAction={{
+              label: 'Refresh',
+              onClick: () => refresh(),
+              disabled: loading,
+            }}
+            style={{ marginTop: 0, maxWidth: 'none', padding: tokens.spacing.x3 }}
+          />
+        </Card>
       ) : null}
 
       {!loading && rows.length > 0 ? (
@@ -114,6 +153,9 @@ export function RecurringTemplatesPage() {
               <DataTable.Th>Frequency</DataTable.Th>
               <DataTable.Th>Next Run Date</DataTable.Th>
               <DataTable.Th>Status</DataTable.Th>
+              <DataTable.Th>Created</DataTable.Th>
+              <DataTable.Th>Submitted</DataTable.Th>
+              <DataTable.Th>Approved</DataTable.Th>
               <DataTable.Th align="right">Actions</DataTable.Th>
             </tr>
           </DataTable.Head>
@@ -126,16 +168,30 @@ export function RecurringTemplatesPage() {
                 </DataTable.Td>
                 <DataTable.Td>{t.frequency}</DataTable.Td>
                 <DataTable.Td>{formatDate(t.nextRunDate)}</DataTable.Td>
-                <DataTable.Td>{t.isActive ? 'Active' : 'Inactive'}</DataTable.Td>
+                <DataTable.Td>
+                  <StatusBadge state={String((t as any).lifecycleStatus)} />
+                </DataTable.Td>
+                <DataTable.Td>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>{formatActor((t as any).createdBy)}</div>
+                  <div style={{ fontSize: 11, color: tokens.colors.text.muted }}>{formatDate((t as any).createdAt)}</div>
+                </DataTable.Td>
+                <DataTable.Td>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>{formatActor((t as any).submittedBy)}</div>
+                  <div style={{ fontSize: 11, color: tokens.colors.text.muted }}>{formatDate(String((t as any).submittedAt ?? ''))}</div>
+                </DataTable.Td>
+                <DataTable.Td>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>{formatActor((t as any).approvedBy)}</div>
+                  <div style={{ fontSize: 11, color: tokens.colors.text.muted }}>{formatDate(String((t as any).approvedAt ?? ''))}</div>
+                </DataTable.Td>
                 <DataTable.Td align="right">
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                     <button onClick={() => navigate(`/finance/gl/recurring/${t.id}`)} style={{ fontSize: 12 }}>
                       {canManage ? 'Edit' : 'View'}
                     </button>
-                    {canGenerate ? (
+                    {canGenerate || canManage ? (
                       <button
                         onClick={() => navigate(`/finance/gl/recurring/${t.id}/generate`)}
-                        disabled={!t.isActive}
+                        disabled={String((t as any).lifecycleStatus) !== 'APPROVED'}
                         style={{ fontSize: 12, fontWeight: 750 }}
                       >
                         Generate

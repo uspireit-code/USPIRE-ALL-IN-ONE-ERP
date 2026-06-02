@@ -15,6 +15,21 @@ export type AuthTenant = {
   name: string;
 };
 
+export type AuthLegalEntityAccessItem = {
+  legalEntityId: string;
+  legalEntity: {
+    id: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+  };
+  accessLevel?: string | null;
+  canPost: boolean;
+  canApprove: boolean;
+  canOverride: boolean;
+  expiresAt?: string | null;
+};
+
 export type AuthMeResponse = {
   user: AuthUser;
   actingUser?: {
@@ -29,6 +44,10 @@ export type AuthMeResponse = {
   } | null;
   tenant: AuthTenant;
   permissions: string[];
+  legalEntityAccess?: AuthLegalEntityAccessItem[];
+  activeLegalEntity?: AuthLegalEntityAccessItem['legalEntity'] | null;
+  activeLegalEntityId?: string | null;
+  requiresLegalEntitySelection?: boolean;
   availableDelegations?: AvailableDelegation[];
   delegation?: {
     delegationId: string;

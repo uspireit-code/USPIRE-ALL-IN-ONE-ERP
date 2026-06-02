@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { PERMISSIONS } from '../../../auth/permission-catalog';
-import { Alert } from '../../../components/Alert';
+import { Button } from '../../../components/Button';
 import { DataTable } from '../../../components/DataTable';
+import { EmptyState } from '../../../components/EmptyState';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
 import { listReviewQueue, rejectJournal, type JournalReviewQueueItem } from '../../../services/gl';
@@ -94,9 +96,9 @@ export function ReviewQueuePage() {
       <div>
         <h2>Review Queue</h2>
         <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Access Denied">
+          <NoticeCard kind="permission" title="Access restricted">
             You do not have permission to access the Review Queue.
-          </Alert>
+          </NoticeCard>
         </div>
       </div>
     );
@@ -127,9 +129,9 @@ export function ReviewQueuePage() {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <h2>Review Queue</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button onClick={refresh} disabled={loading}>
+          <Button size="sm" variant="secondary" onClick={() => refresh()} disabled={loading}>
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -143,9 +145,9 @@ export function ReviewQueuePage() {
 
       {error ? (
         <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Error">
+          <NoticeCard kind="system" title="Unable to load review queue">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
@@ -154,7 +156,17 @@ export function ReviewQueuePage() {
       ) : null}
 
       {!loading && !error && items.length === 0 ? (
-        <div style={{ marginTop: 12, color: tokens.colors.text.muted }}>No journals pending approval.</div>
+        <div style={{ marginTop: 12, maxWidth: 980 }}>
+          <EmptyState
+            title="No journals pending approval"
+            description="When a preparer submits a journal for review, it will appear here for approval or rejection."
+            primaryAction={{
+              label: 'Refresh',
+              onClick: () => refresh(),
+              disabled: loading,
+            }}
+          />
+        </div>
       ) : null}
 
       {!loading && items.length > 0 ? (

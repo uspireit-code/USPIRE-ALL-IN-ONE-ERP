@@ -45,6 +45,29 @@ function resolveApiBaseUrl() {
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  const baseUrl = API_BASE_URL;
+  const isAbsolute = /^https?:\/\//i.test(baseUrl);
+  let baseHost = '';
+  if (isAbsolute) {
+    try {
+      baseHost = new URL(baseUrl).host;
+    } catch {
+      baseHost = '';
+    }
+  }
+
+  if (isAbsolute && baseHost && baseHost !== window.location.host) {
+    // eslint-disable-next-line no-console
+    console.warn('[api] API_BASE_URL host differs from app host; cookies may not be sent', {
+      API_BASE_URL: baseUrl,
+      apiHost: baseHost,
+      appHost: window.location.host,
+      appOrigin: window.location.origin,
+    });
+  }
+}
+
 const defaultConfig: ApiConfig = {
   baseUrl: API_BASE_URL,
 };
@@ -53,12 +76,14 @@ const debugApi = (import.meta.env.VITE_DEBUG_API ?? '').toString().toLowerCase()
 
 function getStoredAuth() {
   const tenantId = (localStorage.getItem('tenantId') ?? '').trim();
-  return { tenantId };
+  const legalEntityId = (localStorage.getItem('legalEntityId') ?? '').trim();
+  return { tenantId, legalEntityId };
 }
 
 function clearStoredAuth() {
   try {
     localStorage.removeItem('tenantId');
+    localStorage.removeItem('legalEntityId');
     localStorage.removeItem('delegationId');
     localStorage.removeItem('actingAsUserId');
     localStorage.removeItem('actingAsUserName');
@@ -85,9 +110,9 @@ export async function apiFetch<T>(
   config: ApiConfig = defaultConfig,
   options?: { governanceReason?: string },
 ): Promise<T> {
-  const { tenantId } = getStoredAuth();
+  const { tenantId, legalEntityId } = getStoredAuth();
 
-  const isAuthEndpoint = inputPath.startsWith('/auth/login') || inputPath.startsWith('/auth/refresh');
+  const isAuthEndpoint = inputPath.startsWith('/auth/');
 
   const headers = new Headers(init?.headers ?? {});
   const hasExplicitContentType = headers.has('Content-Type');
@@ -96,6 +121,7 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
   if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
+  if (legalEntityId && !isAuthEndpoint) headers.set('x-legal-entity-id', legalEntityId);
   if (options?.governanceReason) {
     const reason = String(options.governanceReason).trim();
     if (reason) headers.set('x-governance-reason', reason);
@@ -109,14 +135,20 @@ export async function apiFetch<T>(
       method: init?.method ?? 'GET',
       isAuthEndpoint,
       hasTenantId: Boolean(tenantId),
+      hasLegalEntityId: Boolean(legalEntityId),
+      storedLegalEntityId: legalEntityId || null,
       hasAuthorization: false,
     });
   }
+
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const shouldNoStore = method === 'GET' || inputPath.startsWith('/gl/');
 
   const res = await fetch(`${config.baseUrl}${inputPath}`, {
     ...init,
     headers,
     credentials: init?.credentials ?? 'include',
+    ...(shouldNoStore ? { cache: 'no-store' as RequestCache } : null),
   });
 
   const text = await res.text();
@@ -140,9 +172,9 @@ export async function apiFetchRaw(
   config: ApiConfig = defaultConfig,
   options?: { governanceReason?: string },
 ): Promise<Response> {
-  const { tenantId } = getStoredAuth();
+  const { tenantId, legalEntityId } = getStoredAuth();
 
-  const isAuthEndpoint = inputPath.startsWith('/auth/login') || inputPath.startsWith('/auth/refresh');
+  const isAuthEndpoint = inputPath.startsWith('/auth/');
 
   const headers = new Headers(init?.headers ?? {});
   const isFormDataBody = typeof FormData !== 'undefined' && init?.body instanceof FormData;
@@ -151,6 +183,7 @@ export async function apiFetchRaw(
     headers.set('Content-Type', 'application/json');
   }
   if (tenantId && !isAuthEndpoint) headers.set('x-tenant-id', tenantId);
+  if (legalEntityId && !isAuthEndpoint) headers.set('x-legal-entity-id', legalEntityId);
   if (options?.governanceReason) {
     const reason = String(options.governanceReason).trim();
     if (reason) headers.set('x-governance-reason', reason);
@@ -164,6 +197,7 @@ export async function apiFetchRaw(
       method: init?.method ?? 'GET',
       isAuthEndpoint,
       hasTenantId: Boolean(tenantId),
+      hasLegalEntityId: Boolean(legalEntityId),
       hasAuthorization: false,
     });
   }

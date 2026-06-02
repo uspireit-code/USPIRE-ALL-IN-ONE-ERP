@@ -7,6 +7,9 @@ export function AccountContextPanel(props: {
   open: boolean;
   journalDate: string;
   account: GlAccountLookup | null;
+  restrictLegalEntities?: boolean;
+  authorizedLegalEntityIds?: string[];
+  legalEntityAccessLoaded?: boolean;
   initialValues: {
     legalEntityId?: string | null;
     departmentId?: string | null;
@@ -25,12 +28,34 @@ export function AccountContextPanel(props: {
   const [projects, setProjects] = useState<ProjectLookup[]>([]);
   const [funds, setFunds] = useState<FundLookup[]>([]);
 
-  const [legalEntityPicker, setLegalEntityPicker] = useState('');
   const [departmentPicker, setDepartmentPicker] = useState('');
   const [projectPicker, setProjectPicker] = useState('');
   const [fundPicker, setFundPicker] = useState('');
 
-  const legalEntityById = useMemo(() => new Map(legalEntities.map((e) => [e.id, e] as const)), [legalEntities]);
+  const authorizedLegalEntityIdSet = useMemo(() => {
+    if (!Array.isArray(props.authorizedLegalEntityIds)) return null;
+    const ids = props.authorizedLegalEntityIds;
+    return new Set(ids.map((x) => String(x ?? '').trim()).filter(Boolean));
+  }, [props.authorizedLegalEntityIds]);
+
+  const disableLeFilter = useMemo(() => {
+    if (!import.meta.env.DEV) return false;
+    try {
+      return (localStorage.getItem('disableLeFilter') ?? '').toString().toLowerCase() === 'true';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const legalEntitiesForPicker = useMemo(() => {
+    if (disableLeFilter) return legalEntities;
+    if (!props.restrictLegalEntities) return legalEntities;
+    if (!props.legalEntityAccessLoaded) return legalEntities;
+    if (!authorizedLegalEntityIdSet) return legalEntities;
+    if (authorizedLegalEntityIdSet.size === 0) return [];
+    return legalEntities.filter((e) => authorizedLegalEntityIdSet.has(String(e?.id ?? '').trim()));
+  }, [authorizedLegalEntityIdSet, disableLeFilter, legalEntities, props.legalEntityAccessLoaded, props.restrictLegalEntities]);
+
   const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d] as const)), [departments]);
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p] as const)), [projects]);
   const fundById = useMemo(() => new Map(funds.map((f) => [f.id, f] as const)), [funds]);
@@ -46,6 +71,8 @@ export function AccountContextPanel(props: {
     if (!props.open) return;
     if (!props.account) return;
 
+    let cancelled = false;
+
     setError(null);
     setLoading(true);
 
@@ -54,22 +81,54 @@ export function AccountContextPanel(props: {
     setProjectId(props.initialValues.projectId ?? null);
     setFundId(props.initialValues.fundId ?? null);
 
-    setLegalEntityPicker('');
     setDepartmentPicker('');
     setProjectPicker('');
     setFundPicker('');
 
     Promise.all([
-      listLegalEntities({ effectiveOn }).catch(() => []),
+      listLegalEntities({ effectiveOn }).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error('[ACP][listLegalEntities ERROR]', err);
+        throw err;
+      }),
       listDepartments({ effectiveOn }).catch(() => []),
     ])
       .then(([les, deps]) => {
-        setLegalEntities(Array.isArray(les) ? les : []);
-        setDepartments(Array.isArray(deps) ? deps : []);
+        if (cancelled) return;
+
+        console.assert(Array.isArray(les), 'legalEntities must always be an array');
+
+        setLegalEntities(les);
+        setDepartments(deps);
       })
       .catch(() => setError('Failed to load dimension lookups.'))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [props.account, props.initialValues.departmentId, props.initialValues.fundId, props.initialValues.legalEntityId, props.initialValues.projectId, props.open, effectiveOn]);
+
+  useEffect(() => {
+    if (!props.open) return;
+    if (!props.legalEntityAccessLoaded) return;
+    if (loading) return;
+    if (legalEntityId) return;
+    if (legalEntitiesForPicker.length !== 1) return;
+
+    const only = legalEntitiesForPicker[0];
+    if (!only?.id) return;
+    setLegalEntityId(only.id);
+    setDepartmentId(null);
+    setProjectId(null);
+    setFundId(null);
+    setDepartmentPicker('');
+    setProjectPicker('');
+    setFundPicker('');
+  }, [legalEntitiesForPicker, loading, legalEntityId, props.legalEntityAccessLoaded, props.open]);
 
   useEffect(() => {
     if (!props.open) return;
@@ -98,9 +157,30 @@ export function AccountContextPanel(props: {
     });
   }, [props.account, selectedProject]);
 
+  const dimensionRenderFlags = useMemo(() => {
+    return {
+      legalEntity: true,
+      department: Boolean(visibility.departmentVisible || visibility.departmentRequired || props.account?.requiresDepartment),
+      project: Boolean(visibility.projectVisible || visibility.projectRequired || props.account?.requiresProject),
+      fund: Boolean(visibility.fundVisible || visibility.fundRequired || props.account?.requiresFund),
+    };
+  }, [props.account?.requiresDepartment, props.account?.requiresFund, props.account?.requiresProject, visibility.departmentRequired, visibility.departmentVisible, visibility.fundRequired, visibility.fundVisible, visibility.projectRequired, visibility.projectVisible]);
+
+  const effectiveVisibility = useMemo(() => {
+    return {
+      ...visibility,
+      departmentVisible: dimensionRenderFlags.department,
+      departmentRequired: Boolean(visibility.departmentRequired || props.account?.requiresDepartment),
+      projectVisible: dimensionRenderFlags.project,
+      projectRequired: Boolean(visibility.projectRequired || props.account?.requiresProject),
+      fundVisible: dimensionRenderFlags.fund,
+      fundRequired: Boolean(visibility.fundRequired || props.account?.requiresFund),
+    };
+  }, [dimensionRenderFlags.department, dimensionRenderFlags.fund, dimensionRenderFlags.project, props.account?.requiresDepartment, props.account?.requiresFund, props.account?.requiresProject, visibility]);
+
   const segmentErrors = useMemo(() => {
     return validateSegments({
-      visibility,
+      visibility: effectiveVisibility,
       projectRestricted: Boolean(selectedProject?.isRestricted),
       values: {
         legalEntityId,
@@ -109,19 +189,19 @@ export function AccountContextPanel(props: {
         fundId,
       },
     });
-  }, [departmentId, fundId, legalEntityId, projectId, visibility]);
+  }, [departmentId, effectiveVisibility, fundId, legalEntityId, projectId, selectedProject?.isRestricted]);
 
   useEffect(() => {
     if (!props.open) return;
-    if (!visibility.departmentVisible) {
+    if (!dimensionRenderFlags.department) {
       if (departmentId !== null) setDepartmentId(null);
       if (departmentPicker) setDepartmentPicker('');
     }
-  }, [departmentId, departmentPicker, props.open, visibility.departmentVisible]);
+  }, [departmentId, departmentPicker, dimensionRenderFlags.department, props.open]);
 
   useEffect(() => {
     if (!props.open) return;
-    if (!visibility.fundVisible) {
+    if (!dimensionRenderFlags.fund) {
       setFunds([]);
       return;
     }
@@ -133,7 +213,7 @@ export function AccountContextPanel(props: {
     listFunds({ effectiveOn, projectId })
       .then((fs) => setFunds(Array.isArray(fs) ? fs : []))
       .catch(() => undefined);
-  }, [effectiveOn, projectId, props.open, visibility.fundVisible]);
+  }, [dimensionRenderFlags.fund, effectiveOn, projectId, props.open]);
 
   const applyDisabled = useMemo(() => {
     if (!props.account) return true;
@@ -143,6 +223,37 @@ export function AccountContextPanel(props: {
     if (segmentErrors.fund) return true;
     return false;
   }, [props.account, segmentErrors.department, segmentErrors.fund, segmentErrors.legalEntity, segmentErrors.project]);
+
+  const missingRequiredDimensions = useMemo(() => {
+    return [
+      segmentErrors.legalEntity ? 'Legal Entity' : null,
+      segmentErrors.department ? 'Department' : null,
+      segmentErrors.project ? 'Project' : null,
+      segmentErrors.fund ? 'Fund' : null,
+    ].filter((x): x is string => Boolean(x));
+  }, [segmentErrors.department, segmentErrors.fund, segmentErrors.legalEntity, segmentErrors.project]);
+
+  const requirementBadge = (required: boolean) => (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        borderRadius: 999,
+        padding: '2px 8px',
+        fontSize: 11,
+        fontWeight: 750,
+        color: required ? '#9a3412' : tokens.colors.text.secondary,
+        background: required ? '#ffedd5' : tokens.colors.surface.subtle,
+        border: `1px solid ${required ? '#fed7aa' : tokens.colors.border.subtle}`,
+      }}
+    >
+      {required ? 'Required' : 'Optional'}
+    </span>
+  );
+
+  const validationMessage = (message: string) => (
+    <div style={{ fontSize: 12, color: '#9a3412', fontWeight: 650 }}>{message}</div>
+  );
 
   useEffect(() => {
     if (!props.open) return;
@@ -156,7 +267,9 @@ export function AccountContextPanel(props: {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [applyDisabled, props.open]);
 
-  if (!props.open || !props.account) return null;
+  if (!props.open || !props.account) {
+    return null;
+  }
 
   return (
     <>
@@ -217,57 +330,84 @@ export function AccountContextPanel(props: {
             <div style={{ fontSize: 14, fontWeight: 750, color: tokens.colors.text.primary }}>
               {props.account.code} — {props.account.name}
             </div>
+            {missingRequiredDimensions.length > 0 ? (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {missingRequiredDimensions.map((dimension) => (
+                  <span
+                    key={dimension}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      borderRadius: 999,
+                      padding: '2px 8px',
+                      fontSize: 12,
+                      fontWeight: 750,
+                      color: '#9a3412',
+                      background: '#ffedd5',
+                      border: '1px solid #fed7aa',
+                    }}
+                  >
+                    Missing {dimension}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            Legal Entity *
-            <input
-              list="acp-legal-entities"
-              value={
-                legalEntityId && legalEntityById.get(legalEntityId)
-                  ? `${legalEntityById.get(legalEntityId)?.code} — ${legalEntityById.get(legalEntityId)?.name}`
-                  : legalEntityPicker
-              }
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Legal Entity
+              {requirementBadge(true)}
+            </span>
+            <select
+              value={legalEntityId ?? ''}
               onChange={(e) => {
-                const v = e.target.value;
-                setLegalEntityPicker(v);
-                const exact = legalEntities.find((x) => `${x.code} — ${x.name}` === v);
-                if (exact) {
-                  setLegalEntityId(exact.id);
+                const value = e.target.value;
+
+                if (!value) {
+                  setLegalEntityId(null);
                   setDepartmentId(null);
                   setProjectId(null);
                   setFundId(null);
                   setDepartmentPicker('');
                   setProjectPicker('');
                   setFundPicker('');
-                } else {
-                  setLegalEntityId(null);
-                  setDepartmentId(null);
-                  setProjectId(null);
-                  setFundId(null);
+                  return;
                 }
+
+                const entity = legalEntitiesForPicker.find((x) => x.id === value);
+                if (!entity) return;
+
+                setLegalEntityId(entity.id);
+                setDepartmentId(null);
+                setProjectId(null);
+                setFundId(null);
+                setDepartmentPicker('');
+                setProjectPicker('');
+                setFundPicker('');
               }}
-              onBlur={() => {
-                const label = (legalEntityPicker ?? '').trim();
-                const exact = legalEntities.find((x) => `${x.code} — ${x.name}` === label);
-                if (!exact && !(legalEntityId && legalEntityById.get(legalEntityId))) {
-                  setLegalEntityPicker('');
-                }
-              }}
-              placeholder={loading ? 'Loading…' : 'Search legal entity…'}
               style={{ width: '100%' }}
               disabled={loading}
-            />
-            <datalist id="acp-legal-entities">
-              {legalEntities.map((e) => (
-                <option key={e.id} value={`${e.code} — ${e.name}`} />
+            >
+              <option value="">Select legal entity</option>
+              {legalEntitiesForPicker.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.code} — {e.name}
+                </option>
               ))}
-            </datalist>
+            </select>
+            {props.restrictLegalEntities && !props.legalEntityAccessLoaded ? (
+              <div style={{ fontSize: 12, color: tokens.colors.text.muted }}>Loading legal entity access…</div>
+            ) : null}
+            {segmentErrors.legalEntity ? validationMessage('Legal Entity required for every journal line') : null}
           </label>
 
-          {visibility.departmentVisible ? (
+          {dimensionRenderFlags.department ? (
             <label style={{ display: 'grid', gap: 6 }}>
-              Department / Cost Centre *
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Department / Cost Centre
+                {requirementBadge(effectiveVisibility.departmentRequired)}
+              </span>
               <input
                 list="acp-departments"
                 value={
@@ -307,12 +447,16 @@ export function AccountContextPanel(props: {
                   <option key={d.id} value={`${d.code} — ${d.name}`} />
                 ))}
               </datalist>
+              {segmentErrors.department ? validationMessage('Department required for this account') : null}
             </label>
           ) : null}
 
-          {visibility.projectVisible ? (
+          {dimensionRenderFlags.project ? (
             <label style={{ display: 'grid', gap: 6 }}>
-              Project *
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Project
+                {requirementBadge(effectiveVisibility.projectRequired)}
+              </span>
               <input
                 list="acp-projects"
                 value={
@@ -361,12 +505,16 @@ export function AccountContextPanel(props: {
                   <option key={p.id} value={`${p.code} — ${p.name}`} />
                 ))}
               </datalist>
+              {segmentErrors.project ? validationMessage('Project required for this account') : null}
             </label>
           ) : null}
 
-          {visibility.fundVisible ? (
+          {dimensionRenderFlags.fund ? (
             <label style={{ display: 'grid', gap: 6 }}>
-              Fund *
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Fund
+                {requirementBadge(effectiveVisibility.fundRequired)}
+              </span>
               <input
                 list="acp-funds"
                 value={
@@ -400,6 +548,7 @@ export function AccountContextPanel(props: {
                   <option key={f.id} value={`${f.code} — ${f.name}`} />
                 ))}
               </datalist>
+              {segmentErrors.fund ? validationMessage('Fund required for this account') : null}
             </label>
           ) : null}
         </div>
@@ -426,13 +575,14 @@ export function AccountContextPanel(props: {
 
               props.onApply({
                 legalEntityId,
-                departmentId: visibility.departmentVisible ? departmentId : null,
-                projectId: visibility.projectVisible ? projectId : null,
-                fundId: visibility.fundVisible ? fundId : null,
+                departmentId: dimensionRenderFlags.department ? departmentId : null,
+                projectId: dimensionRenderFlags.project ? projectId : null,
+                fundId: dimensionRenderFlags.fund ? fundId : null,
               });
             }}
             disabled={applyDisabled}
             style={{ fontWeight: 750 }}
+            title={missingRequiredDimensions.length > 0 ? `Resolve: ${missingRequiredDimensions.join(', ')}` : undefined}
           >
             Apply
           </button>

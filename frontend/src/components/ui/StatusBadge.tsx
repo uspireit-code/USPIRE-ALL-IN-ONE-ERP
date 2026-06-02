@@ -21,9 +21,11 @@ export function StatusBadge(props: { state: StatusBadgeState; label?: string }) 
       ? 'pending'
       : state === 'REJECTED'
         ? 'rejected'
-        : state === 'ACTIVE'
+        : state === 'ACTIVE' || state === 'APPROVED'
           ? 'active'
-          : state === 'DRAFT'
+          : state === 'SUSPENDED' || state === 'ARCHIVED'
+            ? 'rejected'
+            : state === 'DRAFT'
             ? 'draft'
             : 'draft';
 

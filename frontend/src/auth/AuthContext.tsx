@@ -76,6 +76,17 @@ export function AuthProvider(props: { children: React.ReactNode }) {
       }
     }
 
+    const activeLegalEntityId = String(me?.activeLegalEntityId ?? me?.activeLegalEntity?.id ?? '').trim();
+    try {
+      if (activeLegalEntityId) {
+        localStorage.setItem('legalEntityId', activeLegalEntityId);
+      } else {
+        localStorage.removeItem('legalEntityId');
+      }
+    } catch {
+      // ignore
+    }
+
     const availableDelegations = Array.isArray((me as any)?.availableDelegations)
       ? (((me as any).availableDelegations ?? []) as AvailableDelegation[])
       : [];
@@ -84,35 +95,6 @@ export function AuthProvider(props: { children: React.ReactNode }) {
     const delegationId = typeof delegationRaw?.delegationId === 'string' ? delegationRaw.delegationId : '';
     const actingAsUserId = typeof delegationRaw?.actingAsUserId === 'string' ? delegationRaw.actingAsUserId : '';
     const realUserId = typeof delegationRaw?.realUserId === 'string' ? delegationRaw.realUserId : '';
-
-    if (import.meta.env.DEV) {
-      const perms = me?.permissions ?? [];
-      const arPerms = perms
-        .filter((p) =>
-          /^(AR_)?(INVOICE|RECEIPT|RECEIPTS|CREDIT_NOTE|REFUND)_(VIEW|CREATE|EDIT_DRAFT|POST)/i.test(p ?? ''),
-        )
-        .sort();
-
-      const apPerms = perms
-        .filter((p) =>
-          /^(AP_)?(SUPPLIER|INVOICE|PAYMENT_PROPOSAL)_(VIEW|CREATE|IMPORT|SUBMIT|APPROVE|POST)/i.test(
-            p ?? '',
-          ),
-        )
-        .sort();
-
-      // TEMP DEBUG: prove what the UI received from /auth/me.
-      // eslint-disable-next-line no-console
-      console.log('[auth.me][frontend]', {
-        email: me?.user?.email,
-        tenantId: me?.tenant?.id,
-        permissionCount: perms.length,
-        arPermissionCount: arPerms.length,
-        arPermissions: arPerms,
-        apPermissionCount: apPerms.length,
-        apPermissions: apPerms,
-      });
-    }
 
     setState((s) => ({
       ...s,
@@ -295,6 +277,7 @@ export function AuthProvider(props: { children: React.ReactNode }) {
     }
 
     localStorage.removeItem('tenantId');
+    localStorage.removeItem('legalEntityId');
     // Keep lastTenantId so public pages (login/forgot/reset) can still load tenant branding.
     localStorage.removeItem('delegationChoice');
     localStorage.removeItem('delegationId');

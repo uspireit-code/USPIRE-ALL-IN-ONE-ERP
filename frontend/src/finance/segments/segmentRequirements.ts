@@ -2,6 +2,7 @@ export type SegmentFlags = {
   requiresDepartment?: boolean;
   requiresProject?: boolean;
   requiresFund?: boolean;
+  departmentRequirement?: 'REQUIRED' | 'OPTIONAL' | 'FORBIDDEN';
 };
 
 export type SegmentValues = {
@@ -14,10 +15,13 @@ export type SegmentValues = {
 export type SegmentVisibility = {
   legalEntityVisible: boolean;
   legalEntityRequired: boolean;
+
   departmentVisible: boolean;
   departmentRequired: boolean;
+
   projectVisible: boolean;
   projectRequired: boolean;
+
   fundVisible: boolean;
   fundRequired: boolean;
 };
@@ -28,21 +32,89 @@ export function getSegmentVisibility(params: {
   legalEntityRequired?: boolean;
 }): SegmentVisibility {
   const account = params.account;
+
   const projectRestricted = Boolean(params.project?.isRestricted);
+
   const legalEntityRequired = params.legalEntityRequired !== false;
 
-  const departmentRequired = Boolean(account?.requiresDepartment);
-  const projectRequired = Boolean(account?.requiresProject) || Boolean(account?.requiresFund) || projectRestricted;
-  const fundRequired = Boolean(account?.requiresFund) || projectRestricted;
+  /**
+   * =========================
+   * DEPARTMENT GOVERNANCE
+   * =========================
+   */
+
+  const departmentRequired =
+    Boolean(account?.requiresDepartment) ||
+    account?.departmentRequirement === 'REQUIRED';
+
+  const departmentForbidden =
+    account?.departmentRequirement === 'FORBIDDEN';
+
+  /**
+   * Department visibility rules:
+   *
+   * REQUIRED  -> visible + required
+   * OPTIONAL  -> visible + optional
+   * FORBIDDEN -> hidden
+   * undefined -> hidden
+   */
+  const departmentVisible =
+    !departmentForbidden &&
+    (
+      account?.departmentRequirement === 'REQUIRED' ||
+      account?.departmentRequirement === 'OPTIONAL' ||
+      Boolean(account?.requiresDepartment)
+    );
+
+  /**
+   * =========================
+   * PROJECT GOVERNANCE
+   * =========================
+   */
+
+  const projectRequired =
+    Boolean(account?.requiresProject) ||
+    Boolean(account?.requiresFund) ||
+    projectRestricted;
+
+  /**
+   * Project visibility:
+   * visible only when governed by account/project rules
+   */
+  const projectVisible =
+    Boolean(account?.requiresProject) ||
+    Boolean(account?.requiresFund) ||
+    projectRestricted;
+
+  /**
+   * =========================
+   * FUND GOVERNANCE
+   * =========================
+   */
+
+  const fundRequired =
+    Boolean(account?.requiresFund) ||
+    projectRestricted;
+
+  /**
+   * Fund visibility:
+   * visible only when governed by account/project rules
+   */
+  const fundVisible =
+    Boolean(account?.requiresFund) ||
+    projectRestricted;
 
   return {
     legalEntityVisible: true,
     legalEntityRequired,
-    departmentVisible: departmentRequired,
+
+    departmentVisible,
     departmentRequired,
-    projectVisible: projectRequired,
+
+    projectVisible,
     projectRequired,
-    fundVisible: fundRequired,
+
+    fundVisible,
     fundRequired,
   };
 }
@@ -60,28 +132,53 @@ export function validateSegments(params: {
   projectRestricted?: boolean;
 }): SegmentValidationErrors {
   const { visibility, values } = params;
+
   const projectRestricted = Boolean(params.projectRestricted);
 
   const errors: SegmentValidationErrors = {};
+
+  /**
+   * =========================
+   * LEGAL ENTITY VALIDATION
+   * =========================
+   */
 
   if (visibility.legalEntityRequired && !values.legalEntityId) {
     errors.legalEntity = 'Legal Entity is required.';
   }
 
+  /**
+   * =========================
+   * DEPARTMENT VALIDATION
+   * =========================
+   */
+
   if (visibility.departmentRequired && !values.departmentId) {
-    errors.department = 'Department is required.';
+    errors.department = 'Department is required for this account.';
   }
+
+  /**
+   * =========================
+   * PROJECT VALIDATION
+   * =========================
+   */
 
   if (values.fundId && !values.projectId) {
     errors.project = 'Project must be selected before Fund.';
   } else if (visibility.projectRequired && !values.projectId) {
-    errors.project = 'Project is required.';
+    errors.project = 'Project is required for this account.';
   }
+
+  /**
+   * =========================
+   * FUND VALIDATION
+   * =========================
+   */
 
   if (visibility.fundRequired && !values.fundId) {
     errors.fund = projectRestricted
       ? 'Fund is required because the selected Project is restricted.'
-      : 'Fund is required.';
+      : 'Fund is required for this account.';
   }
 
   return errors;

@@ -212,8 +212,6 @@ export function CoaSubmissionsPage() {
 
   const validationPanelRef = useRef<HTMLDivElement | null>(null);
 
-  const logAfterRefreshRef = useRef(false);
-
   const codeInputRef = useRef<HTMLInputElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const accountTypeRef = useRef<HTMLSelectElement | null>(null);
@@ -521,16 +519,6 @@ export function CoaSubmissionsPage() {
   };
 
   useEffect(() => {
-    if (!logAfterRefreshRef.current) return;
-    logAfterRefreshRef.current = false;
-    // Temporary debug logs to confirm refresh is not overwriting form state
-    // eslint-disable-next-line no-console
-    console.log('AFTER REFRESH SELECTED:', selected);
-    // eslint-disable-next-line no-console
-    console.log('FORM STATE:', form);
-  }, [selected?.id, selected, form]);
-
-  useEffect(() => {
     let cancelled = false;
     if (!draftBatch?.batchId) {
       setBatchAccounts([]);
@@ -753,7 +741,6 @@ export function CoaSubmissionsPage() {
         const created = await createCoaAccount(payload);
         setSuccess('Draft created');
         setFieldErrors({});
-        logAfterRefreshRef.current = true;
         await refresh();
         setSelectedId(created.id);
         setEditMode('edit');
@@ -787,7 +774,6 @@ export function CoaSubmissionsPage() {
         await updateCoaAccount(payload);
         setSuccess('Draft saved');
         setFieldErrors({});
-        logAfterRefreshRef.current = true;
         await refresh();
         setSelectedId(selected.id);
         setEditMode('edit');
@@ -1015,9 +1001,7 @@ export function CoaSubmissionsPage() {
     setValidationFilter('ALL');
 
     try {
-      console.log('FILE:', uploadFile);
       const res = await validateCoaImport(uploadFile);
-      console.log('VALIDATION RESPONSE:', (res as any));
       setValidation({
         ...(res as any),
         rows: Array.isArray((res as any)?.rows) ? [...((res as any).rows as any[])] : [],

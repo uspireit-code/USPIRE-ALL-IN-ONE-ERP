@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Alert } from '../../../components/Alert';
 import { Button } from '../../../components/Button';
 import { Card } from '../../../components/Card';
 import { DataTable } from '../../../components/DataTable';
+import { EmptyState } from '../../../components/EmptyState';
 import { Input } from '../../../components/Input';
+import { NoticeCard } from '../../../components/NoticeCard';
 import { SettingsPageHeader } from '../../../components/settings/SettingsPageHeader';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
@@ -229,9 +230,9 @@ export function ExceptionRegistersPage() {
 
       {error ? (
         <div style={{ marginTop: 14 }}>
-          <Alert tone="error" title="Error">
+          <NoticeCard kind="system" title="Unable to load governance registers">
             {error}
-          </Alert>
+          </NoticeCard>
         </div>
       ) : null}
 
@@ -336,13 +337,49 @@ export function ExceptionRegistersPage() {
 
               <DataTable.Body>
                 {tab === 'EXCEPTIONS' && exceptions.length === 0 ? (
-                  <DataTable.Empty colSpan={6} title="No exception register rows" />
+                  <tr>
+                    <td colSpan={6} style={{ padding: '20px 12px' }}>
+                      <EmptyState
+                        title="No exception events for the selected period"
+                        description="Try expanding the date range or removing filters (Category / Entity) to view more governance events."
+                        primaryAction={{
+                          label: 'Refresh',
+                          onClick: () => refresh(0),
+                          disabled: loading,
+                        }}
+                      />
+                    </td>
+                  </tr>
                 ) : null}
                 {tab === 'OVERRIDES' && overrideRows.length === 0 ? (
-                  <DataTable.Empty colSpan={5} title="No override session rows" />
+                  <tr>
+                    <td colSpan={5} style={{ padding: '20px 12px' }}>
+                      <EmptyState
+                        title="No override sessions for the selected period"
+                        description="Try adjusting the date range or clearing the status / override code filters."
+                        primaryAction={{
+                          label: 'Refresh',
+                          onClick: () => refresh(0),
+                          disabled: loading,
+                        }}
+                      />
+                    </td>
+                  </tr>
                 ) : null}
                 {tab === 'EVIDENCE' && evidenceRows.length === 0 ? (
-                  <DataTable.Empty colSpan={6} title="No evidence rows" />
+                  <tr>
+                    <td colSpan={6} style={{ padding: '20px 12px' }}>
+                      <EmptyState
+                        title="No evidence files for the selected period"
+                        description="Evidence appears here when uploaded against a transaction or governance action. Adjust filters or expand the date range to see more."
+                        primaryAction={{
+                          label: 'Refresh',
+                          onClick: () => refresh(0),
+                          disabled: loading,
+                        }}
+                      />
+                    </td>
+                  </tr>
                 ) : null}
 
                 {tab === 'EXCEPTIONS'

@@ -50,6 +50,8 @@
   gap: 24px;
   flex: 1;
   min-height: 0;
+  height: calc(100vh - 140px);
+  overflow: hidden;
 }
 
 .coa-layout {
@@ -58,6 +60,8 @@
   gap: 16px;
   flex: 1;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 @media (max-width: 1100px) {
@@ -72,6 +76,8 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .coa-left {
@@ -92,6 +98,7 @@
   margin-top: 10px;
   flex: 1;
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
@@ -129,6 +136,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .coaQueueCard .coaPanelBody {
@@ -136,6 +144,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .coaQueueScroll {
@@ -143,6 +152,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  height: 100%;
   padding-right: 4px;
 }
 
@@ -151,6 +161,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .coaPreviewCard .coaPanelBody {
@@ -158,6 +169,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .coaPreviewScroll {
@@ -165,6 +177,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  height: 100%;
 }
 
 .coaSubmissionsQueueCard {
@@ -219,6 +232,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .coaAccountsCard {
@@ -226,6 +241,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .coaAccountsHeader {
@@ -236,6 +252,7 @@
 .coaAccountsScroll {
   flex: 1;
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px;
@@ -351,6 +368,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  height: 100%;
   padding-right: 4px;
 }
 
@@ -371,6 +389,9 @@
   border-radius: 12px;
   background: #FFFFFF;
   box-shadow: 0 1px 2px rgba(11,12,30,0.05), 0 10px 24px rgba(11,12,30,0.06);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .coaPanelHeader {
@@ -383,6 +404,9 @@
 
 .coaPanelBody {
   padding: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .coaDetailsHeader {
@@ -522,6 +546,7 @@
 
   .coaPageLayout {
     flex-direction: column;
+    height: auto;
   }
 
   .coaSubmissionsQueueCard {
