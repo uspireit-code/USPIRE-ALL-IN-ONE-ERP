@@ -109,25 +109,15 @@ export function AuthLayout(props: { children: React.ReactNode }) {
                 />
               </div>
             ) : (
-              <div
-                aria-label="Organisation logo placeholder"
+              <img
+                src="/logo.png"
+                alt="USPIRE ERP"
                 style={{
-                  width: isCompact ? 116 : 128,
-                  height: isCompact ? 116 : 128,
-                  borderRadius: 999,
-                  background: 'rgba(255,255,255,0.10)',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 900,
-                  letterSpacing: 0.6,
-                  color: 'rgba(255,255,255,0.88)',
-                  userSelect: 'none',
+                  width: "96px",
+                  height: "96px",
+                  objectFit: "contain",
                 }}
-              >
-                U
-              </div>
+              />
             )}
 
             <div
