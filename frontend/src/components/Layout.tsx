@@ -223,14 +223,26 @@ export function Layout() {
 
   const avatarUrl = state.me?.user?.avatarUrl ?? null;
   const avatarSrc = useMemo(() => {
-    if (!avatarUrl) return '';
-    if (/^https?:\/\//i.test(avatarUrl)) return avatarUrl;
-    if (avatarUrl.startsWith('/')) {
-      const base = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-      return `${base}${avatarUrl}`;
-    }
+  if (!avatarUrl) return '';
+
+  if (/^https?:\/\//i.test(avatarUrl)) {
     return avatarUrl;
-  }, [avatarUrl]);
+  }
+
+  if (avatarUrl.startsWith('/uploads/')) {
+    return `${window.location.origin}${avatarUrl}`;
+  }
+
+  if (avatarUrl.startsWith('/')) {
+    const base = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000')
+      .replace(/\/api\/?$/, '')
+      .replace(/\/$/, '');
+
+    return `${base}${avatarUrl}`;
+  }
+
+  return avatarUrl;
+}, [avatarUrl]);
 
   type NavSearchItem = {
     title: string;
