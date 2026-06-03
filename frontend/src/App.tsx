@@ -5,6 +5,7 @@ import { can, canAny } from './auth/permissions';
 import { PERMISSIONS } from './auth/permission-catalog';
 import { BrandingProvider } from './branding/BrandingContext';
 import { Layout } from './components/Layout';
+import { AuthBootstrapGate } from './components/AuthBootstrapGate';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ManagementDashboardPage } from './pages/ManagementDashboardPage';
@@ -227,7 +228,9 @@ export default function App() {
             <Route
               path="/"
               element={
-                <Layout />
+                <AuthBootstrapGate>
+                  <Layout />
+                </AuthBootstrapGate>
               }
             >
               <Route index element={<DashboardPage />} />

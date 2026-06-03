@@ -3,6 +3,35 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { DelegationSelectorModal } from './DelegationSelectorModal';
 
+export function AuthLoadingScreen() {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#020445',
+        color: '#FCFCFC',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <img
+          src="/logo.png"
+          alt="USPIRE ERP"
+          style={{
+            width: 88,
+            height: 88,
+            objectFit: 'contain',
+          }}
+        />
+        <div style={{ fontSize: 13, fontWeight: 750, letterSpacing: 0.4 }}>Loading secure session…</div>
+      </div>
+    </div>
+  );
+}
+
 export function AuthBootstrapGate(props: { children: React.ReactNode }) {
   const { state, logout, activateDelegation } = useAuth();
   const [timedOut, setTimedOut] = useState(false);
@@ -25,12 +54,12 @@ export function AuthBootstrapGate(props: { children: React.ReactNode }) {
     return () => window.clearTimeout(t);
   }, [state.isAuthenticated, state.me]);
 
-  if (state.isBootstrapping) return <div>Loading...</div>;
+  if (state.isBootstrapping) return <AuthLoadingScreen />;
 
   if (!state.isAuthenticated) return <Navigate to="/login" replace />;
 
   if (!state.me) {
-    if (!timedOut) return <div>Loading...</div>;
+    if (!timedOut) return <AuthLoadingScreen />;
 
     return (
       <div>

@@ -20,7 +20,6 @@ import { useAuth } from '../auth/AuthContext';
 import { canAny } from '../auth/permissions';
 import { PERMISSIONS } from '../auth/permission-catalog';
 import { resolveBrandAssetUrl, useBranding } from '../branding/BrandingContext';
-import { AuthBootstrapGate } from './AuthBootstrapGate';
 import type React from 'react';
 import { apiFetch, getApiErrorMessage, pingSession } from '../services/api';
 import { changeMyPassword, updateMyProfile, uploadMyAvatar } from '../services/users';
@@ -2477,9 +2476,7 @@ export function Layout() {
       overflow: 'hidden',
     }}
   >
-    <AuthBootstrapGate>
-      <Outlet />
-    </AuthBootstrapGate>
+    <Outlet />
   </div>
 </div>
 </div>

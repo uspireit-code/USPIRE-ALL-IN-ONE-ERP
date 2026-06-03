@@ -116,11 +116,14 @@ export function AuthProvider(props: { children: React.ReactNode }) {
     if (!state.isBootstrapping) return;
 
     refreshMe()
-      .catch((e: any) => {
-        const status = typeof e?.status === 'number' ? e.status : undefined;
-        if (status === 401) {
-          setState((s) => ({ ...s, me: null, isAuthenticated: false }));
-        }
+      .catch(() => {
+        setState((s) => ({
+          ...s,
+          me: null,
+          isAuthenticated: false,
+          availableDelegations: [],
+          delegation: { isDelegated: false },
+        }));
       })
       .finally(() => {
         setState((s) => ({ ...s, isBootstrapping: false }));
