@@ -1150,8 +1150,7 @@ export function Layout() {
   const pageTitle = pageTitleByPath.find((x) => x.match(location.pathname))?.title ?? (effective?.organisationShortName || effective?.organisationName || 'USPIRE ERP');
   const showTopBar = !location.pathname.startsWith('/login');
 
-  const headerEnvRaw = String((import.meta as any)?.env?.VITE_APP_ENV ?? '').trim();
-  const headerEnv = headerEnvRaw ? headerEnvRaw.toUpperCase() : 'DEV';
+
 
   const COLORS = {
     navy: 'var(--uspire-navy)',
