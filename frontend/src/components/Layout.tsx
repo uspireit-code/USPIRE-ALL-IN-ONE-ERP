@@ -1300,15 +1300,6 @@ export function Layout() {
     </div>
   ) : null;
 
-  const envBadge = useMemo(() => {
-    const env = headerEnv;
-    const isDev = env === 'DEV' || env === 'LOCAL';
-    const isStaging = env === 'STAGING' || env === 'UAT';
-    const bg = isDev ? 'rgba(56, 189, 248, 0.20)' : isStaging ? 'rgba(249, 115, 22, 0.22)' : 'rgba(34, 197, 94, 0.22)';
-    const border = isDev ? 'rgba(56, 189, 248, 0.35)' : isStaging ? 'rgba(249, 115, 22, 0.36)' : 'rgba(34, 197, 94, 0.36)';
-    const color = isDev ? '#BAE6FD' : isStaging ? '#FED7AA' : '#BBF7D0';
-    return { env, bg, border, color };
-  }, [headerEnv]);
 
   const GridIcon = () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2285,24 +2276,6 @@ export function Layout() {
           </div>
 
           <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              style={{
-                height: 24,
-                padding: '0 10px',
-                borderRadius: 999,
-                background: envBadge.bg,
-                border: `1px solid ${envBadge.border}`,
-                color: envBadge.color,
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: 0.8,
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
-              title={`Environment: ${envBadge.env}`}
-            >
-              {envBadge.env}
-            </div>
 
             <div ref={notificationsWrapRef} className="notification-wrapper" style={{ position: 'relative' }}>
               <button
