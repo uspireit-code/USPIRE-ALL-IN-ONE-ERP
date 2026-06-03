@@ -2473,7 +2473,8 @@ export function Layout() {
       display: 'flex',
       flexDirection: 'column',
 
-      overflow: 'hidden',
+      overflowX: 'hidden',
+      overflowY: 'auto',
     }}
   >
     <Outlet />
