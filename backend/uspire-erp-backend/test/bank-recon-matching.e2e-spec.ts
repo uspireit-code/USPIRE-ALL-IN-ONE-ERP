@@ -275,11 +275,11 @@ describe('Bank Reconciliation Matching Engine (e2e)', () => {
     prisma = new PrismaClient();
 
     const tenant = await prisma.tenant.findFirst({
-      where: { name: 'USPIRE Demo Tenant' },
+      where: { name: '' },
       select: { id: true },
     });
 
-    if (!tenant) throw new Error('Seed tenant not found (USPIRE Demo Tenant)');
+    if (!tenant) throw new Error('Seed tenant not found ()');
     tenantId = tenant.id;
 
     const [officerUser, controllerUser] = await Promise.all([

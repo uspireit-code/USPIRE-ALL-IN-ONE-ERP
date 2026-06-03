@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-const TENANT_NAME = 'USPIRE Demo Tenant';
+const TENANT_NAME = '';
 
 const DEFAULT_PERIOD_CLOSE_CHECKLIST_ITEMS = [
   { code: 'AP_REVIEWED', name: 'AP reviewed' },

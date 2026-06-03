@@ -252,10 +252,10 @@ async function main() {
   });
 
   const tenant = await prisma.tenant.upsert({
-    where: { name: 'USPIRE Demo Tenant' },
+    where: { name: '' },
     create: {
-      name: 'USPIRE Demo Tenant',
-      organisationName: 'USPIRE Demo Tenant',
+      name: '',
+      organisationName: '',
       primaryColor: '#020445',
       status: TenantStatus.ACTIVE,
     },
@@ -371,12 +371,12 @@ async function main() {
     where: {
       tenantId_name: {
         tenantId: tenant.id,
-        name: 'USPIRE Demo Entity',
+        name: 'USPIRE Professional Services',
       },
     },
     create: {
       tenantId: tenant.id,
-      name: 'USPIRE Demo Entity',
+      name: 'USPIRE Professional Services',
       jurisdiction: 'ZA',
       baseCurrency: 'ZAR',
       fiscalYearStart: 1,

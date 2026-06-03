@@ -261,14 +261,14 @@ describe('Imprest Settlement Journal Posting (e2e)', () => {
       create: {
         tenantId,
         code: 'T-LE-ENTITY',
-        name: 'USPIRE Demo Entity',
+        name: 'USPIRE Professional Services',
         isActive: true,
         effectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
         effectiveTo: null,
         createdById: controllerUserId,
       } as any,
       update: {
-        name: 'USPIRE Demo Entity',
+        name: 'USPIRE Professional Services',
         isActive: true,
         effectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
         effectiveTo: null,
@@ -434,11 +434,11 @@ describe('Imprest Settlement Journal Posting (e2e)', () => {
     await app.init();
 
     const tenant = await prisma.tenant.findFirst({
-      where: { name: 'USPIRE Demo Tenant' },
+      where: { name: '' },
       select: { id: true },
     });
 
-    if (!tenant) throw new Error('Seed tenant not found (USPIRE Demo Tenant)');
+    if (!tenant) throw new Error('Seed tenant not found ()');
     tenantId = tenant.id;
 
     const [officerUser, managerUser, controllerUser] = await Promise.all([
