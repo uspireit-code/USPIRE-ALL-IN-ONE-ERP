@@ -1613,8 +1613,25 @@ async function main() {
       PERMISSIONS.AP.INVOICE_VIEW,
       PERMISSIONS.AP.INVOICE_CREATE,
       PERMISSIONS.AP.INVOICE_SUBMIT,
-
-      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+      PERMISSIONS.CUSTOMERS.VIEW,
+      PERMISSIONS.AR_STATEMENT.VIEW,
+      PERMISSIONS.AR_REMINDER.VIEW,
+      PERMISSIONS.REPORT.REPORTS_VIEW,
+      PERMISSIONS.REPORT.TB_VIEW,
+      PERMISSIONS.REPORT.PL_VIEW_LEGACY,
+      PERMISSIONS.REPORT.BS_VIEW_LEGACY,
+      PERMISSIONS.REPORT.PNL_VIEW,
+      PERMISSIONS.REPORT.BALANCE_SHEET_VIEW,
+      PERMISSIONS.REPORT.SOCE_VIEW,
+      PERMISSIONS.REPORT.SOE_VIEW,
+      PERMISSIONS.REPORT.CASH_FLOW_VIEW,
+      PERMISSIONS.REPORT.CASHFLOW_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_PL_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_SOCE_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_CF_VIEW,
+      PERMISSIONS.REPORT.REPORT_GENERATE,
+      PERMISSIONS.REPORT.REPORT_EXPORT,
     ]);
 
     const financeOfficerAllowedCodes = [
@@ -1664,8 +1681,24 @@ async function main() {
       PERMISSIONS.AP.PAYMENT_PROPOSAL_SUBMIT,
       PERMISSIONS.REPORT.AP_AGING_VIEW,
       PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW,
-      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
       PERMISSIONS.BANK.ACCOUNT_VIEW,
+      PERMISSIONS.REPORT.REPORTS_VIEW,
+      PERMISSIONS.REPORT.TB_VIEW,
+      PERMISSIONS.REPORT.DISCLOSURE_VIEW,
+      PERMISSIONS.REPORT.PL_VIEW_LEGACY,
+      PERMISSIONS.REPORT.BS_VIEW_LEGACY,
+      PERMISSIONS.REPORT.PNL_VIEW,
+      PERMISSIONS.REPORT.BALANCE_SHEET_VIEW,
+      PERMISSIONS.REPORT.SOCE_VIEW,
+      PERMISSIONS.REPORT.SOE_VIEW,
+      PERMISSIONS.REPORT.CASH_FLOW_VIEW,
+      PERMISSIONS.REPORT.CASHFLOW_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_PL_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_SOCE_VIEW,
+      PERMISSIONS.REPORT.PRESENTATION_CF_VIEW,
+      PERMISSIONS.REPORT.REPORT_GENERATE,
+      PERMISSIONS.REPORT.REPORT_EXPORT,
 
       PERMISSIONS.AUDIT.EVIDENCE_UPLOAD,
       PERMISSIONS.AUDIT.EVIDENCE_VIEW,
@@ -1949,6 +1982,7 @@ async function main() {
     });
 
     await assignPermissionsByCode(financeControllerRole.id, [
+      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
       PERMISSIONS.SYSTEM.CONFIG_VIEW,
       PERMISSIONS.SYSTEM.CONFIG_UPDATE,
       PERMISSIONS.FINANCE.CONFIG_CHANGE,
@@ -2218,16 +2252,21 @@ async function main() {
   }
 
   // Reports RBAC backfill (idempotent):
-  // - FINANCE_MANAGER + FINANCE_CONTROLLER should be able to run financial statements.
-  // - FINANCE_OFFICER must not.
+  // - FINANCE_OFFICER + FINANCE_MANAGER + FINANCE_CONTROLLER should be able to run financial statements.
   // NOTE: endpoints use a mix of legacy and new permissions; grant the minimal set to support TB/PL/BS and their presentation routes.
   const tbViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.TB_VIEW }, select: { id: true } });
   const plLegacyPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PL_VIEW_LEGACY }, select: { id: true } });
   const bsLegacyPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.BS_VIEW_LEGACY }, select: { id: true } });
   const pnlEnginePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PNL_VIEW }, select: { id: true } });
   const bsEnginePerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.BALANCE_SHEET_VIEW }, select: { id: true } });
+  const soceViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.SOCE_VIEW }, select: { id: true } });
+  const soeStatementViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.SOE_VIEW }, select: { id: true } });
+  const cashFlowViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.CASH_FLOW_VIEW }, select: { id: true } });
+  const cashflowStatementViewPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.CASHFLOW_VIEW }, select: { id: true } });
   const plPresentationPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PRESENTATION_PL_VIEW }, select: { id: true } });
   const bsPresentationPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PRESENTATION_BS_VIEW }, select: { id: true } });
+  const socePresentationPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PRESENTATION_SOCE_VIEW }, select: { id: true } });
+  const cfPresentationPerm = await prisma.permission.findUnique({ where: { code: PERMISSIONS.REPORT.PRESENTATION_CF_VIEW }, select: { id: true } });
 
   const reportPermIds = [
     reportsModuleViewPerm?.id,
@@ -2236,15 +2275,23 @@ async function main() {
     bsLegacyPerm?.id,
     pnlEnginePerm?.id,
     bsEnginePerm?.id,
+    soceViewPerm?.id,
+    soeStatementViewPerm?.id,
+    cashFlowViewPerm?.id,
+    cashflowStatementViewPerm?.id,
     plPresentationPerm?.id,
     bsPresentationPerm?.id,
+    socePresentationPerm?.id,
+    cfPresentationPerm?.id,
+    reportGeneratePerm?.id,
+    reportExportPerm?.id,
   ].filter(Boolean) as string[];
 
   if (reportPermIds.length > 0) {
     const rolesNeedingReportPerms = await prisma.role.findMany({
       where: {
         name: {
-          in: ['FINANCE_MANAGER', 'FINANCE_CONTROLLER'],
+          in: ['FINANCE_OFFICER', 'FINANCE_MANAGER', 'FINANCE_CONTROLLER'],
         },
       },
       select: { id: true },
@@ -2261,24 +2308,37 @@ async function main() {
         skipDuplicates: true,
       });
     }
-
-    // Ensure FINANCE_OFFICER does not have financial statements permissions.
-    const financeOfficerRoles = await prisma.role.findMany({
-      where: {
-        name: 'FINANCE_OFFICER',
-      },
-      select: { id: true },
-    });
-
-    if (financeOfficerRoles.length > 0) {
-      await prisma.rolePermission.deleteMany({
-        where: {
-          roleId: { in: financeOfficerRoles.map((r) => r.id) },
-          permissionId: { in: reportPermIds },
-        },
-      });
-    }
   }
+
+  await removePermissionsByCode(
+    [financeOfficerRole.id, financeManagerRole.id],
+    [
+      PERMISSIONS.SYSTEM.SETTINGS_VIEW,
+      PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+      PERMISSIONS.SYSTEM.CONFIG_VIEW,
+      PERMISSIONS.SYSTEM.CONFIG_UPDATE,
+      PERMISSIONS.SYSTEM.CONFIG_CHANGE,
+      PERMISSIONS.FINANCE.CONFIG_VIEW,
+      PERMISSIONS.FINANCE.CONFIG_UPDATE,
+      PERMISSIONS.FINANCE.CONFIG_CHANGE,
+      PERMISSIONS.USER.CREATE,
+      PERMISSIONS.USER.EDIT,
+      PERMISSIONS.USER.ASSIGN_ROLE,
+      PERMISSIONS.ROLE.ASSIGN,
+      PERMISSIONS.SECURITY.DELEGATION_MANAGE,
+      PERMISSIONS.GOVERNANCE.FINANCIAL.VIEW,
+      PERMISSIONS.GOVERNANCE.FINANCIAL.MANAGE,
+      PERMISSIONS.GOVERNANCE.SYSTEM.VIEW,
+      PERMISSIONS.GOVERNANCE.SYSTEM.MANAGE,
+    ],
+  );
+
+  await assignPermissionsByCode(financeControllerRole.id, [
+    PERMISSIONS.SYSTEM.SETTINGS_VIEW,
+    PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
+    PERMISSIONS.SYSTEM.CONFIG_VIEW,
+    PERMISSIONS.FINANCE.CONFIG_VIEW,
+  ]);
 
   // COA governance: unlock is controller-only.
   // Explicitly add for FINANCE_CONTROLLER, and explicitly remove for ADMIN / FINANCE_MANAGER / FINANCE_OFFICER.

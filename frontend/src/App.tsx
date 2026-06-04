@@ -145,53 +145,40 @@ import { ArRemindersManualTriggerPage } from './pages/ar/ArRemindersManualTrigge
 import { ArRemindersRulesPage } from './pages/ar/ArRemindersRulesPage';
 import { ArRemindersTemplatesPage } from './pages/ar/ArRemindersTemplatesPage';
 
+
 function SettingsVisibleRoute(props: { children: React.ReactNode }) {
   const { state } = useAuth();
-  const has = canAny(state.me, [
-    (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
-    (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
-    (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
-    PERMISSIONS.SYSTEM.CONFIG_VIEW,
-    PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW,
-    PERMISSIONS.FINANCE.CONFIG_VIEW,
-    PERMISSIONS.FINANCE.CONFIG_CHANGE,
-    PERMISSIONS.USER.VIEW,
-    PERMISSIONS.ROLE.VIEW,
-  ]);
-  if (!has)
+
+  const has =
+    can(state.me, PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW) ||
+    can(state.me, PERMISSIONS.SYSTEM.CONFIG_VIEW) ||
+    can(state.me, PERMISSIONS.FINANCE.CONFIG_VIEW);
+
+  if (!has) {
     return (
       <AccessDeniedPage
-        requiredAnyPermissions={[
-          (PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW,
-          (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW,
-          (PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE,
-          PERMISSIONS.SYSTEM.CONFIG_VIEW,
-          PERMISSIONS.FINANCE.CONFIG_VIEW,
-          PERMISSIONS.FINANCE.CONFIG_CHANGE,
-          PERMISSIONS.USER.VIEW,
-          PERMISSIONS.ROLE.VIEW,
-        ]}
+        requiredPermission="SYSTEM OR FINANCE SETTINGS ACCESS"
       />
     );
+  }
+
   return <>{props.children}</>;
 }
-
 function PermissionOnlyRoute(props: { permission: string; children: React.ReactNode }) {
   const { state } = useAuth();
-  if (state.isAuthenticated && !state.me) return <div>Loading...</div>;
-  const has = can(state.me, props.permission);
-  if (!has) {
-    if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
-      console.warn('[route.guard][deny][only]', {
-        path: window.location.pathname,
-        requiredPermission: props.permission,
-        userEmail: state.me?.user?.email,
-        permissions: state.me?.permissions ?? [],
-      });
-    }
-    return <AccessDeniedPage requiredPermission={props.permission} />;
+
+  if (state.isAuthenticated && !state.me) {
+    return <div>Loading...</div>;
   }
+
+  const has = can(state.me, props.permission);
+
+  if (!has) {
+    return (
+      <AccessDeniedPage requiredPermission={props.permission} />
+    );
+  }
+
   return <>{props.children}</>;
 }
 
@@ -508,17 +495,103 @@ export default function App() {
               <Route path="payments/ar" element={<ArReceiptsListPage />} />
               <Route path="payments/ar/new" element={<CreateArReceiptPage />} />
               <Route path="payments/ar/:id" element={<ArReceiptDetailsPage />} />
-              <Route path="reports" element={<ReportsHomePage />} />
-              <Route path="reports/trial-balance" element={<TrialBalancePage />} />
-              <Route path="reports/pnl" element={<ProfitLossPage />} />
-              <Route path="reports/profit-and-loss" element={<ProfitLossPage />} />
-              <Route path="reports/balance-sheet" element={<BalanceSheetPage />} />
-              <Route path="reports/soce" element={<SocePage />} />
-              <Route path="reports/cash-flow" element={<CashFlowPage />} />
-              <Route path="reports/disclosure-notes" element={<DisclosureNotesPage />} />
-              <Route path="reports/ap-aging" element={<ApAgingPage />} />
-              <Route path="reports/ar-aging" element={<ArAgingPage />} />
-              <Route path="reports/vat" element={<VatSummaryPage />} />
+              <Route
+                path="reports"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.REPORT.TB_VIEW,
+                      PERMISSIONS.REPORT.PRESENTATION_PL_VIEW,
+                      PERMISSIONS.REPORT.PRESENTATION_BS_VIEW,
+                      PERMISSIONS.REPORT.CASHFLOW_VIEW,
+                      PERMISSIONS.REPORT.SOE_VIEW,
+                      PERMISSIONS.REPORT.DISCLOSURE_VIEW,
+                    ]}
+                  >
+                    <ReportsHomePage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="reports/trial-balance"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.REPORT.TB_VIEW}>
+                    <TrialBalancePage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="reports/pnl"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.REPORT.PRESENTATION_PL_VIEW, PERMISSIONS.REPORT.PNL_VIEW]}>
+                    <ProfitLossPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="reports/profit-and-loss"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.REPORT.PRESENTATION_PL_VIEW, PERMISSIONS.REPORT.PNL_VIEW]}>
+                    <ProfitLossPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="reports/balance-sheet"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.REPORT.PRESENTATION_BS_VIEW, PERMISSIONS.REPORT.BALANCE_SHEET_VIEW]}>
+                    <BalanceSheetPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="reports/soce"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.REPORT.SOE_VIEW, PERMISSIONS.REPORT.SOCE_VIEW]}>
+                    <SocePage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="reports/cash-flow"
+                element={
+                  <PermissionAnyRoute permissions={[PERMISSIONS.REPORT.CASHFLOW_VIEW, PERMISSIONS.REPORT.CASH_FLOW_VIEW]}>
+                    <CashFlowPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="reports/disclosure-notes"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.REPORT.DISCLOSURE_VIEW}>
+                    <DisclosureNotesPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="reports/ap-aging"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.REPORT.AP_AGING_VIEW}>
+                    <ApAgingPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="reports/ar-aging"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.REPORT.AR_AGING_VIEW}>
+                    <ArAgingPage />
+                  </PermissionOnlyRoute>
+                }
+              />
+              <Route
+                path="reports/vat"
+                element={
+                  <PermissionOnlyRoute permission={PERMISSIONS.TAX.REPORT_VIEW}>
+                    <VatSummaryPage />
+                  </PermissionOnlyRoute>
+                }
+              />
               <Route path="opening-balances" element={<OpeningBalancesPage />} />
               <Route path="fixed-assets" element={<FixedAssetsPage />} />
               <Route path="periods" element={<PeriodsPage />} />

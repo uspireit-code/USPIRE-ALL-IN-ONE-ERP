@@ -1370,16 +1370,28 @@ export function Layout() {
 
   const SIDEBAR_WIDTH = 280;
 
-  const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
-  const hasSystemConfigView = hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
-  const hasSystemSettingsView = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
-  const hasFinanceConfigView = hasPermission(PERMISSIONS.FINANCE.CONFIG_VIEW);
-  const hasUserView = hasPermission(PERMISSIONS.USER.VIEW);
-  const hasRoleView = hasPermission(PERMISSIONS.ROLE.VIEW);
+const hasFinanceViewAll = hasPermission(PERMISSIONS.FINANCE.VIEW_ALL);
+const hasSystemConfigView = hasPermission(PERMISSIONS.SYSTEM.CONFIG_VIEW);
+const hasSystemSettingsView = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW);
 
-  const hasFinancialGovernanceView =
-    hasPermission((PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.VIEW) ||
-    hasPermission((PERMISSIONS as any).GOVERNANCE?.FINANCIAL?.MANAGE);
+const isFinanceController = userRoles.includes('FINANCE_CONTROLLER');
+const isFinanceOfficer = userRoles.includes('FINANCE_OFFICER');
+const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
+
+/**
+ * SETTINGS RULES
+ * ----------------
+ * Finance Controller:
+ *   Can access ONLY finance-related settings.
+ *
+ * Super Admin:
+ *   Can access non-finance/platform settings.
+ *
+ * Finance Officer:
+ *   Must NEVER see Settings module.
+ */
+const showSettings =
+  isFinanceController || isSuperAdmin;
 
   const hasSystemGovView =
     hasPermission((PERMISSIONS as any).GOVERNANCE?.SYSTEM?.VIEW) ||
@@ -1395,6 +1407,22 @@ export function Layout() {
   const showSupplierStatements =
     hasPermission(PERMISSIONS.REPORT.SUPPLIER_STATEMENT_VIEW) ||
     hasFinanceViewAll;
+  const showTrialBalance = hasPermission(PERMISSIONS.REPORT.TB_VIEW) || hasFinanceViewAll;
+  const showProfitAndLoss = hasPermission(PERMISSIONS.REPORT.PRESENTATION_PL_VIEW) || hasPermission(PERMISSIONS.REPORT.PNL_VIEW) || hasFinanceViewAll;
+  const showBalanceSheet = hasPermission(PERMISSIONS.REPORT.PRESENTATION_BS_VIEW) || hasPermission(PERMISSIONS.REPORT.BALANCE_SHEET_VIEW) || hasFinanceViewAll;
+  const showCashFlow = hasPermission(PERMISSIONS.REPORT.CASHFLOW_VIEW) || hasPermission(PERMISSIONS.REPORT.CASH_FLOW_VIEW) || hasFinanceViewAll;
+  const showSoce = hasPermission(PERMISSIONS.REPORT.SOE_VIEW) || hasPermission(PERMISSIONS.REPORT.SOCE_VIEW) || hasFinanceViewAll;
+  const showDisclosureNotes = hasPermission(PERMISSIONS.REPORT.DISCLOSURE_VIEW) || hasFinanceViewAll;
+  const showReports =
+  isFinanceOfficer ||
+  isFinanceController ||
+  showTrialBalance ||
+  showProfitAndLoss ||
+  showBalanceSheet ||
+  showCashFlow ||
+  showSoce ||
+  showDisclosureNotes;
+  
   const showApAging =
     hasPermission(PERMISSIONS.REPORT.AP_AGING_VIEW) || hasFinanceViewAll;
   const showPaymentProposals =
@@ -1512,16 +1540,6 @@ export function Layout() {
       PERMISSIONS.IMPREST.CASE_ISSUE,
     ]);
 
-  const showSettings =
-    hasSystemGovView ||
-    hasSystemConfigView ||
-    hasSystemSettingsView ||
-    hasFinanceConfigView ||
-    hasFinancialGovernanceView ||
-    hasUserView ||
-    hasRoleView ||
-    hasPermission(PERMISSIONS.SECURITY.DELEGATION_MANAGE);
-
   const showFinanceNav =
     hasFinanceViewAll ||
     showCoa ||
@@ -1537,7 +1555,8 @@ export function Layout() {
     showArReceipts ||
     showArCreditNotes ||
     showArRefunds ||
-    showImprest;
+    showImprest ||
+    showReports;
 
   const linkBaseStyle: React.CSSProperties = {
     display: 'flex',
@@ -1970,25 +1989,28 @@ export function Layout() {
 
                 {showFixedAssets ? <SidebarLink to="/fixed-assets" label="Fixed Assets" icon={<FolderIcon />} level={2} /> : null}
 
-                <SidebarToggle
-                  label="Reports"
-                  icon={<FolderIcon />}
-                  open={openFinanceL2.reports}
-                  active={financeActiveL2.reports}
-                  level={2}
-                  onToggle={() => setOpenFinanceL2((s) => ({ ...s, reports: !s.reports }))}
-                />
-                {openFinanceL2.reports ? (
-                  <Indent level={3}>
-                    <SidebarLink to="/reports/trial-balance" label="Trial Balance" icon={<BarChartIcon />} level={3} />
-                    <SidebarLink to="/reports/profit-and-loss" label="P&L" icon={<BarChartIcon />} level={3} />
-                    <SidebarLink to="/reports/balance-sheet" label="Balance Sheet" icon={<BarChartIcon />} level={3} />
-                    <SidebarLink to="/reports/cash-flow" label="Cash Flow" icon={<BarChartIcon />} level={3} />
-                    <SidebarLink to="/reports/soce" label="SOCE" icon={<BarChartIcon />} level={3} />
-                  </Indent>
+                {showReports ? (
+                  <>
+                    <SidebarToggle
+                      label="Reports"
+                      icon={<FolderIcon />}
+                      open={openFinanceL2.reports}
+                      active={financeActiveL2.reports}
+                      level={2}
+                      onToggle={() => setOpenFinanceL2((s) => ({ ...s, reports: !s.reports }))}
+                    />
+                    {openFinanceL2.reports ? (
+                      <Indent level={3}>
+                        {showTrialBalance ? <SidebarLink to="/reports/trial-balance" label="Trial Balance" icon={<BarChartIcon />} level={3} /> : null}
+                        {showProfitAndLoss ? <SidebarLink to="/reports/profit-and-loss" label="P&L" icon={<BarChartIcon />} level={3} /> : null}
+                        {showBalanceSheet ? <SidebarLink to="/reports/balance-sheet" label="Balance Sheet" icon={<BarChartIcon />} level={3} /> : null}
+                        {showCashFlow ? <SidebarLink to="/reports/cash-flow" label="Cash Flow" icon={<BarChartIcon />} level={3} /> : null}
+                        {showSoce ? <SidebarLink to="/reports/soce" label="SOCE" icon={<BarChartIcon />} level={3} /> : null}
+                        {showDisclosureNotes ? <SidebarLink to="/reports/disclosure-notes" label="Disclosure Notes" icon={<FileTextIcon />} level={3} /> : null}
+                      </Indent>
+                    ) : null}
+                  </>
                 ) : null}
-
-                <SidebarLink to="/reports/disclosure-notes" label="Disclosure Notes" icon={<FileTextIcon />} level={2} />
                 {showAudit ? <SidebarLink to="/audit" label="Audit" icon={<ShieldIcon />} level={2} /> : null}
               </Indent>
             ) : null}
