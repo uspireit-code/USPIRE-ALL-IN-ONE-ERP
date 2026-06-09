@@ -2162,6 +2162,14 @@ export class AuthService {
       reason: 'idle_timeout',
     });
 
+    await this.autoRevokeStaleSessions({
+  tenantId: tenant.id,
+  userId: user.id,
+  req,
+  requestId,
+  reason: 'post_2fa_cleanup',
+});
+
     const active = await this.getActiveSession({ tenantId: tenant.id, userId: user.id });
     if (active) {
       await this.writeAuthAuditEvent({
