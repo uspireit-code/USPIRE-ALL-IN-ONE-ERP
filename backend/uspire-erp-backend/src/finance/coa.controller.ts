@@ -70,7 +70,10 @@ export class CoaController {
   }
 
   @Post()
-  @Permissions(PERMISSIONS.COA.DRAFT_CREATE)
+@PermissionsAny(
+  PERMISSIONS.COA.DRAFT_CREATE,
+  PERMISSIONS.COA.NEW_DRAFT_CREATE,
+)
   async create(@Req() req: Request, @Body() dto: CreateCoaAccountDto) {
     return this.coa.create(req, dto);
   }
@@ -175,8 +178,11 @@ export class CoaController {
     return this.coa.rejectReclassification(req, id, dto);
   }
 
-  @Post('import')
-  @Permissions(PERMISSIONS.COA.DRAFT_CREATE)
+ @Post('import')
+@PermissionsAny(
+  PERMISSIONS.COA.DRAFT_CREATE,
+  PERMISSIONS.COA.NEW_DRAFT_CREATE,
+)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -190,7 +196,10 @@ export class CoaController {
   }
 
   @Post('import/validate')
-  @Permissions(PERMISSIONS.COA.DRAFT_CREATE)
+@PermissionsAny(
+  PERMISSIONS.COA.DRAFT_CREATE,
+  PERMISSIONS.COA.NEW_DRAFT_CREATE,
+)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -201,8 +210,11 @@ export class CoaController {
     return this.coa.validateImport(req, file);
   }
 
-  @Post('import/commit')
-  @Permissions(PERMISSIONS.COA.DRAFT_CREATE)
+ @Post('import/commit')
+@PermissionsAny(
+  PERMISSIONS.COA.DRAFT_CREATE,
+  PERMISSIONS.COA.NEW_DRAFT_CREATE,
+)
   async commitImport(
     @Req() req: Request,
     @Body()
@@ -279,7 +291,10 @@ export class CoaController {
   }
 
   @Get('import-template')
-  @Permissions(PERMISSIONS.COA.DRAFT_CREATE)
+@PermissionsAny(
+  PERMISSIONS.COA.DRAFT_CREATE,
+  PERMISSIONS.COA.NEW_DRAFT_CREATE,
+)
   async importTemplate(
     @Req() req: Request,
     @Query('format') format: string | undefined,
@@ -295,8 +310,11 @@ export class CoaController {
     res.send(tpl.body);
   }
 
-  @Get('import-template/industry/:industry')
-  @Permissions(PERMISSIONS.COA.DRAFT_CREATE)
+@Get('import-template/industry/:industry')
+@PermissionsAny(
+  PERMISSIONS.COA.DRAFT_CREATE,
+  PERMISSIONS.COA.NEW_DRAFT_CREATE,
+)
   async importIndustryTemplate(
     @Req() req: Request,
     @Param('industry') industry: string,
