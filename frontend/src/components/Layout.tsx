@@ -1446,12 +1446,14 @@ const showSettings =
   const showGlRegister = showGlView;
   const showGlDrafts = showGlCreate;
   const showCoa = hasPermission(PERMISSIONS.COA.VIEW) || hasFinanceViewAll;
-  const showCoaSubmissions =
-    hasPermission(PERMISSIONS.COA.DRAFT_CREATE)
-    || hasPermission(PERMISSIONS.COA.DRAFT_EDIT)
-    || hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT)
-    || hasFinanceViewAll
-    ;
+ const showCoaSubmissions =
+  hasPermission(PERMISSIONS.COA.DRAFT_CREATE)
+  || hasPermission(PERMISSIONS.COA.DRAFT_EDIT)
+  || hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT)
+  || hasPermission(PERMISSIONS.COA.NEW_DRAFT_CREATE)
+  || hasPermission(PERMISSIONS.COA.NEW_DRAFT_EDIT)
+  || hasPermission(PERMISSIONS.COA.NEW_DRAFT_SUBMIT)
+  || hasFinanceViewAll;
 
   const showCoaApprovals = hasPermission(PERMISSIONS.COA.APPROVE) || hasFinanceViewAll;
   const showPeriods =
