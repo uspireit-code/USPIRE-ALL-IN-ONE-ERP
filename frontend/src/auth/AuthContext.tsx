@@ -203,19 +203,21 @@ export function AuthProvider(props: { children: React.ReactNode }) {
     return resp as any;
   }, [refreshMe]);
 
-  const verify2fa = useCallback(async (params: { challengeId: string; otp: string }) => {
-    const payload = {
-      challengeId: (params.challengeId ?? '').trim(),
-      otp: (params.otp ?? '').trim(),
-    };
+const verify2fa = useCallback(async (params: { challengeId: string; otp: string }) => {
+  const payload = {
+    challengeId: (params.challengeId ?? '').trim(),
+    otp: (params.otp ?? '').trim(),
+  };
 
-    await apiFetch<{ success: true }>('/auth/2fa/verify', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+  await apiFetch<{ success: true }>('/auth/2fa/verify', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 
-    await refreshMe();
-  }, [refreshMe]);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  await refreshMe();
+}, [refreshMe]);
 
   const activateDelegation = useCallback(
     async (params: { delegationId: string; actingAsUserName?: string }) => {
