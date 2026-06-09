@@ -256,7 +256,7 @@ export function Layout() {
       { title: 'Dashboard', category: 'Home', route: '/', icon: <LayoutDashboard size={16} aria-hidden /> },
       { title: 'Chart of Accounts', category: 'Finance & Accounting', route: '/finance/coa', icon: <Landmark size={16} aria-hidden />, keywords: ['coa', 'accounts', 'ledger'] },
       { title: 'COA Health', category: 'Finance & Accounting', route: '/finance/coa-health', icon: <Gauge size={16} aria-hidden />, keywords: ['coa', 'health', 'validation'] },
-      { title: 'COA Submissions', category: 'Finance & Accounting', route: '/finance/coa-submissions', icon: <FileText size={16} aria-hidden />, keywords: ['coa', 'submissions', 'approval'] },
+      { title: 'COA Submissions', category: 'Finance & Accounting', route: '/finance/coa/submissions', icon: <FileText size={16} aria-hidden />, keywords: ['coa', 'submissions', 'approval'] },
       { title: 'General Ledger', category: 'Finance & Accounting', route: '/finance/gl', icon: <Wallet size={16} aria-hidden />, keywords: ['gl', 'journals', 'ledger'] },
       { title: 'Journals', category: 'Finance & Accounting', route: '/finance/gl/journals', icon: <Receipt size={16} aria-hidden />, keywords: ['journal', 'entries', 'posting'] },
       { title: 'Accounts Payable', category: 'Finance & Accounting', route: '/ap', icon: <CreditCard size={16} aria-hidden />, keywords: ['ap', 'suppliers', 'bills'] },
@@ -1452,6 +1452,7 @@ const showSettings =
     || hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT)
     || hasFinanceViewAll
     ;
+
   const showCoaApprovals = hasPermission(PERMISSIONS.COA.APPROVE) || hasFinanceViewAll;
   const showPeriods =
     hasFinanceViewAll ||
@@ -1541,22 +1542,24 @@ const showSettings =
     ]);
 
   const showFinanceNav =
-    hasFinanceViewAll ||
-    showCoa ||
-    showGlView ||
-    showPeriods ||
-    showFinanceBudgets ||
-    showForecasts ||
-    showFixedAssets ||
-    showBankReconciliation ||
-    showApBills ||
-    showArCustomers ||
-    showArInvoices ||
-    showArReceipts ||
-    showArCreditNotes ||
-    showArRefunds ||
-    showImprest ||
-    showReports;
+  hasFinanceViewAll ||
+  showCoa ||
+  showCoaSubmissions ||
+  showCoaApprovals ||
+  showGlView ||
+  showPeriods ||
+  showFinanceBudgets ||
+  showForecasts ||
+  showFixedAssets ||
+  showBankReconciliation ||
+  showApBills ||
+  showArCustomers ||
+  showArInvoices ||
+  showArReceipts ||
+  showArCreditNotes ||
+  showArRefunds ||
+  showImprest ||
+  showReports;
 
   const linkBaseStyle: React.CSSProperties = {
     display: 'flex',
