@@ -1376,7 +1376,9 @@ const hasSystemSettingsView = hasPermission(PERMISSIONS.SYSTEM.SYS_SETTINGS_VIEW
 
 const isFinanceController = userRoles.includes('FINANCE_CONTROLLER');
 const isFinanceOfficer = userRoles.includes('FINANCE_OFFICER');
-const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
+const isSuperAdmin =
+  userRoles.includes('SUPER_ADMIN') ||
+  userRoles.includes('SUPERADMIN');
 
 /**
  * SETTINGS RULES
