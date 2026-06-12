@@ -612,6 +612,7 @@ export async function postJournal(id: string) {
     method: 'POST',
     headers: {
       'x-governance-reason': 'Approved retro posting',
+      'x-override-session-id-retro': 'MANUAL_OVERRIDE',
     },
   });
 }
