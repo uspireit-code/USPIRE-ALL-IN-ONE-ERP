@@ -608,7 +608,12 @@ export async function listPostQueue() {
 }
 
 export async function postJournal(id: string) {
-  return apiFetch<JournalEntry>(`/gl/journals/${id}/post`, { method: 'POST' });
+  return apiFetch<JournalEntry>(`/gl/journals/${id}/post`, {
+    method: 'POST',
+    headers: {
+      'x-governance-reason': 'Approved retro posting',
+    },
+  });
 }
 
 export async function returnJournalToReview(id: string, reason: string) {
