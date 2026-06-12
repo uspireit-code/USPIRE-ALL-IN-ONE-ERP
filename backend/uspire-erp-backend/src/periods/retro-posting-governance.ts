@@ -92,17 +92,27 @@ export function assertRetroPostingWithinToleranceOrEscalated(params: {
 
   const reason = readReason({ req: params.req, context: params.context });
   if (!reason || reason.length < 3) {
-    throw new ForbiddenException(
-      'Governance reason is required for retro posting. Provide x-governance-reason header.',
-    );
+    throw new ForbiddenException({
+      error: 'Posting blocked by retro posting control',
+      code: 'RETRO_POSTING_OVERRIDE_REQUIRED',
+      overrideCode: 'RETRO_POSTING_OVERRIDE',
+      entryPoint: 'GL_JOURNAL_POST',
+      reason:
+        'Governance reason is required for retro posting. Provide x-governance-reason header.',
+    });
   }
 
   if (params.req) {
     const sessionId = String(params.req.header('x-override-session-id-retro') ?? '').trim();
     if (!sessionId) {
-      throw new ForbiddenException(
-        'Override session is required for retro posting. Provide x-override-session-id-retro header.',
-      );
+      throw new ForbiddenException({
+        error: 'Posting blocked by retro posting control',
+        code: 'RETRO_POSTING_OVERRIDE_REQUIRED',
+        overrideCode: 'RETRO_POSTING_OVERRIDE',
+        entryPoint: 'GL_JOURNAL_POST',
+        reason:
+          'Override session is required for retro posting. Provide x-override-session-id-retro header.',
+      });
     }
     (params.req as any).governanceOverrideSessionIdRetro = sessionId;
   }
@@ -110,7 +120,13 @@ export function assertRetroPostingWithinToleranceOrEscalated(params: {
   // Conservative behavior: if no escalation sink is available, do not allow override.
   const existing = getEscalation({ req: params.req, context: params.context });
   if (!existing && !params.req && !params.context?.setEscalation) {
-    throw new ForbiddenException(decision.reason);
+    throw new ForbiddenException({
+      error: 'Posting blocked by retro posting control',
+      code: 'RETRO_POSTING_OVERRIDE_REQUIRED',
+      overrideCode: 'RETRO_POSTING_OVERRIDE',
+      entryPoint: 'GL_JOURNAL_POST',
+      reason: decision.reason,
+    });
   }
 
   if (!existing) {

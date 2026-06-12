@@ -8,6 +8,11 @@ import {
   reviewJournal,
   submitJournal,
 } from '../services/gl';
+import {
+  parseOverrideRequirement,
+  type OverrideRequirement,
+} from '../services/overrideSessions';
+import { OverridePostingModal } from './OverridePostingModal';
 
 export function JournalActionBar(props: {
   journal: JournalDetailResponse;
@@ -23,6 +28,7 @@ export function JournalActionBar(props: {
   const [confirmPostOpen, setConfirmPostOpen] = useState(false);
   const [confirmReturnOpen, setConfirmReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [overrideReq, setOverrideReq] = useState<OverrideRequirement | null>(null);
 
   const status = props.journal.status;
   const creatorId = props.journal.createdBy?.id ?? null;
@@ -60,8 +66,49 @@ export function JournalActionBar(props: {
     !isReviewer &&
     !blockedByClosedPeriod;
 
+  // Closed periods require a governed override session rather than a normal post.
+  const canRequestClosedPeriodOverride =
+    props.canPost &&
+    status === 'REVIEWED' &&
+    !isCreator &&
+    !isReviewer &&
+    blockedByClosedPeriod &&
+    !budgetBlock;
+
+  async function attemptPost() {
+    setBusy(true);
+    props.onError('');
+    try {
+      await postJournal(props.journal.id);
+      await props.onJournalUpdated();
+    } catch (e) {
+      const requirement = parseOverrideRequirement(e);
+      if (requirement) {
+        setOverrideReq(requirement);
+        return;
+      }
+      const body = (e as any)?.body;
+      const msgFromBody =
+        body && typeof body === 'object'
+          ? typeof body.error === 'string'
+            ? body.error
+            : typeof body.message === 'string'
+              ? body.message
+              : typeof body.reason === 'string'
+                ? body.reason
+                : null
+          : null;
+      props.onError(msgFromBody ?? getApiErrorMessage(e, 'Failed to post journal'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const infoMessage = useMemo(() => {
     if (blockedByClosedPeriod) {
+      if (canRequestClosedPeriodOverride) {
+        return 'This journal belongs to a CLOSED accounting period. Posting requires an approved governance override.';
+      }
       return 'This journal belongs to a CLOSED accounting period and cannot be modified.';
     }
 
@@ -86,7 +133,7 @@ export function JournalActionBar(props: {
     }
 
     return null;
-  }, [blockedByClosedPeriod, budgetBlock, budgetWarnNeedsJustification, isCreator, isReviewer, props.canApprove, props.canCreate, props.canPost, status]);
+  }, [blockedByClosedPeriod, canRequestClosedPeriodOverride, budgetBlock, budgetWarnNeedsJustification, isCreator, isReviewer, props.canApprove, props.canCreate, props.canPost, status]);
 
   async function wrap(action: () => Promise<unknown>, fallback: string) {
     setBusy(true);
@@ -174,6 +221,12 @@ export function JournalActionBar(props: {
             </button>
           </>
         ) : null}
+
+        {canRequestClosedPeriodOverride ? (
+          <button onClick={() => setConfirmPostOpen(true)} disabled={busy} style={{ fontWeight: 700 }}>
+            Post with governance override
+          </button>
+        ) : null}
       </div>
 
       {confirmPostOpen ? (
@@ -224,9 +277,9 @@ export function JournalActionBar(props: {
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  wrap(() => postJournal(props.journal.id), 'Failed to post journal').finally(() => setConfirmPostOpen(false))
-                }
+                onClick={() => {
+                  void attemptPost().finally(() => setConfirmPostOpen(false));
+                }}
                 disabled={busy}
                 style={{ fontWeight: 750 }}
               >
@@ -316,6 +369,21 @@ export function JournalActionBar(props: {
             </div>
           </div>
         </>
+      ) : null}
+
+      {overrideReq ? (
+        <OverridePostingModal
+          journal={{
+            id: props.journal.id,
+            journalNumber: props.journal.journalNumber,
+            reference: props.journal.reference,
+          }}
+          requirement={overrideReq}
+          onClose={() => setOverrideReq(null)}
+          onPosted={() => {
+            void props.onJournalUpdated();
+          }}
+        />
       ) : null}
     </div>
   );

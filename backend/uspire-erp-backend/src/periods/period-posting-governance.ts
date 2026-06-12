@@ -89,23 +89,36 @@ export function assertPeriodAllowsPosting(params: {
     if (!allowed) {
       throw new ForbiddenException({
         error: 'Posting blocked by accounting period control',
+        code: 'PERIOD_SOFT_CLOSE_OVERRIDE_REQUIRED',
+        overrideCode: 'PERIOD_SOFT_CLOSE_OVERRIDE',
+        entryPoint: 'GL_JOURNAL_POST',
         reason: `Accounting period is SOFT_CLOSED${suffix}`,
       });
     }
 
     const reason = readReason({ req: params.req, context: params.context });
     if (!reason || reason.length < 3) {
-      throw new ForbiddenException(
-        'Governance reason is required for posting in a SOFT_CLOSED period. Provide x-governance-reason header.',
-      );
+      throw new ForbiddenException({
+        error: 'Posting blocked by accounting period control',
+        code: 'PERIOD_SOFT_CLOSE_OVERRIDE_REQUIRED',
+        overrideCode: 'PERIOD_SOFT_CLOSE_OVERRIDE',
+        entryPoint: 'GL_JOURNAL_POST',
+        reason:
+          'Governance reason is required for posting in a SOFT_CLOSED period. Provide x-governance-reason header.',
+      });
     }
 
     if (params.req) {
       const sessionId = String(params.req.header('x-override-session-id-period') ?? '').trim();
       if (!sessionId) {
-        throw new ForbiddenException(
-          'Override session is required for posting in a SOFT_CLOSED period. Provide x-override-session-id-period header.',
-        );
+        throw new ForbiddenException({
+          error: 'Posting blocked by accounting period control',
+          code: 'PERIOD_SOFT_CLOSE_OVERRIDE_REQUIRED',
+          overrideCode: 'PERIOD_SOFT_CLOSE_OVERRIDE',
+          entryPoint: 'GL_JOURNAL_POST',
+          reason:
+            'Override session is required for posting in a SOFT_CLOSED period. Provide x-override-session-id-period header.',
+        });
       }
       (params.req as any).governanceOverrideSessionIdPeriod = sessionId;
     }
@@ -127,12 +140,18 @@ export function assertPeriodAllowsPosting(params: {
   if (s === PeriodStatus.HARD_CLOSED || s === PeriodStatus.ARCHIVED) {
     throw new ForbiddenException({
       error: 'Posting blocked by accounting period control',
+      code: 'PERIOD_CLOSED_OVERRIDE_REQUIRED',
+      overrideCode: 'GL_POST_OVERRIDE',
+      entryPoint: 'GL_JOURNAL_POST_OVERRIDE',
       reason: `Accounting period is not OPEN${suffix}`,
     });
   }
 
   throw new ForbiddenException({
     error: 'Posting blocked by accounting period control',
+    code: 'PERIOD_CLOSED_OVERRIDE_REQUIRED',
+    overrideCode: 'GL_POST_OVERRIDE',
+    entryPoint: 'GL_JOURNAL_POST_OVERRIDE',
     reason: `Accounting period is not OPEN${suffix}`,
   });
 }

@@ -1,4 +1,46 @@
-import { apiFetch } from './api';
+import { apiFetch, type ApiError } from './api';
+
+export type OverrideRequiredCode =
+  | 'RETRO_POSTING_OVERRIDE_REQUIRED'
+  | 'PERIOD_SOFT_CLOSE_OVERRIDE_REQUIRED'
+  | 'PERIOD_CLOSED_OVERRIDE_REQUIRED';
+
+export type OverrideRequirement = {
+  code: OverrideRequiredCode;
+  overrideCode: string;
+  entryPoint: string;
+  reason: string;
+};
+
+const OVERRIDE_REQUIRED_CODES: OverrideRequiredCode[] = [
+  'RETRO_POSTING_OVERRIDE_REQUIRED',
+  'PERIOD_SOFT_CLOSE_OVERRIDE_REQUIRED',
+  'PERIOD_CLOSED_OVERRIDE_REQUIRED',
+];
+
+/**
+ * Detects whether a failed posting request was blocked by retro / period
+ * governance and requires an override workflow. Returns the structured
+ * requirement (override code + entry point) the frontend should drive, or
+ * null if the error is unrelated to override governance.
+ */
+export function parseOverrideRequirement(error: unknown): OverrideRequirement | null {
+  const body = (error as Partial<ApiError>)?.body as
+    | { code?: string; overrideCode?: string; entryPoint?: string; reason?: string; message?: string }
+    | undefined;
+
+  if (!body || typeof body !== 'object') return null;
+
+  const code = String(body.code ?? '').trim() as OverrideRequiredCode;
+  if (!OVERRIDE_REQUIRED_CODES.includes(code)) return null;
+
+  return {
+    code,
+    overrideCode: String(body.overrideCode ?? '').trim(),
+    entryPoint: String(body.entryPoint ?? '').trim(),
+    reason: String(body.reason ?? body.message ?? '').trim(),
+  };
+}
 
 export type OverrideSessionStatus =
   | 'REQUESTED'

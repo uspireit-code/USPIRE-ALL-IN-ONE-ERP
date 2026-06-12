@@ -607,13 +607,41 @@ export async function listPostQueue() {
   return apiFetch<JournalPostQueueItem[]>('/gl/journals/post-queue', { method: 'GET' });
 }
 
-export async function postJournal(id: string) {
+export type PostJournalGovernanceOptions = {
+  /** Justification recorded against the posting (x-governance-reason header). */
+  governanceReason?: string;
+  /** Approved RETRO_POSTING_OVERRIDE session id for retro tolerance overrides. */
+  retroOverrideSessionId?: string;
+  /** Approved PERIOD_SOFT_CLOSE_OVERRIDE session id for soft-closed periods. */
+  periodOverrideSessionId?: string;
+};
+
+export async function postJournal(id: string, options?: PostJournalGovernanceOptions) {
+  const headers: Record<string, string> = {};
+
+  const reason = String(options?.governanceReason ?? '').trim();
+  if (reason) headers['x-governance-reason'] = reason;
+
+  const retroSessionId = String(options?.retroOverrideSessionId ?? '').trim();
+  if (retroSessionId) headers['x-override-session-id-retro'] = retroSessionId;
+
+  const periodSessionId = String(options?.periodOverrideSessionId ?? '').trim();
+  if (periodSessionId) headers['x-override-session-id-period'] = periodSessionId;
+
   return apiFetch<JournalEntry>(`/gl/journals/${id}/post`, {
     method: 'POST',
-    headers: {
-      'x-governance-reason': 'Approved retro posting',
-      'x-override-session-id-retro': 'MANUAL_OVERRIDE',
-    },
+    ...(Object.keys(headers).length ? { headers } : {}),
+  });
+}
+
+/**
+ * Retry posting using an approved GL_POST_OVERRIDE governance session
+ * (e.g. when the journal falls in a CLOSED / HARD_CLOSED accounting period).
+ */
+export async function postJournalOverride(id: string, overrideSessionId: string) {
+  return apiFetch<JournalEntry>(`/gl/journals/${id}/post-override`, {
+    method: 'POST',
+    body: JSON.stringify({ overrideSessionId: String(overrideSessionId ?? '').trim() }),
   });
 }
 

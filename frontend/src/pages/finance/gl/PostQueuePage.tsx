@@ -9,6 +9,8 @@ import { NoticeCard } from '../../../components/NoticeCard';
 import { tokens } from '../../../designTokens';
 import { getApiErrorMessage } from '../../../services/api';
 import { listPostQueue, postJournal, returnJournalToReview, type JournalPostQueueItem } from '../../../services/gl';
+import { parseOverrideRequirement, type OverrideRequirement } from '../../../services/overrideSessions';
+import { OverridePostingModal } from '../../../components/OverridePostingModal';
 
 function RiskBadge(props: { riskScore?: number | null }) {
   const s = typeof props.riskScore === 'number' ? props.riskScore : 0;
@@ -39,6 +41,10 @@ export function PostQueuePage() {
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState('');
+
+  const [overrideFor, setOverrideFor] = useState<
+    { journal: JournalPostQueueItem; requirement: OverrideRequirement } | null
+  >(null);
 
   const confirmItem = useMemo(() => items.find((i) => i.id === confirmId) ?? null, [confirmId, items]);
   const returnItem = useMemo(() => items.find((i) => i.id === returnId) ?? null, [returnId, items]);
@@ -86,6 +92,7 @@ export function PostQueuePage() {
     if (!confirmId) return;
     setBusyId(confirmId);
     setError(null);
+    const journal = items.find((x) => x.id === confirmId) ?? null;
     try {
       await postJournal(confirmId);
       setItems((prev) => prev.filter((x) => x.id !== confirmId));
@@ -93,7 +100,13 @@ export function PostQueuePage() {
       window.setTimeout(() => setToast(null), 2500);
       setConfirmId(null);
     } catch (e: any) {
-      setError(getApiErrorMessage(e, 'Failed to post journal'));
+      const requirement = parseOverrideRequirement(e);
+      if (requirement && journal) {
+        setConfirmId(null);
+        setOverrideFor({ journal, requirement });
+      } else {
+        setError(getApiErrorMessage(e, 'Failed to post journal'));
+      }
     } finally {
       setBusyId(null);
     }
@@ -396,6 +409,19 @@ export function PostQueuePage() {
             </div>
           </div>
         </>
+      ) : null}
+
+      {overrideFor ? (
+        <OverridePostingModal
+          journal={overrideFor.journal}
+          requirement={overrideFor.requirement}
+          onClose={() => setOverrideFor(null)}
+          onPosted={() => {
+            setItems((prev) => prev.filter((x) => x.id !== overrideFor.journal.id));
+            setToast('Journal posted under approved governance override');
+            window.setTimeout(() => setToast(null), 2500);
+          }}
+        />
       ) : null}
     </div>
   );

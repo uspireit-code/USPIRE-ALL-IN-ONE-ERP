@@ -9502,40 +9502,89 @@ export class GlService {
       });
     }
 
+    const periodStatusUpper = String((period as any)?.status ?? '').toUpperCase();
+    const periodAllowsNormalPosting =
+      periodStatusUpper === 'OPEN' || periodStatusUpper === 'ACTIVE';
+
+    // A validated, approved GL_POST_OVERRIDE session (entered via the
+    // /post-override endpoint) is a governed exception that permits posting into
+    // an otherwise blocked accounting period. It is always logged and never
+    // auto-approved.
+    const hasApprovedGlPostOverride = Boolean(params.override?.overrideSessionId);
+
     try {
       assertPeriodAllowsPosting({
         req: params.req,
         period,
         permissionUsed: PERMISSIONS.GL.FINAL_POST,
       });
-    } catch {
+    } catch (periodErr) {
+      if (!hasApprovedGlPostOverride) {
+        await writeAuditEventWithPrisma(
+          {
+            tenantId: authz.tenantId,
+            eventType: AuditEventType.GL_JOURNAL_POST_BLOCKED,
+            entityType: AuditEntityType.JOURNAL_ENTRY,
+            entityId: entry.id,
+            actorUserId: authz.id,
+            timestamp: new Date(),
+            outcome: 'BLOCKED' as any,
+            action: 'FINANCE_GL_FINAL_POST',
+            permissionUsed: PERMISSIONS.GL.FINAL_POST,
+            lifecycleType: 'POST',
+            reason: `Accounting period is not OPEN: ${period.name}`,
+            metadata: {
+              journalId: entry.id,
+              periodId: (period as any)?.id ?? null,
+              periodName: (period as any)?.name ?? null,
+              periodStatus: (period as any)?.status ?? null,
+            },
+          },
+          prisma,
+        );
+
+        // Preserve the structured governance code/body produced by
+        // assertPeriodAllowsPosting so the frontend can distinguish soft-close
+        // from hard-close override flows.
+        if (periodErr instanceof ForbiddenException) {
+          throw periodErr;
+        }
+
+        throw new ForbiddenException({
+          error: 'Posting blocked by accounting period control',
+          code: 'PERIOD_CLOSED_OVERRIDE_REQUIRED',
+          overrideCode: 'GL_POST_OVERRIDE',
+          entryPoint: 'GL_JOURNAL_POST_OVERRIDE',
+          reason: `Accounting period is not OPEN: ${period.name}`,
+        });
+      }
+
+      // Governed override path: record that an approved override permitted
+      // posting into a non-OPEN period, then continue.
       await writeAuditEventWithPrisma(
         {
           tenantId: authz.tenantId,
-          eventType: AuditEventType.GL_JOURNAL_POST_BLOCKED,
+          eventType: AuditEventType.GL_JOURNAL_OVERRIDE_POSTED,
           entityType: AuditEntityType.JOURNAL_ENTRY,
           entityId: entry.id,
-          actorUserId: authz.id,
+          actorUserId: authz.actorUserId,
           timestamp: new Date(),
-          outcome: 'BLOCKED' as any,
+          outcome: 'SUCCESS' as any,
           action: 'FINANCE_GL_FINAL_POST',
-          permissionUsed: PERMISSIONS.GL.FINAL_POST,
-          lifecycleType: 'POST',
-          reason: `Accounting period is not OPEN: ${period.name}`,
+          permissionUsed:
+            params.override?.permissionUsed ?? PERMISSIONS.GL.OVERRIDE_POST,
+          lifecycleType: 'POST_OVERRIDE',
+          reason: `Posting into non-OPEN accounting period permitted under approved override (${params.override?.overrideSessionId})`,
           metadata: {
             journalId: entry.id,
             periodId: (period as any)?.id ?? null,
             periodName: (period as any)?.name ?? null,
             periodStatus: (period as any)?.status ?? null,
+            overrideSessionId: params.override?.overrideSessionId ?? null,
           },
         },
         prisma,
       );
-
-      throw new ForbiddenException({
-        error: 'Posting blocked by accounting period control',
-        reason: `Accounting period is not OPEN: ${period.name}`,
-      });
     }
 
     const tenantControls = await (prisma.tenant as any).findUnique({
@@ -9547,12 +9596,18 @@ export class GlService {
       Math.floor(Number((tenantControls as any)?.retroPostToleranceDays ?? 0)),
     );
 
-    assertRetroPostingWithinToleranceOrEscalated({
-      req: params.req,
-      postingDate: new Date(entry.journalDate),
-      toleranceDays: retroPostToleranceDays,
-      escalationType: 'RETRO_POSTING_OVERRIDE',
-    });
+    // Retro-posting governance only applies when the period is NOT a normal
+    // open posting period. Posting into a current or prior OPEN period proceeds
+    // normally even when the journal date is older than the retro tolerance.
+    // A comprehensive approved GL_POST_OVERRIDE already subsumes this control.
+    if (!periodAllowsNormalPosting && !hasApprovedGlPostOverride) {
+      assertRetroPostingWithinToleranceOrEscalated({
+        req: params.req,
+        postingDate: new Date(entry.journalDate),
+        toleranceDays: retroPostToleranceDays,
+        escalationType: 'RETRO_POSTING_OVERRIDE',
+      });
+    }
 
     const entryPoint = params.override
       ? ('GL_JOURNAL_POST_OVERRIDE' as const)
