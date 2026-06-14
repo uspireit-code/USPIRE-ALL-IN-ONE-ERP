@@ -9547,12 +9547,19 @@ export class GlService {
       Math.floor(Number((tenantControls as any)?.retroPostToleranceDays ?? 0)),
     );
 
-    assertRetroPostingWithinToleranceOrEscalated({
-      req: params.req,
-      postingDate: new Date(entry.journalDate),
-      toleranceDays: retroPostToleranceDays,
-      escalationType: 'RETRO_POSTING_OVERRIDE',
-    });
+  const periodStatus = String((period as any)?.status ?? '').toUpperCase();
+
+const periodAllowsNormalPosting =
+  periodStatus === 'OPEN' || periodStatus === 'ACTIVE';
+
+if (period && !periodAllowsNormalPosting) {
+  assertRetroPostingWithinToleranceOrEscalated({
+    req: params.req,
+    postingDate: new Date(entry.journalDate),
+    toleranceDays: retroPostToleranceDays,
+    escalationType: 'RETRO_POSTING_OVERRIDE',
+  });
+}
 
     const entryPoint = params.override
       ? ('GL_JOURNAL_POST_OVERRIDE' as const)

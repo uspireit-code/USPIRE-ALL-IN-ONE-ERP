@@ -212,6 +212,12 @@ model TenantTaxConfig {
   @@index([inputVatAccountId])
 }
 
+model TenantJournalNumberingConfig {
+  tenantId String @id
+  scope    String @default("TENANT_GLOBAL")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+}
+
 model TaxRate {
   id                   String                @id @default(uuid())
   tenantId             String
@@ -1467,6 +1473,7 @@ model Tenant {
   unappliedReceiptsAccount              Account?                               @relation("TenantUnappliedReceiptsAccount", fields: [unappliedReceiptsAccountId], references: [id], onDelete: Restrict)
   sequenceCounters                      TenantSequenceCounter[]
   taxConfig                             TenantTaxConfig?
+  journalNumberingConfig                TenantJournalNumberingConfig?
   twoFactorChallenges                   TwoFactorChallenge[]
   unlockRequests                        UnlockRequest[]
   users                                 User[]

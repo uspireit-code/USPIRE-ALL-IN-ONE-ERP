@@ -144,9 +144,17 @@ function toErrorReportCsv(rows: CoaImportValidationRow[]) {
 export function CoaSubmissionsPage() {
   const { hasPermission } = useAuth();
   const canView = hasPermission(PERMISSIONS.COA.VIEW);
-  const canDraftCreate = hasPermission(PERMISSIONS.COA.DRAFT_CREATE);
-  const canDraftEdit = hasPermission(PERMISSIONS.COA.DRAFT_EDIT);
-  const canDraftSubmit = hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT);
+  const canDraftCreate =
+  hasPermission(PERMISSIONS.COA.DRAFT_CREATE) ||
+  hasPermission(PERMISSIONS.COA.NEW_DRAFT_CREATE);
+
+const canDraftEdit =
+  hasPermission(PERMISSIONS.COA.DRAFT_EDIT) ||
+  hasPermission(PERMISSIONS.COA.NEW_DRAFT_EDIT);
+
+const canDraftSubmit =
+  hasPermission(PERMISSIONS.COA.DRAFT_SUBMIT) ||
+  hasPermission(PERMISSIONS.COA.NEW_DRAFT_SUBMIT);
   const canUnlock = hasPermission(PERMISSIONS.COA.UNLOCK);
 
   const [loading, setLoading] = useState(false);

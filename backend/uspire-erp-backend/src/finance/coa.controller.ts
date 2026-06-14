@@ -79,13 +79,19 @@ export class CoaController {
   }
 
   @Post('bulk-submit')
-  @Permissions(PERMISSIONS.COA.DRAFT_SUBMIT)
+  @PermissionsAny(
+    PERMISSIONS.COA.DRAFT_SUBMIT,
+    PERMISSIONS.COA.NEW_DRAFT_SUBMIT,
+  )
   async bulkSubmit(@Req() req: Request, @Body() body: { ids: string[] }) {
     return this.coa.bulkSubmitAccounts(req, body?.ids ?? []);
   }
 
   @Post(':id/submit')
-  @Permissions(PERMISSIONS.COA.DRAFT_SUBMIT)
+  @PermissionsAny(
+    PERMISSIONS.COA.DRAFT_SUBMIT,
+    PERMISSIONS.COA.NEW_DRAFT_SUBMIT,
+  )
   async submit(@Req() req: Request, @Param('id') id: string) {
     return this.coa.submitAccount(req, id);
   }
@@ -253,7 +259,10 @@ export class CoaController {
   }
 
   @Post('import-batches/:batchId/submit')
-  @Permissions(PERMISSIONS.COA.DRAFT_SUBMIT)
+  @PermissionsAny(
+    PERMISSIONS.COA.DRAFT_SUBMIT,
+    PERMISSIONS.COA.NEW_DRAFT_SUBMIT,
+  )
   async submitImportBatch(@Req() req: Request, @Param('batchId') batchId: string) {
     return this.coa.submitImportBatch(req, batchId);
   }

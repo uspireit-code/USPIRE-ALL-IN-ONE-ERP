@@ -949,6 +949,9 @@ export default function App() {
                       PERMISSIONS.COA.DRAFT_CREATE,
                       PERMISSIONS.COA.DRAFT_EDIT,
                       PERMISSIONS.COA.DRAFT_SUBMIT,
+                      PERMISSIONS.COA.NEW_DRAFT_CREATE,
+                      PERMISSIONS.COA.NEW_DRAFT_EDIT,
+                      PERMISSIONS.COA.NEW_DRAFT_SUBMIT,
                     ]}
                   >
                     <CoaSubmissionsPage />
@@ -979,10 +982,60 @@ export default function App() {
                   </PermissionOnlyRoute>
                 }
               />
-              <Route path="finance/gl/journals" element={<JournalBrowserPage />} />
-              <Route path="finance/gl/journals/new" element={<JournalEntryPage />} />
-              <Route path="finance/gl/journals/:id" element={<JournalEntryPage />} />
-              <Route path="finance/gl/upload" element={<JournalUploadPage />} />
+              <Route
+                path="finance/gl/journals"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.GL.VIEW,
+                      PERMISSIONS.GL.JOURNAL_VIEW_LEGACY,
+                    ]}
+                  >
+                    <JournalBrowserPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/gl/journals/new"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.GL.CREATE,
+                      PERMISSIONS.GL.JOURNAL_CREATE_LEGACY,
+                    ]}
+                  >
+                    <JournalEntryPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/gl/journals/:id"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.GL.VIEW,
+                      PERMISSIONS.GL.JOURNAL_VIEW_LEGACY,
+                      PERMISSIONS.GL.CREATE,
+                      PERMISSIONS.GL.JOURNAL_CREATE_LEGACY,
+                    ]}
+                  >
+                    <JournalEntryPage />
+                  </PermissionAnyRoute>
+                }
+              />
+              <Route
+                path="finance/gl/upload"
+                element={
+                  <PermissionAnyRoute
+                    permissions={[
+                      PERMISSIONS.GL.CREATE,
+                      PERMISSIONS.GL.JOURNAL_CREATE_LEGACY,
+                    ]}
+                  >
+                    <JournalUploadPage />
+                  </PermissionAnyRoute>
+                }
+              />
               <Route
                 path="finance/gl/risk"
                 element={
