@@ -3278,27 +3278,6 @@ export class GlService {
         }
       }
 
-      if (period && !periodAllowsNormalPosting) {
-        try {
-          assertRetroPostingWithinToleranceOrEscalated({
-            req,
-            postingDate: j.journalDate,
-            toleranceDays: retroPostToleranceDays,
-            escalationType: 'RETRO_POSTING_OVERRIDE',
-          });
-        } catch (e: any) {
-          errors.push({
-            journalKey: key,
-            message:
-              typeof e?.response?.message === 'string'
-                ? e.response.message
-                : typeof e?.message === 'string'
-                  ? e.message
-                  : 'Retro posting is not allowed',
-          });
-        }
-      }
-
       const hasAnyDebit = lines.some((l) => (l.debit ?? 0) > 0);
       const hasAnyCredit = lines.some((l) => (l.credit ?? 0) > 0);
       if (!hasAnyDebit || !hasAnyCredit) {
@@ -9551,15 +9530,6 @@ export class GlService {
 
 const periodAllowsNormalPosting =
   periodStatus === 'OPEN' || periodStatus === 'ACTIVE';
-
-if (period && !periodAllowsNormalPosting) {
-  assertRetroPostingWithinToleranceOrEscalated({
-    req: params.req,
-    postingDate: new Date(entry.journalDate),
-    toleranceDays: retroPostToleranceDays,
-    escalationType: 'RETRO_POSTING_OVERRIDE',
-  });
-}
 
     const entryPoint = params.override
       ? ('GL_JOURNAL_POST_OVERRIDE' as const)
